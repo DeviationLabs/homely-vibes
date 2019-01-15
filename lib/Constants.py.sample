@@ -1,0 +1,41 @@
+#!/usr/bin/env python3.6
+import os
+
+SECONDS_IN_DAY = 86400
+MAX_ZONES = 16
+HOME = os.environ['HOME']
+
+MAX_NEW_FILES = 2 # Number of recent raw log files that are reprocessed into summary json
+DAYS_LOOKBACK = 60 # Days of data to store in the pumprates file. Perf penalty if too large
+START_FROM_EPOCH = 1539161991 # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
+START_FROM_EPOCH = 1541055600 # 2018-11-01-00-00-00 # The really good data.
+MIN_DRIP_REPORT_TIME = 310 # If drip runs less than this, don't report in pump stats
+IGNORE_BELOW_RATE = 0.008  # If pump rate is below this number, then do not alert even if above average
+
+TUYA_LOG_BASE = '{}/tuya_logs/tuya_logs.csv'.format(HOME)
+JSON_SUMMARY_FILE = '{}/tuya_logs/summary.json'.format(HOME)
+JSON_SUMMARY_PATCH_FILE = '{}/tuya_logs/summary.json'.format(HOME) # When debugging, use a different name
+RACHIO_EVENTS_CMD = '{}/bin/WaterMonitoring/get_rachio_events.js'.format(HOME)
+JSON_PUMPRATES_FILE = '{}/tuya_logs/pump_rates.json'.format(HOME)
+
+EMAIL_DAY = 'Thursday'
+EMAIL_HOUR = 8
+ALWAYS_EMAIL = False
+TRIGGER_THRESH = 1.25 # ie: 25% higher than average
+EMAIL_FROM = 'user_from@gmail.com'
+EMAIL_TO = 'user_to@gmail.com'
+
+GMAIL_USERNAME = 'user_from'
+GMAIL_PASSWORD = 'XXX'
+
+FOSCAM_NODES=["192.168.1.51",  # Frontyard
+              "192.168.1.52",  # Main Entrance
+              "192.168.1.53",  # Backyard
+              "192.168.1.54",  # Kitchen
+              "192.168.1.55"]  # Garage
+FOSCAM_USERNAME="user_from"
+FOSCAM_PASSWORD="YYY"
+
+WINDOWS_NODES=["192.168.1.100"]
+WINDOWS_USERNAME="user_from"
+WINDOWS_PASSWORD="ZZZ"

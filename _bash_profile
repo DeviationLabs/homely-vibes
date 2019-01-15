@@ -1,0 +1,290 @@
+# .bashrc
+# Tue Jul 19 21:54:58 PDT 2016 
+
+# Disable capslock
+#xmodmap -e "remove lock = Caps_Lock"
+
+# Flush dir stack
+dirs -c
+
+# Prevent cd tray from ejecting. 
+#eject -i 1 2>&1 > /dev/null
+
+# Avoiding the need to type the ssh key passphrase
+#source ~/bin/sshkeys_load.sh 
+
+# Enable vi key bindings
+#if [[ -z "$OSTYPE" || $OSTYPE != *"linux-gnu"* ]]; then 
+#  set -o vi
+  stty stop undef
+  bind -m vi-insert "\C-l":clear-screen
+  bind -m vi-insert "\C-r":reverse-search-history
+  bind -m vi-insert "\C-s":forward-search-history
+  bind -m vi-insert "\C-a":beginning-of-line
+  #bind -m vi-insert "\C-e":end-of-line  #do the right thing 
+  bind -m vi-insert "\C-w":backward-delete-word
+  bind -m vi-insert "\C-k":forward-delete-word
+#fi
+
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+	source /etc/bashrc 2>/dev/null
+fi
+
+###########################
+# ENV variable modification
+###########################
+export CDPATH=.:~/s:~
+export NODE_PATH='/usr/local/lib/node_modules'
+export DSAB="our.abutala.sb.facebook.com"
+export DS="abutala@${DSAB}"
+export EDITOR=vim
+export PATH=.:~/bin:~/s:/usr/local/sbin:$PATH
+export PYTHONPATH=$PYTHONPATH:~/bin/lib
+export HGEDITOR=vim
+export HISTFILESIZE=-1
+export HISTSIZE=130000
+export VISUAL=vim
+#export PROMPT_COMMAND="echo DONE $*"
+
+#export C_INCLUDE_PATH=/opt/local/include/cairo
+#export LDFLAGS=-L/opt/local/lib
+#export CFLAGS=-I/opt/local/include/cairo
+#export CPPFLAGS=-I/opt/local/include/cairo
+
+###########################
+# User specific aliases and functions 
+###########################
+## NOTE: use "env" to avoid aliases and functions
+alias .b='source ~/.bash_profile'
+alias beep="echo DONE $@"
+alias cd='cdp'
+alias cd..='cd ..'
+alias cd-='cd -'
+alias cp='cp -ia'
+alias df='df -H | egrep "^/dev|Filesystem|/Volumes/"'
+alias editcron='vi ~/bin/cronjobs; crontab -r; crontab ~/bin/cronjobs; crontab -l'
+alias eixt='exit'
+alias gerp='grep'
+alias getbuild='scp $DS:/data/users/abutala/poky/build-arm/tmp/deploy/images/armada39x/tg-update-armada39x.bin .'
+alias getip='ifconfig | grep "inet"'
+alias getrept='scp 192.168.1.101:~/tuya_logs/tuya_logs.csv ~abutala/Downloads; open ~/Dropbox\ \(Personal\)/Homely/Water\ Meter.xlsx'
+alias grep='egrep'
+alias hgs='\hg status --no-status --rev .^'
+alias ls='ls'
+unalias ls 
+alias ls-al='ls -al'
+alias ls-l='ls -l'
+#alias Matlab='matlab -nodesktop $*'
+alias mkdir='mkdir -p'
+alias mosh='echo "Use et instead..."'
+alias mv='mv -i'
+alias pwd='pwd -P'
+alias python='/opt/homebrew/bin/python3.6'
+alias reboot='echo not me'
+#alias revdiff='svn diff *.csv | cut -d"," -f 1,2,3,11,15| egrep "^\-\w|^\+\w" | cut -c 1-150'
+alias rm='rm -i'
+alias Sed='perl -pe'
+alias sl='ls'
+alias startmonit='echo "Starting Tuya monitor..."; nohup ~/bin/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null &'
+alias stopmonit='echo "Stopping Tuya monitor..."; killall poll_tuya.sh'
+#alias syncout="echo scp $1 ${USER}@$DS:~"
+#alias syncin="echo scp ${USER}@$DS:~/$1 ."
+alias uall='umount -f -A 2>/dev/null; df -h'
+alias vb='vi ~/.bash_profile'
+alias vi='vim'
+alias vs='vi ~/scratch.txt -c "set paste" -c "start"'
+alias vt='vi ~/.tmux.conf'
+alias ws='wireshark -Y "s1ap||(gtpv2 && gtpv2.message_type > 2)" $* 2>/dev/null'
+
+#function done {
+#  echo -en "DONE $@\r"
+#  sleep 1
+#  echo "   "
+#}
+
+#function arc {
+#  echo "Will notify upon completion of -- $@"
+#  /usr/local/bin/arc $@
+#  echo "DONE -- arc $@"
+#}
+
+function cdp {
+  if [[ ! -n $1 ]]; then 
+    # use the old cd cmd
+    # echo "Now doing(1): cd $@"
+    \cd $@
+  elif [[ $1 == '-' ]]; then
+    popd &> /dev/null
+  else
+    # change directory to absolute path 
+    # echo "Now doing(2): cd $@"
+    pushd . &> /dev/null 
+    \cd "$@"
+    \cd "`pwd -P`"
+  fi
+}
+
+#function cdp {
+#  cd $@
+#  cd "`pwd -P`"
+#}
+
+function hg {
+  echo "Will notify upon completion of -- $@"
+  /bin/hg $@
+  echo "DONE -- hg $@"
+}
+
+function mnthome { 
+    umount -f /Volumes/h_abutala /Volumes/h_shared_docs 2> /dev/null
+    sudo mkdir -p /Volumes/h_abutala /Volumes/h_shared_docs
+    sudo chown abutala /Volumes/h_abutala
+    sudo chown abutala /Volumes/h_shared_docs
+    mount -t smb //abutala@192.168.1.100/abutala /Volumes/h_abutala 
+    mount -t smb //abutala@192.168.1.100/shared-docs /Volumes/h_shared_docs 
+    sleep 2
+    df -h
+}
+
+function et { 
+  if [[ -z $1 ]]; then  
+    echo "Connecting to devserver: $DSAB"
+    /usr/local/bin/et $DS:8080
+  else
+    echo "Connecting to: $1"
+    /usr/local/bin/et $@
+  fi
+}
+
+function mosh { 
+  if [[ -z $1 ]]; then  
+    echo "Connecting to devserver: $DSAB"
+    /usr/local/bin/mosh -6 $DS
+  else
+    echo "Connecting to: $1"
+    /usr/local/bin/mosh -6 $@
+  fi
+}
+
+#function notif {
+#  set -o history -o histexpand
+#  echo DONE ["!:0"] with args ["!:*"]
+#}
+
+function viw {
+  # vi a file in path 
+  vi `which $1`
+}
+
+function which {
+  # show absolute path of comand that has been run 
+  # readlink -f `/usr/bin/which $*`
+  stat -f `/usr/bin/which $*`
+}
+
+# Platform specific config
+if [[ ! (-z "$HOSTNAME") && ($HOSTNAME == *"prn2.facebook.com") ]]; then 
+  echo "Dev Server..."
+  # Default tmux shell if not in one already, else choose a session
+  if [[ -z "$TMUX" ]]; then 
+    tmux new-session -A -s default \; choose-session
+    echo "=============================================="
+    echo "Bye Amit. Sessions status:"
+    tmux ls
+    echo "=============================================="
+    sleep 2
+    exit
+  else
+    echo "=============================================="
+    echo "Welcome Amit. Sessions status:"
+    tmux ls
+    echo "=============================================="
+  fi 
+elif [[ (! -z "$OSTYPE") && ($OSTYPE == *"darwin"*) ]]; then 
+  echo "Amit's MacOS..."
+#  test -e "${HOME}/.iterm2_shell_integration.bash" && source "${HOME}/.iterm2_shell_integration.bash"
+else
+  echo "Unknown shell..."
+fi
+
+#########
+# Dead stuff
+#########
+
+# Stuff below to handle lack of AcceptUserEnviroment in global ssh config
+#if [ -t 1 ] ; then 
+#  echo "Welcome Amit"
+#  if [ -f $HOME/.ssh/fake_environment ]; then
+#    source $HOME/.ssh/fake_environment
+#    \rm -f $HOME/.ssh/fake_environment
+#
+#    # If on NFS, check if direct access to mount point. 
+#    # localname=`echo $HOSTNAME|sed "s/\..*$//"` # Get just the hostname from the FQDN
+#    # cd `pwd -P| sed "s/^.*$localname//"`         
+#    # locaname=
+#  else
+#    echo "Starting from default workspace"
+#    cd ~/rwork
+#  fi
+#fi
+#
+#function ws {
+#  # Kick off wireshark with default config
+#  DISPLAY_FILTER="s1ap||(gtpv2 && gtpv2.message_type > 2)"
+#  if [ -f /home/luminate/pkg/lw-wireshark/wireshark ]
+#  then
+#    echo "Running private wireshark..."
+#    /home/luminate/pkg/lw-wireshark/wireshark -Y "$DISPLAY_FILTER" $* 2>/dev/null
+#  else
+#    wireshark -Y "$DISPLAY_FILTER" $* 2>/dev/null
+#  fi
+#}
+#
+#function rl { 
+#  # ssh while preserving path 
+#  xhost + 
+#
+#  # load identity if not already loaded 
+#  if [ "a"."id_rsa-gw-corp" != "a".`ssh-add -l | grep -o id_rsa-gw-corp` ]; then
+#    ssh-add ~/.ssh/id_rsa-gw-corp
+#    ssh-add ~/.ssh/id_rsa-local
+#  fi
+#  echo cd `pwd` > $HOME/.ssh/fake_environment
+#  ssh -X -o StrictHostKeyChecking=no $*
+#}
+#
+#function stat {
+#  # status of all test controller machines 
+#  for i in 1 2 3 4 5 6 7 8 9 10; 
+#  do 
+#    echo "test$i:"; 
+##    ssh test$i mpstat | grep all | cut -c 1-13,90-100; 
+#    ssh test$i top -b -n 1| egrep "Cpu|KiB Mem"
+#    ssh test$i ifconfig | grep epcnet
+#    echo ""
+#  done
+#}
+#
+#function dev {
+#  # source dev.env from the right folder
+#  DEV_FILE="dev.env"
+#  DEV_FILE_PATH="."
+#  while [[ ! -n $DEV_FILE || ! -f $DEV_FILE ]]
+#  do
+#    DEV_FILE=`find $DEV_FILE_PATH -maxdepth 1 -name "dev.env" -print 2> /dev/null`
+##   echo "File: $DEV_FILE. Dir: $DEV_FILE_PATH"
+#    DEV_FILE_PATH="$DEV_FILE_PATH/.."
+#  done
+#  DEV_FILE=`readlink -f $DEV_FILE`
+#  echo "Sourcing $DEV_FILE ..."
+#  source $DEV_FILE
+#  echo $PYTHONPATH
+#}
+
+# Setting PATH for Python 3.5
+PATH="/Library/Frameworks/Python.framework/Versions/3.5/bin:${PATH}"
+export PATH
+
+# added by Anaconda3 5.1.0 installer
+export PATH="/anaconda3/bin:$PATH"

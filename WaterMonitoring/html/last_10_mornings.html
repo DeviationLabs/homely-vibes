@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Eden Booster Pump Activation Data</title>
+
+<script type="text/javascript" src="JS/jquery-1.11.1.min.js"></script>
+<script type="text/javascript" src="JS/jquery.canvasjs.min.js"></script>
+<script type="text/javascript" src="JS/common.js"></script>
+
+<script type="text/javascript">
+window.onload = function ()
+{
+  const RACHIO_START_TIME = 4;
+  const FILES_PER_DAY = 4;
+  const DAYS_LOOKBACK = 10;
+  const URL_PREFIX = "/tuya_logs/tuya_logs.csv";
+  const HIST_GRANULARITY = 10; 
+  const HIST_MAX = 600;
+  const ON_CURRENT_THRESH = 300; 
+
+  // Before calling chartJS, compute some stats and build a histogram. 
+  // We're looking for a file with 1st record that is before the RACHIO_START_TIME
+  // This gets us the right file because of the way log rotate guarantees that the 1st rotated 
+  // file of the day is Rachio's 
+  async function make_new_morning_chart(startFileCounter, chartName, histName)
+  {
+    for (
+      var fileCounter = startFileCounter; 
+      fileCounter < (startFileCounter + FILES_PER_DAY); 
+      fileCounter++
+    )
+    {
+      var fileName = URL_PREFIX + "." + fileCounter;
+      if (fileCounter == 0)
+      {
+        fileName = URL_PREFIX;
+      }
+
+      var dataPoints = [];
+      await $.get(fileName, data =>
+      {
+        dataPoints = getDataPointsFromCSVLines(data);
+      });
+
+      var startTime = dataPoints[0]["label"];
+      var startHour = parseInt(startTime.substr(11, 2));
+
+      if (startHour < RACHIO_START_TIME)
+      { 
+        [titleText, hist] = compute_stats(dataPoints); 
+        render_new_chart(dataPoints, chartName, titleText);
+        render_new_hist(hist, histName);
+        return; 
+      }
+    }
+    console.error("APB [" + startFileCounter + "]: " + "reached end of loop and failed");
+  }
+
+
+  // Get some stats on the data we read, also build a histogram
+  function compute_stats(dataPoints) 
+  {
+    var num_toggles = 0;
+    var isOff = true; 
+    var lastStartTime = dataPoints[0]["epoch"];
+    var interStartMin = 100000; 
+    var totalOnTime = 0; 
+    var dict = {};  
+
+    for (var count = 0; count < dataPoints.length; count++) {
+       var time = dataPoints[count]["epoch"];
+       var value = dataPoints[count]["tuya_current"];
+
+       if (value > ON_CURRENT_THRESH  && isOff) {
+         var deltaTime = time - lastStartTime;
+         interStartMin = Math.min(interStartMin, deltaTime); 
+         lastStartTime = time; 
+         num_toggles++;
+         isOff = false;
+         deltaTime = deltaTime - (deltaTime % HIST_GRANULARITY);  // TODO: use log scale? 
+         dict[deltaTime] = (dict[deltaTime] || 0) + 1;
+       } else if (value < ON_CURRENT_THRESH && !isOff) {
+         isOff = true; 
+         totalOnTime += time - lastStartTime; 
+       }
+    }
+
+    var startTime = dataPoints[0]["label"];
+    var startDate = startTime.substr(0, 10);
+    var startDay = new Date(startDate+ "T12:00:00Z").toString().split(' ')[0];; 
+    var endTime = dataPoints[dataPoints.length - 1]["label"];
+    var title = startDay + "   " + startDate.slice(5) + " :: " +
+          startTime.substr(11,5) + " to " +
+          endTime.substr(11,5) + "   [ Runs: " + num_toggles + 
+          "   minInter: " + interStartMin + "  runTime:" + totalOnTime + " ]";
+
+    var hist = []; 
+    for(var key in dict) {
+      if (key > HIST_MAX) continue; 
+      hist.push( { label: key, y: dict[key] }); 
+    }
+
+    return [title, hist];
+  }
+
+
+  // Outer wrapper for generating HTML code and tying everything together
+  function make_all_charts()
+  {
+    for (var count = 0; count < DAYS_LOOKBACK; count++)
+    {
+      var chartName = "chartContainer" + count;
+      var histName = "histContainer" + count;
+
+      make_new_morning_chart(count * FILES_PER_DAY, chartName, histName);
+
+      document.body.innerHTML += '<hr><br>';
+      document.body.innerHTML += '<div id="' + chartName + '" style="width:75%; height:300px; float:left"></div>';
+      document.body.innerHTML += '<div id="' + histName + '" style="width:25%; height:300px; float:right"></div>';
+      document.body.innerHTML += '<br>';
+    }
+    // console.error(document.body.innerHTML);
+  }
+
+  // Execute
+  make_all_charts();
+}
+</script>
+</head>
+
+<body>
+    <center><h3>Last 10 mornings of drip...</h3></center>
+    <li> <a href="last_day.html">Last Day's Performance</a> </li>
+    <li> <a href="pump_rates.html">Pump Rates</a> </li>
+    <br>
+</body>
+</html>

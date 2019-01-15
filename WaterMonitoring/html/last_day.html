@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Eden Booster Pump Activation Data</title>
+
+<script type="text/javascript" src="JS/jquery-1.11.1.min.js"></script>
+<script type="text/javascript" src="JS/jquery.canvasjs.min.js"></script>
+<script type="text/javascript" src="JS/common.js"></script>
+
+<script type="text/javascript">
+window.onload = function() {
+  const LOOKBACK = 10;
+  const URL_PREFIX = "/tuya_logs/tuya_logs.csv";
+     
+   function make_new_chart(data, chartName) {
+       var dataPoints = getDataPointsFromCSVLines(data);
+       var startTime = dataPoints[0]["label"];
+       dataSet = dataPoints.length;
+       var endTime = dataPoints[dataSet-1]["label"];
+       var titleText = startTime.substr(0,10) + " :: " + 
+                     startTime.slice(11) + " to " + 
+                     endTime.slice(11);
+
+       // console.error("Amit" + dataPoints[0] + "|| "+startTime);
+       render_new_chart(dataPoints, chartName, titleText); 
+   }
+
+  function make_all_charts()
+  {
+    for (var count = 0; count < LOOKBACK; count++)
+    {
+      var fileName = URL_PREFIX + "." + count;
+      if (count == 0)
+      {
+        fileName = URL_PREFIX;
+      }
+      var chartName = "chartContainer" + count;
+
+      $.get(fileName, function(data) {
+         make_new_chart(data, this.i);
+      }.bind({i:chartName}));
+
+      document.body.innerHTML += '<hr><br>';
+      document.body.innerHTML += '<div id="' + chartName + '" style="width:95%; height:300px"></div>';
+      document.body.innerHTML += '<br>';
+    }
+    // console.error(document.body.innerHTML);
+  }
+
+  // Execute
+  make_all_charts();
+}
+</script>
+</head>
+
+<body>
+    <center><h3>Most recent 30 hours of data...</h3></center>
+    <li> <a href="last_10_mornings.html">Last 10 Mornings</a> </li>
+    <li> <a href="pump_rates.html">Pump Rates</a> </li>
+    <br>
+</body>
+</html>

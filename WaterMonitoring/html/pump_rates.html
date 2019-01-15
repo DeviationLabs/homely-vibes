@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Eden Booster Pump Activation Data</title>
+
+<script type="text/javascript" src="JS/jquery-1.11.1.min.js"></script>
+<script type="text/javascript" src="JS/jquery.canvasjs.min.js"></script>
+<script type="text/javascript" src="JS/common.js"></script>
+
+<script type="text/javascript">
+window.onload = async function() {
+  const JSON_PUMPRATES_FILE = "/tuya_logs/pump_rates.json";
+  var pumpRates = [];
+  var runTimes = [];
+
+  await $.getJSON(JSON_PUMPRATES_FILE, function(zonesHistory) {
+    for (var zoneNum in zonesHistory) {
+      var zoneHistory = zonesHistory[zoneNum];
+      var chartName = "ZoneChart" + zoneNum.toString();
+      pumpRates.push({
+          type: "line",
+          connectNullData: true,
+          name: zoneHistory['zoneName'],
+          showInLegend: true,
+          legendText: zoneHistory['zoneName'],
+          dataPoints: zoneHistory['pumpRates']
+        });
+      runTimes.push({
+          type: "line",
+          connectNullData: true,
+          name: zoneHistory['zoneName'],
+          showInLegend: true,
+          legendText: zoneHistory['zoneName'],
+          dataPoints: zoneHistory['runTimes']
+        });
+      }
+  }); 
+
+  make_new_chart("pumpRates", "Pump Rates", pumpRates);
+  make_new_chart("runTimes", "Run Times", runTimes);
+}
+
+function make_new_chart(name, title, dataset) {
+  var chart = new CanvasJS.Chart(name,
+  {
+        animationEnabled: true,
+        zoomEnabled: true,
+        axisY:{
+//          title: "Active ratio",
+          lineColor: "#7F6084",
+          tickColor: "#7F6084",
+          labelFontColor: "#7F6084",
+          titleFontColor: "#7F6084"
+        },
+        toolTip: {
+          shared: true
+        },
+        legend: {
+          cursor: "pointer",
+          horizontalAlign: "left",
+          verticalAlign: "center",
+          fontSize: 14,
+          itemclick: toggleDataSeries
+        },
+        title:
+        {
+          text: title,
+          fontSize: 20
+        },
+        data: dataset
+  });
+  chart.render();
+}
+</script>
+</head>
+
+<body>
+    <center><h3>Pump Rates and Run Times</h3></center>
+    <li> <a href="last_10_mornings.html">Last 10 Mornings</a> </li>
+    <li> <a href="last_day.html">Last Day's Performance</a> </li>
+    <br><hr><br>
+    <div id="pumpRates" style="height: 900px; width: 100%;"></div>
+    <div id="runTimes" style="height: 900px; width: 100%;"></div>
+</body>
+</html>
