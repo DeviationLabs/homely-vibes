@@ -1,0 +1,6 @@
+#!/bin/bash
+# One step at a time, Centralize all hardcoding into one place. Then we'll get rid of multiple copies of data. 
+
+export TUYA_ID="0000"
+export RACHIO_API_KEY="000"
+export RACHIO_ID="000"

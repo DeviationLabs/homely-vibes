@@ -1,10 +1,6 @@
 README.private.txt
-
 lib/Constants.py
+lib/Constants.sh
 lib/tuya_switch_config_cli.json
 
-WaterMonitoring/get_rachio_events.js
-WaterMonitoring/poll_rachio.js
-WaterMonitoring/poll_tuya.sh
-WaterMonitoring/tuya_switch_config_cli.json
 WaterMonitoring/backups/canvasjs-non-commercial-2.2.zip
