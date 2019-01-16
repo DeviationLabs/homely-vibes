@@ -1,6 +1,15 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# C extensions
+*.so
+
+# hardcoded constants
 README.private.txt
 lib/Constants.py
 lib/Constants.sh
 lib/tuya_switch_config_cli.json
 
+# backups
 WaterMonitoring/backups/canvasjs-non-commercial-2.2.zip
