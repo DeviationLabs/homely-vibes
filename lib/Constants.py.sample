@@ -10,9 +10,11 @@ DAYS_LOOKBACK = 60 # Days of data to store in the pumprates file. Perf penalty i
 START_FROM_EPOCH = 1539161991 # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
 START_FROM_EPOCH = 1541055600 # 2018-11-01-00-00-00 # The really good data.
 MIN_ZONE_PLOT_TIME = 310
+DAYS_EMAIL_REPORT = 14
 MIN_DRIP_ZONE_REPORT_TIME = 1200
 MIN_SPRINKLER_ZONE_REPORT_TIME = 600
 MIN_MISC_ZONE_REPORT_TIME = SECONDS_IN_DAY
+PUMP_ALERT = 27
 
 TUYA_LOG_BASE = '{}/tuya_logs/tuya_logs.csv'.format(HOME)
 JSON_SUMMARY_FILE = '{}/tuya_logs/summary.json'.format(HOME)

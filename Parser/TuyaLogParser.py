@@ -199,11 +199,22 @@ def genSendMessage(always_email):
                                             'runTime': 0,
                                             'zoneName': None,
                                             'startTime': 0 })
+  totalPumpTime = 0;
+  totalToggles = 0;
   summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
 
-  # Loop over DAYS_LOOKBACK but in reversed ordered
-  for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_LOOKBACK*4):-1]:
+  for ts, record in sorted(summary.items())[-(Constants.DAYS_LOOKBACK*4):-1]:
     zonesStats = record['zonesStats']
+    for zoneNumStr, zoneStats in zonesStats.items():
+      aggregated[zoneNumStr]['pumpTime'] += zoneStats.get('pumpTime', 0)
+      aggregated[zoneNumStr]['runTime'] += zoneStats.get('runTime', 0)
+
+  # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement
+  for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_EMAIL_REPORT*4):-1]:
+    zonesStats = record['zonesStats']
+    if totalPumpTime < Constants.MIN_ZONE_PLOT_TIME:
+      totalToggles += record.get('totalToggles', 0)
+      totalPumpTime += record.get('totalPumpTime', 0)
     for zoneNumStr, zoneStats in zonesStats.items():
       latestZoneStats = latest[zoneNumStr]
       pumpRate = zoneStats.get('pumpRate', 0)
@@ -216,25 +227,26 @@ def genSendMessage(always_email):
         latestZoneStats['pumpTime'] += pumpTime
         latestZoneStats['runTime'] += runTime
         latestZoneStats['pumpRate'] = latestZoneStats['pumpTime'] / latestZoneStats['runTime']
-      aggregated[zoneNumStr]['pumpTime'] += pumpTime
-      aggregated[zoneNumStr]['runTime'] += runTime
 
   # Return a summary message.
   message = ""
   for zoneNumStr, zoneStats in sorted(latest.items()):
     average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
+
     if zoneStats['pumpRate'] < average * Constants.TRIGGER_THRESH:
-      message += "Zone:%s Good on %s(%s) - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], \
-                 zoneStats['pumpRate'], average)
+      attrib = "Good"
     elif not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
-      message += "Zone:%s Low data on %s(%s) - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], \
-                 zoneStats['pumpRate'], average)
+      attrib = "Low data"
     else:
-      message += "Zone:%s Failed on %s (%s) - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], \
-                 zoneStats['pumpRate'], average)
+      attrib = "Falied"
+    message += "Zone:%s %s on %s(%s) - Rate:%.03f Average:%.03f\n" \
+                % (zoneNumStr, attrib, zoneStats['startTime'], zoneStats['runTime'], \
+                zoneStats['pumpRate'], average)
+
+  pumpDutyCycle = totalPumpTime / totalToggles
+  message += "\n\nPump Duty Cycle %s = %d (%d/%d)" % \
+              ("[Failed: too low]" if pumpDutyCycle < Constants.PUMP_ALERT else "",
+              pumpDutyCycle, totalPumpTime, totalToggles)
 
   logging.info(message)
   alert = True if "fail" in message.lower() else False

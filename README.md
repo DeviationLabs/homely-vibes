@@ -2,7 +2,6 @@
 IoT integration between Tuya smart switch and Rach.io irrigation control to track and alert on water consumption
 
 Project Timelines:
-
 * 08-10-2018: Concept
 * 08-22-2018: Buy Energy Monitors
 * 08-25-2018: Energy Monitor cli scraper tested
@@ -26,19 +25,15 @@ Project Timelines:
 * 12-08-2018: [v1.4] Extend email capabilties. Add Foscam/Alpha monitoring to ecosystem. Refactor directories
 * 12-08-2018: [v1.4.1] use logger and arg parser in Parser. Remove symlink to lib files
 * 01-15-2019: [v1.4.2] Github repo.
-* 01-15-2019: [v1.4.3] Better filtering on email reports but plots are still noisy.
+* 01-15-2019: [v1.4.3] Better filtering on email reports. Add pumpDutyCycle to emails.
 
 --
-
 Future:
 * Add filtering to plots too?
-* Migrate to Eden app password creds
 * Alpha up check detailed.
 
 --
-
 Modules:
-
 wget -c https://nodejs.org/dist/latest-v10.x/node-v10.9.0-linux-arm64.tar.gz
 sudo tar -xzf node-v10.9.0-linux-arm64.tar.gz --strip-components=1 --group=root --no-same-owner -C /usr/local/
 apt-get install npm
@@ -49,7 +44,6 @@ sudo npm -g i rachio
 sudo npm -g i foscam
 
 Changes:
-
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
 
