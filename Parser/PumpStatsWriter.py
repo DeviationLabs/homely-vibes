@@ -120,7 +120,7 @@ def writeFromSummary():
       pumpRate = zone.get('pumpRate', None)
       runTime = zone.get('runTime', None)
       # Get rid of the low confidence data when drip runs for too little time
-      if TuyaLogParser.isInvalidDripData(zone.get('zoneName',"UNK"), runTime):
+      if runTime is None or runTime < Constants.MIN_ZONE_PLOT_TIME:
         pumpRate = None
       zonesHistory[zoneNumStr]['pumpRates'].append({
                                        'label': ts,

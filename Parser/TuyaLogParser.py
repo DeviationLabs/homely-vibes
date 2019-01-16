@@ -191,54 +191,63 @@ def readSummaryFile(jsonSummaryFile):
 
 
 # Flag all zone where latest rate is greater than average of the last N days.
-def genSendMessage():
+def genSendMessage(always_email):
   aggregated = collections.defaultdict(lambda: {'pumpTime': 0,
                                                 'runTime': 0 })
-  latest = collections.defaultdict(lambda: {'pumpRate': 0,
+  latest = collections.defaultdict(lambda: {'pumpTime': 0,
+                                            'pumpRate': 0,
                                             'runTime': 0,
-                                            'zoneName': "",
+                                            'zoneName': None,
                                             'startTime': 0 })
   summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
 
-  for ts, record in sorted(summary.items())[-(Constants.DAYS_LOOKBACK*4):-1]:
+  # Loop over DAYS_LOOKBACK but in reversed ordered
+  for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_LOOKBACK*4):-1]:
     zonesStats = record['zonesStats']
     for zoneNumStr, zoneStats in zonesStats.items():
+      latestZoneStats = latest[zoneNumStr]
       pumpRate = zoneStats.get('pumpRate', 0)
+      pumpTime = zoneStats.get('pumpTime', 0)
       runTime = zoneStats.get('runTime', 0)
-      latest[zoneNumStr]['pumpRate'] = pumpRate
-      latest[zoneNumStr]['runTime'] = runTime
-      latest[zoneNumStr]['startTime'] = record['logStartTime']
-      latest[zoneNumStr]['zoneName'] = zoneStats.get('zoneName',"UNK")
-      aggregated[zoneNumStr]['pumpTime'] += pumpRate*runTime
+      if latestZoneStats['zoneName'] is None:
+        latestZoneStats['startTime'] = record['logStartTime']
+        latestZoneStats['zoneName'] = zoneStats.get('zoneName',"UNK")
+      if not meetsMinRunTime(latestZoneStats['zoneName'], latestZoneStats['runTime']):
+        latestZoneStats['pumpTime'] += pumpTime
+        latestZoneStats['runTime'] += runTime
+        latestZoneStats['pumpRate'] = latestZoneStats['pumpTime'] / latestZoneStats['runTime']
+      aggregated[zoneNumStr]['pumpTime'] += pumpTime
       aggregated[zoneNumStr]['runTime'] += runTime
 
   # Return a summary message.
   message = ""
   for zoneNumStr, zoneStats in sorted(latest.items()):
     average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
-    if isInvalidDripData(zoneStats['zoneName'], zoneStats['runTime']):
-      message += "Zone:%s Too short run on %s(%s) - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], zoneStats['pumpRate'], average)
-    elif zoneStats['pumpRate'] < average * Constants.TRIGGER_THRESH:
-      message += "Zone:%s Good on %s - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['pumpRate'], average)
-    elif zoneStats['pumpRate'] < Constants.IGNORE_BELOW_RATE:
-      message += "Zone:%s Too low to detect on %s - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['pumpRate'], average)
+    if zoneStats['pumpRate'] < average * Constants.TRIGGER_THRESH:
+      message += "Zone:%s Good on %s(%s) - Rate:%.03f Average:%.03f\n" \
+                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], \
+                 zoneStats['pumpRate'], average)
+    elif not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
+      message += "Zone:%s Low data on %s(%s) - Rate:%.03f Average:%.03f\n" \
+                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], \
+                 zoneStats['pumpRate'], average)
     else:
-      message += "Zone:%s Failed check on %s (%s) - Rate:%.03f Average:%.03f\n" \
-                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], zoneStats['pumpRate'], average)
+      message += "Zone:%s Failed on %s (%s) - Rate:%.03f Average:%.03f\n" \
+                 % (zoneNumStr, zoneStats['startTime'], zoneStats['runTime'], \
+                 zoneStats['pumpRate'], average)
 
   logging.info(message)
   alert = True if "fail" in message.lower() else False
-  Mailer.sendmail("[PumpStats]", alert, message)
+  Mailer.sendmail("[PumpStats]", alert, message, always_email)
 
 
 # Hacky: Assumes only drip zones have "D" in 1st half of zoneName
-def isInvalidDripData(zoneName, runTime):
-  if runTime is None:
-    runTime = 0
-  return True if ('D' in zoneName.split('-')[0] and \
-                    runTime < Constants.MIN_DRIP_REPORT_TIME) \
-         else False
+def meetsMinRunTime(zoneName, runTime):
+  if ('D' in zoneName.split('-')[0] and runTime > Constants.MIN_DRIP_ZONE_REPORT_TIME):
+    return True
+  elif ('S' in zoneName.split('-')[0] and runTime > Constants.MIN_SPRINKLER_ZONE_REPORT_TIME):
+    return True
+  elif (runTime > Constants.MIN_MISC_ZONE_REPORT_TIME):
+    return True
+  return False
 

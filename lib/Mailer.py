@@ -38,8 +38,10 @@ def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
       server.sendmail(Constants.EMAIL_FROM, Constants.EMAIL_TO, msg.as_string())
       server.close()
       logging.info("%s Email sent!" % ts)
-    except:
+    except smtplib.SMTPDataError as e:
       logging.error("%s Something went wrong..." % ts)
+      logging.error(e)
+      print(e)
   else:
     logging.info("%s No email" % ts)
 

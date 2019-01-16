@@ -25,15 +25,14 @@ Project Timelines:
 * 11-21-2018: [v1.3.1] Refactor emails. Better handling of alerting, email frequency, content
 * 12-08-2018: [v1.4] Extend email capabilties. Add Foscam/Alpha monitoring to ecosystem. Refactor directories
 * 12-08-2018: [v1.4.1] use logger and arg parser in Parser. Remove symlink to lib files
-* 01-15-2019: [v1.4.2] Github repo. move to eden for email credentials.
+* 01-15-2019: [v1.4.2] Github repo.
+* 01-15-2019: [v1.4.3] Better filtering on email reports but plots are still noisy.
 
 --
 
 Future:
-
-* Move out all hardcoded config in all files - JS and that yucky shell script
-* Pump duty cycle alerting. Extend pump avg to be last 10 minutes/ last 30 days.
-* remove hardcoding in JS files into config store. Add files to repo.
+* Add filtering to plots too?
+* Migrate to Eden app password creds
 * Alpha up check detailed.
 
 --

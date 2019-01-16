@@ -24,7 +24,8 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  try:
+#  try:
+  if True:
     for fileCounter in range(Constants.MAX_NEW_FILES):
       csvLogfile = Constants.TUYA_LOG_BASE
       csvLogfile += '.{}'.format(fileCounter) if fileCounter > 0 else ''
@@ -36,10 +37,10 @@ if __name__ == "__main__":
     # Gen Stats for the last N days.
     PumpStatsWriter.writeFromSummary()
 
-    TuyaLogParser.genSendMessage()
-  except:
-    Mailer.sendmail(topic="[PumpStats]", alert=True,\
-                    message="Something failed in script execution", always_email=True)
+    TuyaLogParser.genSendMessage(args.always_email)
+#  except Error as e:
+#    Mailer.sendmail(topic="[PumpStats]", alert=True,\
+        #                    message="Something failed in script execution\s%s" % e, always_email=True)
 
   logging.info('Done!')
   print("Done!")
