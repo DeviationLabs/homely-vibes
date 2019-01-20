@@ -1,13 +1,12 @@
 #!/usr/bin/env python3.6
 import argparse
 import logging
-import os
-import requests
-import subprocess
+import re
 import sys
 import time
 import Mailer
 import Constants
+import NetHelpers
 
 system_unhealthy = False
 state = dict()
@@ -15,45 +14,25 @@ message = ""
 
 #### Helper Functions ####
 
-# ping output, 1 line per row. Suppress bash retval
-def ping_output(node, count=1, desired_up=True):
-  node_state = None
-  cmd = "ping -c%d %s" % (count, node)
-  try:
-    output = subprocess.check_output(cmd.split())
-  except subprocess.CalledProcessError as e:
-    output = e.output
-  for line in output.decode('utf-8').splitlines():
-    if '0 received' in line:
-       node_state = False
-    elif 'received' in line:
-       node_state = True
-  logging.debug("node %s: got %s" % (node, node_state))
-  return node_state if desired_up else not node_state
-
-
 def reboot_foscam(node):
   cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" \
         % (node, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
-  resp_text = '\n'
-  try:
-    resp = requests.get(cmd)
-    resp_text = ' '.join(resp.text.split('\n'))
-  except (OSError, Exception) as e:
-    resp_text = "Something failed in reboot request on node: %s" % node
-  return(resp_text)
+  return NetHelpers.http_req(cmd)
 
 
 def reboot_windows(node):
-  winCmd = "shutdown /r /f ; ping localhost -n 3 ; net statistics workstation"
-  sshOpts = '-o ConnectTimeout=10'
-  cmd = "sshpass -p %s ssh %s %s@%s %s 2> /dev/null" \
-        % (Constants.WINDOWS_PASSWORD, sshOpts, Constants.WINDOWS_USERNAME, node, winCmd)
-  try:
-    output = subprocess.check_output(cmd.split())
-  except subprocess.CalledProcessError as e:
-    output = e.output
-  return output.decode('utf-8')
+  # Ping to keep child proc alive for long enough
+  winCmd = "shutdown /r /f ; ping localhost -n 3 > nul"
+  return NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
+
+
+def check_deep_state(node):
+  winCmd = "net statistics workstation"
+  output = NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
+  if ("successful" in output):
+    foundStr = re.search("Statistics since (.*)", output).group(1)
+    output = "Up since %s" % foundStr
+  return output
 
 
 def log_message(msg):
@@ -64,6 +43,7 @@ def log_message(msg):
 
 def check_state(desired_up, attempts):
   global state
+  global system_unhealthy
   for node in nodes:
     state[node] = False
   for attempt in range(attempts):
@@ -73,7 +53,7 @@ def check_state(desired_up, attempts):
     for node in nodes:
       # if state is false, then ping again to check if state is now true
       if not state[node]:
-        state[node] = ping_output(node=node, desired_up=desired_up)
+        state[node] = NetHelpers.ping_output(node=node, desired_up=desired_up)
   if not all(state.values()):
     system_unhealthy = True
 
@@ -118,9 +98,9 @@ if __name__ == "__main__":
     log_message("Rebooting now...")
     for node in nodes:
       if args.mode == 'foscam':
-        log_message(reboot_foscam(node))
+        logging.debug(reboot_foscam(node))
       else:
-        log_message(reboot_windows(node))
+        logging.debug(reboot_windows(node))
 
     check_state(desired_up=False, attempts=180)
     for node in nodes:
@@ -134,11 +114,16 @@ if __name__ == "__main__":
     for node in nodes:
       if state[node]:
         log_message("%s[%s] back online." % (args.mode, node))
-
-  Mailer.sendmail(topic="[NodeCheck-%s]" %args.mode, alert=system_unhealthy, \
-                  message=message, always_email=args.always_email)
+        if args.mode == 'windows':
+          # If windows and alive, do a deep check
+          time.sleep(60) # generously wait for processes to stabilize
+          log_message(check_deep_state(node))
   if system_unhealthy:
+    log_message("Failed to restart nodes...")
     logging.error('Hmm... overall badness')
   else:
     logging.info('All is well')
+
+  Mailer.sendmail(topic="[NodeCheck-%s]" %args.mode, alert=system_unhealthy, \
+                  message=message, always_email=args.always_email)
   print("Done!")
