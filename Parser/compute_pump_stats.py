@@ -2,13 +2,14 @@
 import argparse
 import logging
 import sys
+import traceback
 import Constants
 import Mailer
 import PumpStatsWriter
 import TuyaLogParser
 
 if __name__ == "__main__":
-  parser = argparse.ArgumentParser(description = "Reboot Utility")
+  parser = argparse.ArgumentParser(description = "Compute waterpump stats and email alert")
   parser.add_argument('--always_email',
                       help    ='Send email report',
                       action  ='store_true',
@@ -37,9 +38,11 @@ if __name__ == "__main__":
     PumpStatsWriter.writeFromSummary()
 
     TuyaLogParser.genSendMessage(args.always_email)
-  except:
-    Mailer.sendmail(topic="[PumpStats]", alert=True,\
-                    message="Something failed in script execution", always_email=True)
+  except Exception as e:
+    msg="Something failed in script execution:\n%s" % traceback.format_exc()
+    logging.error(msg)
+    Mailer.sendmail(topic="[PumpStats]", alert=True, message=msg, always_email=True)
+    raise
 
   logging.info('Done!')
   print("Done!")

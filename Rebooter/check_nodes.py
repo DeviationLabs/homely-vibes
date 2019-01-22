@@ -44,16 +44,16 @@ def log_message(msg):
 def check_state(desired_up, attempts):
   global state
   global system_unhealthy
-  for node in nodes:
-    state[node] = False
+  for nodeName, nodeIP in nodes.items():
+    state[nodeName] = False
   for attempt in range(attempts):
     if all(state.values()):
       return
     time.sleep(1)
-    for node in nodes:
+    for nodeName, nodeIP in nodes.items():
       # if state is false, then ping again to check if state is now true
-      if not state[node]:
-        state[node] = NetHelpers.ping_output(node=node, desired_up=desired_up)
+      if not state[nodeName]:
+        state[nodeName] = NetHelpers.ping_output(node=nodeIP, desired_up=desired_up)
   if not all(state.values()):
     system_unhealthy = True
 
@@ -88,36 +88,36 @@ if __name__ == "__main__":
           else Constants.WINDOWS_NODES
 
   check_state(desired_up=True, attempts=1)
-  for node in nodes:
-    if state[node]:
-      log_message("Node %s healthy." % node)
+  for nodeName, nodeIP in nodes.items():
+    if state[nodeName]:
+      log_message("%s: %s healthy." % (args.mode, nodeName))
     else:
-      log_message("Node %s unhealthy." % node)
+      log_message("%s: %s unhealthy." % (args.mode, nodeName))
 
   if args.reboot:
     log_message("Rebooting now...")
-    for node in nodes:
+    for nodeName, nodeIP in nodes.items():
       if args.mode == 'foscam':
-        logging.debug(reboot_foscam(node))
+        logging.debug(reboot_foscam(nodeIP))
       else:
-        logging.debug(reboot_windows(node))
+        logging.debug(reboot_windows(nodeIP))
 
     check_state(desired_up=False, attempts=180)
-    for node in nodes:
-      if state[node]:
-        log_message("Confirmed node is down: %s" % node)
+    for nodeName, nodeIP in nodes.items():
+      if state[nodeName]:
+        log_message("Confirmed node is down: %s" % nodeName)
       else:
-        log_message("Oops! Failed to reboot: %s" % node)
+        log_message("Oops! Failed to reboot: %s" % nodeName)
 
     log_message("Sleep until nodes restart...")
     check_state(desired_up=True, attempts=300)
-    for node in nodes:
-      if state[node]:
-        log_message("%s[%s] back online." % (args.mode, node))
+    for nodeName, nodeIP in nodes.items():
+      if state[nodeName]:
+        log_message("%s: %s back online." % (args.mode, nodeName))
         if args.mode == 'windows':
           # If windows and alive, do a deep check
           time.sleep(60) # generously wait for processes to stabilize
-          log_message(check_deep_state(node))
+          log_message(check_deep_state(nodeName))
   if system_unhealthy:
     log_message("Failed to restart nodes...")
     logging.error('Hmm... overall badness')

@@ -17,13 +17,16 @@ USER_EMAIL=abutala@gmail.com
 # |   |      |  |  |
 #*/2  *      *  *  *     ping6 -q -c 3 2620:10d:c089:fff:3ac9:86ff:fe50:f377
 
-# Check on Foscam every hour and reboot once a day. Reboot Alpha once a week
+# NodeCheck: Check on Foscam every hour and reboot once a day. Reboot Alpha once a week
 0    7      *  *  *     ~/bin/Rebooter/check_nodes.py --reboot --mode='foscam' > /dev/null
 1    *      *  *  *     ~/bin/Rebooter/check_nodes.py --mode='foscam' > /dev/null
 0    6      *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
 1    *      *  *  *     ~/bin/Rebooter/check_nodes.py --mode='windows' > /dev/null
 
-# Water Monitoring. 
+# WaterMonitoring
 @reboot                  sleep 120 ; nohup ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
 1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/Junk/log_rotate.status.txt ~/bin/log_rotate.conf
 5-59/15   *  *  *  *     ~/bin/Parser/compute_pump_stats.py &> /dev/null
+
+# GarageDoor
+*/5   *     *  *  *    ~/bin/GarageCheck/check_garage_door.py --save_image > /dev/null

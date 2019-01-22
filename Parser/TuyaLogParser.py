@@ -5,6 +5,7 @@ from enum import Enum
 import json
 import logging
 import os
+import time
 import Constants
 import Mailer
 
@@ -198,7 +199,7 @@ def genSendMessage(always_email):
                                             'pumpRate': 0,
                                             'runTime': 0,
                                             'zoneName': None,
-                                            'startTime': 0 })
+                                            'startEpoch': 0 })
   totalPumpTime = 0;
   totalToggles = 0;
   summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
@@ -210,7 +211,7 @@ def genSendMessage(always_email):
       aggregated[zoneNumStr]['runTime'] += zoneStats.get('runTime', 0)
 
   # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement
-  for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_EMAIL_REPORT*4):-1]:
+  for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
     if totalPumpTime < Constants.MIN_ZONE_PLOT_TIME:
       totalToggles += record.get('totalToggles', 0)
@@ -221,7 +222,7 @@ def genSendMessage(always_email):
       pumpTime = zoneStats.get('pumpTime', 0)
       runTime = zoneStats.get('runTime', 0)
       if latestZoneStats['zoneName'] is None:
-        latestZoneStats['startTime'] = record['logStartTime']
+        latestZoneStats['startEpoch'] = record['logStartEpoch']
         latestZoneStats['zoneName'] = zoneStats.get('zoneName',"UNK")
       if not meetsMinRunTime(latestZoneStats['zoneName'], latestZoneStats['runTime']):
         latestZoneStats['pumpTime'] += pumpTime
@@ -238,10 +239,11 @@ def genSendMessage(always_email):
     elif not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
       attrib = "Low data"
     else:
-      attrib = "Falied"
-    message += "Zone:%s %s on %s(%s) - Rate:%.03f Average:%.03f\n" \
-                % (zoneNumStr, attrib, zoneStats['startTime'], zoneStats['runTime'], \
-                zoneStats['pumpRate'], average)
+      attrib = "Failed"
+    date_brief = time.strftime('%m-%d', time.localtime(zoneStats['startEpoch']))
+    message += "%s on %s: %s - Rate:%.03f Average:%.03f Secs: %s\n" \
+                % (attrib, date_brief, zoneStats['zoneName'], \
+                zoneStats['pumpRate'], average, zoneStats['runTime'])
 
   pumpDutyCycle = totalPumpTime / totalToggles
   message += "\n\nPump Duty Cycle %s = %d (%d/%d)" % \

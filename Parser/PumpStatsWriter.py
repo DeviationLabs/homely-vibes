@@ -122,6 +122,10 @@ def writeFromSummary():
       # Get rid of the low confidence data when drip runs for too little time
       if runTime is None or runTime < Constants.MIN_ZONE_PLOT_TIME:
         pumpRate = None
+      # DST and other confounding issues. Put an upper bound on runTime
+      if runTime is not None:
+        maxSecs = int(Constants.SECONDS_IN_DAY / Constants.LOGROTATE_PER_DAY)
+        runTime = min(runTime, maxSecs)
       zonesHistory[zoneNumStr]['pumpRates'].append({
                                        'label': ts,
                                        'y': pumpRate
