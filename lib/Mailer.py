@@ -30,7 +30,10 @@ def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
       flag = "[ALERT]" if alert else ""
       msg['Subject'] = "%s%s %s %02d:%02d" % \
               (topic,flag, day_today, hour_today, minute_today)
-      msg.attach(MIMEText(message, 'plain'))
+      if "<html>" in message:
+        msg.attach(MIMEText(message, 'html'))
+      else:
+        msg.attach(MIMEText(message, 'plain'))
 
       server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
       server.ehlo()

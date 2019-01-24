@@ -230,26 +230,29 @@ def genSendMessage(always_email):
         latestZoneStats['pumpRate'] = latestZoneStats['pumpTime'] / latestZoneStats['runTime']
 
   # Return a summary message.
-  message = ""
+  message = "<html> <head></head> <body>"
+  message += "<a href=\"http://%s\">Dashboard</a><p>\n" % Constants.MY_EXTERNAL_IP
+
   for zoneNumStr, zoneStats in sorted(latest.items()):
     average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
 
     if zoneStats['pumpRate'] < average * Constants.TRIGGER_THRESH:
       attrib = "Good"
     elif not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
-      attrib = "Low data"
+      attrib = "<font color=\"blue\">Low data</font>"
     else:
-      attrib = "Failed"
+      attrib = "<font color=\"red\">Failed</font>"
     date_brief = time.strftime('%m-%d', time.localtime(zoneStats['startEpoch']))
-    message += "%s on %s: %s - Rate:%.03f Average:%.03f Secs: %s\n" \
-                % (attrib, date_brief, zoneStats['zoneName'], \
+    message += "<br>[%s] %s <b>%s</b> - Rate:%.03f Average:%.03f Secs: %s\n" \
+                % (date_brief, zoneStats['zoneName'], attrib, \
                 zoneStats['pumpRate'], average, zoneStats['runTime'])
 
   pumpDutyCycle = totalPumpTime / totalToggles
-  message += "\n\nPump Duty Cycle %s = %d (%d/%d)" % \
-              ("[Failed: too low]" if pumpDutyCycle < Constants.PUMP_ALERT else "",
+  message += "<br><br>Pump Duty Cycle %s= <b>%d</b> (%d/%d)" % \
+              ("<font color=\"red\">[Failed: too low] </font>" if pumpDutyCycle < Constants.PUMP_ALERT else "",
               pumpDutyCycle, totalPumpTime, totalToggles)
 
+  message += "</p></body></html>"
   logging.info(message)
   alert = True if "fail" in message.lower() else False
   Mailer.sendmail("[PumpStats]", alert, message, always_email)

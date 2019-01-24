@@ -23,6 +23,9 @@ USER_EMAIL=abutala@gmail.com
 0    6      *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
 1    *      *  *  *     ~/bin/Rebooter/check_nodes.py --mode='windows' > /dev/null
 
+# FTP folder management
+1    8      *  *  *     ~/bin/Rebooter/purge_old_foscam_files.sh > /dev/null
+
 # WaterMonitoring
 @reboot                  sleep 120 ; nohup ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
 1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/Junk/log_rotate.status.txt ~/bin/log_rotate.conf
