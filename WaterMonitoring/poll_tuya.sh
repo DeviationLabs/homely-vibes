@@ -36,7 +36,7 @@ do
       latchedEpoch=$currEpoch
       temp=$(${scriptdir}/poll_rachio.js)
   fi
-  line_rachio=${temp:-"-3,UNK"} # Handle the no data case
+  line_rachio=${temp:-"-3,Script Error"} # Handle the no data case
   echo "${line_date},${line_tuya},${line_rachio}"
 done
 

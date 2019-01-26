@@ -40,13 +40,12 @@ Project Timelines:
 * 01-21-2019: [v1.5.0] Foscam garage image fetch. ML experimentation stubs.
                        Further refinement on email reports (inc script error traceback)
 * 01-23-2019: [v1.5.1] HTML emails. CPU temp monitoring for host OS. Foscam ftp folder sanity check
+* 01-25-2019: [v1.5.2] HTML emails part 2. Minor tweak to averaging computation. Installation notes for tensorflow
 
 --
 
 Future:
 * Foscam ML garage door check.
-* Add filtering to water monitor plots? (not needed?)
-* Monitor foscam video feed storage on NAS
 
 --
 
@@ -64,3 +63,13 @@ Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
 
+Tensorflow install notes:
+sudo apt-get install virtualenv
+virtualenv --system-site-packages -p python3.5 ./python-tf/
+wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
+export CPATH=/usr/include/hdf5/serial/
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
+# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
+HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
+# (If hitting odroid reboots)
+cpulimit -l 10 -- python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.wh

@@ -11,7 +11,7 @@ client.getDevice(DEVICE_ID)
   .then(activeZone =>
           console.log(activeZone
                       ? `${activeZone.zoneNumber},${activeZone.name}`
-                      : "-1,off")
+                      : "-1,In House")
        )
-  .catch(() => console.log(`-2,RateLimited`));
-//  .then(activeZone => console.log( activeZone));
+  .catch(() => console.log(`-2,Rachio Error`));
+//  .then(activeZone => console.log(activeZone));

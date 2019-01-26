@@ -204,7 +204,9 @@ def genSendMessage(always_email):
   totalToggles = 0;
   summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
 
-  for ts, record in sorted(summary.items())[-(Constants.DAYS_LOOKBACK*4):-1]:
+  # Average excludes data from the last few weeks
+  for ts, record in sorted(summary.items())[-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):\
+                                            -(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY)]:
     zonesStats = record['zonesStats']
     for zoneNumStr, zoneStats in zonesStats.items():
       aggregated[zoneNumStr]['pumpTime'] += zoneStats.get('pumpTime', 0)
@@ -230,29 +232,47 @@ def genSendMessage(always_email):
         latestZoneStats['pumpRate'] = latestZoneStats['pumpTime'] / latestZoneStats['runTime']
 
   # Return a summary message.
-  message = "<html> <head></head> <body>"
-  message += "<a href=\"http://%s\">Dashboard</a><p>\n" % Constants.MY_EXTERNAL_IP
+  message = "<html><head><style>"
+  message += """
+  th {
+    background-color: black;
+    text-align: center;
+    color: white;
+  }
+  th, td {
+    padding: 1px 15px;
+  }
+  tr:nth-child(even) {
+    background-color: #eee;
+  }
+  tr:nth-child(odd) {
+    background-color: #fff;
+  }
+"""
+  message += "</style></head><body>\n"
+  message += "<a href=\"http://%s\">Dashboard</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
+  message += "<tr><th>Date</th><th>Zone</th><th>Status</th><th>Offset</th><th>Average</th><th>Secs</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
     average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
 
-    if zoneStats['pumpRate'] < average * Constants.TRIGGER_THRESH:
+    if zoneStats['pumpRate'] < average * Constants.ALERT_THRESH:
       attrib = "Good"
     elif not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
       attrib = "<font color=\"blue\">Low data</font>"
     else:
-      attrib = "<font color=\"red\">Failed</font>"
+      attrib = "<b><font color=\"red\">Failed</font></b>"
     date_brief = time.strftime('%m-%d', time.localtime(zoneStats['startEpoch']))
-    message += "<br>[%s] %s <b>%s</b> - Rate:%.03f Average:%.03f Secs: %s\n" \
+    message += "<tr><td>[%s]</td><td>%s</td><td>%s</td><td>%0.03f %%</td><td>%.03f</td><td align=\"right\">%6s</td></tr>\n" \
                 % (date_brief, zoneStats['zoneName'], attrib, \
-                zoneStats['pumpRate'], average, zoneStats['runTime'])
+                (zoneStats['pumpRate'] - average) * 100 / average, average, zoneStats['runTime'])
 
   pumpDutyCycle = totalPumpTime / totalToggles
-  message += "<br><br>Pump Duty Cycle %s= <b>%d</b> (%d/%d)" % \
+  message += "</table><br>Pump Duty Cycle %s= <b>%d</b> (%d/%d)" % \
               ("<font color=\"red\">[Failed: too low] </font>" if pumpDutyCycle < Constants.PUMP_ALERT else "",
               pumpDutyCycle, totalPumpTime, totalToggles)
 
-  message += "</p></body></html>"
+  message += "</body></html>"
   logging.info(message)
   alert = True if "fail" in message.lower() else False
   Mailer.sendmail("[PumpStats]", alert, message, always_email)
@@ -260,11 +280,11 @@ def genSendMessage(always_email):
 
 # Hacky: Assumes only drip zones have "D" in 1st half of zoneName
 def meetsMinRunTime(zoneName, runTime):
-  if ('D' in zoneName.split('-')[0] and runTime > Constants.MIN_DRIP_ZONE_REPORT_TIME):
+  if ('D' in zoneName.split('-')[0] and runTime > Constants.MIN_DRIP_ZONE_ALERT_TIME):
     return True
-  elif ('S' in zoneName.split('-')[0] and runTime > Constants.MIN_SPRINKLER_ZONE_REPORT_TIME):
+  elif ('S' in zoneName.split('-')[0] and runTime > Constants.MIN_SPRINKLER_ZONE_ALERT_TIME):
     return True
-  elif (runTime > Constants.MIN_MISC_ZONE_REPORT_TIME):
+  elif (runTime > Constants.MIN_MISC_ZONE_ALERT_TIME):
     return True
   return False
 

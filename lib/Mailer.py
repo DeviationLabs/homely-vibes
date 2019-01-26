@@ -19,7 +19,7 @@ def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
   if always_email or \
       ( alert and hour_today == Constants.EMAIL_HOUR \
         and minute_today < 10 ) or \
-      ( day_today == Constants.EMAIL_DAY \
+      ( day_today == Constants.EMAIL_NON_ALERT_DAY \
         and hour_today == Constants.EMAIL_HOUR \
         and minute_today < 10 \
       ):
