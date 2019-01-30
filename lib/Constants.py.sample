@@ -11,7 +11,7 @@ LOGROTATE_PER_DAY = 4
 DAYS_LOOKBACK = 90 # Days of data to store in the pumprates file. Perf penalty if too large
 START_FROM_EPOCH = 1539161991 # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
 START_FROM_EPOCH = 1541055600 # 2018-11-01-00-00-00 # The really good data.
-MIN_ZONE_PLOT_TIME = 189
+MIN_DRIP_PLOT_TIME = 189
 
 TUYA_LOG_BASE = '{}/tuya_logs/tuya_logs.csv'.format(HOME)
 JSON_SUMMARY_FILE = '{}/tuya_logs/summary.json'.format(HOME)

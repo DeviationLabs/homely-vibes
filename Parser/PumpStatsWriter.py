@@ -120,7 +120,8 @@ def writeFromSummary():
       pumpRate = zone.get('pumpRate', None)
       runTime = zone.get('runTime', None)
       # Get rid of the low confidence data when drip runs for too little time
-      if runTime is None or runTime < Constants.MIN_ZONE_PLOT_TIME:
+      if runTime is None:
+#          or ( 'D' in zone['zoneName'].split('-')[0] and runTime < Constants.MIN_DRIP_PLOT_TIME):
         pumpRate = None
       # DST and other confounding issues. Put an upper bound on runTime
       if runTime is not None:

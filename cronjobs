@@ -28,8 +28,11 @@ USER_EMAIL=abutala@gmail.com
 
 # WaterMonitoring
 @reboot                  sleep 120 ; nohup ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
+45    *     *  *   *     run-one nohup ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
 1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/Junk/log_rotate.status.txt ~/bin/log_rotate.conf
 5-59/15   *  *  *  *     ~/bin/Parser/compute_pump_stats.py &> /dev/null
 
 # GarageDoor
-*/5   *     *  *  *    ~/bin/GarageCheck/check_garage_door.py --save_image > /dev/null
+# @reboot                  sleep 120 ; nohup watch -n 30 --precise ~/bin/GarageCheck/check_garage_door.py --save_image > /dev/null
+@reboot                  sleep 120 ; nohup ~/bin/GarageCheck/check_garage_door.py --out_dir /mnt/IPCam_Data/garage_images --save_image > /dev/null
+45    *     *  *   *     run-one nohup ~/bin/GarageCheck/check_garage_door.py --out_dir /mnt/IPCam_Data/garage_images --save_image > /dev/null

@@ -117,7 +117,7 @@ if __name__ == "__main__":
         if args.mode == 'windows':
           # If windows and alive, do a deep check
           time.sleep(60) # generously wait for processes to stabilize
-          log_message(check_deep_state(nodeName))
+          log_message(check_deep_state(nodeIP))
   if system_unhealthy:
     log_message("Failed to restart nodes...")
     logging.error('Hmm... overall badness')

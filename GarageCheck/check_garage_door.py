@@ -41,29 +41,31 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  try:
-    mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
-                       Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
+  runState = True
+  while runState:
+    try:
+      mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
+                         Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
 
-    with NetHelpers.no_stdout():
-      (retVal, IPparams) = mycam.get_ip_info(print_ipinfo)
-#      mycam.get_port_info()
-#      time.sleep(1)
-      picture_data = mycam.snap_picture_2()
-    logging.debug("Got IP params: %s" % json.dumps(IPparams))
+      with NetHelpers.no_stdout():
+        (retVal, IPparams) = mycam.get_ip_info(print_ipinfo)
+        picture_data = mycam.snap_picture_2()
+      logging.debug("Got IP params: %s" % json.dumps(IPparams))
 
-    if args.save_image == True:
-      ts = time.strftime("%Y-%m-%d_%H-%M", time.localtime())
-      filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
-      fh = open(filename, "wb")
-      fh.write(picture_data[1]) ## Ubuntu: Use "eog <filename>" to view
-      logging.debug("Saved image to %s" % filename)
-      fh.close()
-  except Exception as e:
-    msg="Something failed in script execution:\n%s" % traceback.format_exc()
-    logging.error(msg)
-    Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=True)
-    raise
+      if args.save_image == True:
+        ts = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
+        fh = open(filename, "wb")
+        fh.write(picture_data[1]) ## Ubuntu: Use "eog <filename>" to view
+        logging.debug("Saved image to %s" % filename)
+        fh.close()
+    except Exception as e:
+      msg="Something failed in script execution:\n%s" % traceback.format_exc()
+      logging.error(msg)
+      Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=True)
+      raise
+      runState = False
+    time.sleep(30)
 
   logging.info('Done!')
   print("Done!")

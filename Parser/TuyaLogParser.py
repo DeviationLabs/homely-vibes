@@ -215,7 +215,7 @@ def genSendMessage(always_email):
   # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement
   for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
-    if totalPumpTime < Constants.MIN_ZONE_PLOT_TIME:
+    if totalPumpTime < Constants.MIN_SPRINKLER_ZONE_ALERT_TIME:
       totalToggles += record.get('totalToggles', 0)
       totalPumpTime += record.get('totalPumpTime', 0)
     for zoneNumStr, zoneStats in zonesStats.items():
@@ -251,26 +251,35 @@ def genSendMessage(always_email):
 """
   message += "</style></head><body>\n"
   message += "<a href=\"http://%s\">Dashboard</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
-  message += "<tr><th>Date</th><th>Zone</th><th>Status</th><th>Offset</th><th>Average</th><th>Secs</th></tr>"
+  message += "<tr><th>Date</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
     average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
 
-    if zoneStats['pumpRate'] < average * Constants.ALERT_THRESH:
-      attrib = "Good"
-    elif not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
-      attrib = "<font color=\"blue\">Low data</font>"
+    if not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
+      if zoneStats['pumpRate'] < average * Constants.ALERT_THRESH:
+        attrib = "Good."
+      else:
+        attrib = "<font color=\"blue\">Low data</font>"
     else:
-      attrib = "<b><font color=\"red\">Failed</font></b>"
+      if zoneStats['pumpRate'] < average * Constants.ALERT_THRESH:
+        attrib = "Good"
+      else:
+        attrib = "<b><font color=\"red\">Failed</font></b>"
     date_brief = time.strftime('%m-%d', time.localtime(zoneStats['startEpoch']))
-    message += "<tr><td>[%s]</td><td>%s</td><td>%s</td><td>%0.03f %%</td><td>%.03f</td><td align=\"right\">%6s</td></tr>\n" \
-                % (date_brief, zoneStats['zoneName'], attrib, \
-                (zoneStats['pumpRate'] - average) * 100 / average, average, zoneStats['runTime'])
+    message += "<tr><td>[%s]</td><td>%s</td><td>%s</td>" % (date_brief, zoneStats['zoneName'], attrib)
+
+    message +=  "<td align=\"right\">%+3d %%</td><td>%0.03f</td><td align=\"right\">%4d</td></tr>\n" \
+                % ( (zoneStats['pumpRate'] - average) * 100 / average,\
+                    zoneStats['pumpRate'],\
+                    zoneStats['runTime']/60 )
 
   pumpDutyCycle = totalPumpTime / totalToggles
-  message += "</table><br>Pump Duty Cycle %s= <b>%d</b> (%d/%d)" % \
-              ("<font color=\"red\">[Failed: too low] </font>" if pumpDutyCycle < Constants.PUMP_ALERT else "",
-              pumpDutyCycle, totalPumpTime, totalToggles)
+  message += "</table><br>Pump duty cycle %s= <b>%d</b> seconds" % \
+              ("<font color=\"red\">[Failed: Too Low] </font>" if pumpDutyCycle < Constants.PUMP_ALERT else "",
+              pumpDutyCycle)
+  message += "<br><br><small>Deviation alert @ %+d %%</small>" % (Constants.ALERT_THRESH * 100 - 100)
+  message += "<br><small>Pump alert @ %d seconds</small>" % (Constants.PUMP_ALERT)
 
   message += "</body></html>"
   logging.info(message)
