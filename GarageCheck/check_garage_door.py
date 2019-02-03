@@ -4,8 +4,10 @@ from foscam.foscam import FoscamCamera, FOSCAM_SUCCESS
 import logging
 import json
 import sys
+import traceback
 import time
 import Constants
+import Mailer
 import NetHelpers
 
 def print_ipinfo(returncode, params):
@@ -53,6 +55,8 @@ if __name__ == "__main__":
       logging.debug("Got IP params: %s" % json.dumps(IPparams))
 
       if args.save_image == True:
+        if (len(picture_data) < 2 or picture_data[1] is None):
+          raise Exception("No data in image file, or no image returned")
         ts = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
         filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
         fh = open(filename, "wb")

@@ -200,24 +200,24 @@ def genSendMessage(always_email):
                                             'runTime': 0,
                                             'zoneName': None,
                                             'startEpoch': 0 })
-  totalPumpTime = 0;
-  totalToggles = 0;
+  aggregatedPumpTime = 0
+  aggregatedToggles = 0
   summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
+  lastEndTime = None
 
-  # Average excludes data from the last few weeks
-  for ts, record in sorted(summary.items())[-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):\
-                                            -(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY)]:
+  for ts, record in list(summary.items())[-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):]:
     zonesStats = record['zonesStats']
+    lastEndTime = record['logEndTime']
     for zoneNumStr, zoneStats in zonesStats.items():
       aggregated[zoneNumStr]['pumpTime'] += zoneStats.get('pumpTime', 0)
       aggregated[zoneNumStr]['runTime'] += zoneStats.get('runTime', 0)
 
   # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement
-  for ts, record in sorted(summary.items())[-1:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
+  for ts, record in list(summary.items())[:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
-    if totalPumpTime < Constants.MIN_SPRINKLER_ZONE_ALERT_TIME:
-      totalToggles += record.get('totalToggles', 0)
-      totalPumpTime += record.get('totalPumpTime', 0)
+    if aggregatedToggles < Constants.PUMP_TOGGLES_COUNT:
+      aggregatedToggles += record.get('totalToggles', 0)
+      aggregatedPumpTime += record.get('totalPumpTime', 0)
     for zoneNumStr, zoneStats in zonesStats.items():
       latestZoneStats = latest[zoneNumStr]
       pumpRate = zoneStats.get('pumpRate', 0)
@@ -274,16 +274,22 @@ def genSendMessage(always_email):
                     zoneStats['pumpRate'],\
                     zoneStats['runTime']/60 )
 
-  pumpDutyCycle = totalPumpTime / totalToggles
+  pumpDutyCycle = aggregatedPumpTime / aggregatedToggles
   message += "</table><br>Pump duty cycle %s= <b>%d</b> seconds" % \
               ("<font color=\"red\">[Failed: Too Low] </font>" if pumpDutyCycle < Constants.PUMP_ALERT else "",
               pumpDutyCycle)
-  message += "<br><br><small>Deviation alert @ %+d %%</small>" % (Constants.ALERT_THRESH * 100 - 100)
+  message += "<br><hr><br><small>Deviation alert @ %+d %%</small>" % (Constants.ALERT_THRESH * 100 - 100)
   message += "<br><small>Pump alert @ %d seconds</small>" % (Constants.PUMP_ALERT)
+  message += "<br><small>Last Update: %s</small>" % lastEndTime
 
   message += "</body></html>"
   logging.info(message)
+  with open("%s/public_html/report.html" % Constants.HOME,'w') as fp:
+    fp.write(message)
   alert = True if "fail" in message.lower() else False
+  # Get emails once a day even if no alerts.
+  if (lastEndTime.split('-')[3] == Constants.EMAIL_HOUR and lastEndTime.split('-')[4] < 15):
+    always_email = True
   Mailer.sendmail("[PumpStats]", alert, message, always_email)
 
 

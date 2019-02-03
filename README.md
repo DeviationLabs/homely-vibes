@@ -41,7 +41,8 @@ Project Timelines:
                        Further refinement on email reports (inc script error traceback)
 * 01-23-2019: [v1.5.1] HTML emails. CPU temp monitoring for host OS. Foscam ftp folder sanity check
 * 01-25-2019: [v1.5.2] HTML emails part 2. Minor tweak to averaging computation. Installation notes for tensorflow
-* 01-28-2019: [v1.5.3] Minor tweaks on email. bug fix on check_deep_state. restartable background processes in cron.
+* 01-28-2019: [v1.5.3] Minor tweaks on plotter/email. bug fix on check_deep_state. restartable background processes in cron.
+* 01-30-2019: [v1.5.4] Minor fix in rates computation. Post report on the website too. bug fixes on check_garage. Drop the non-alert day.
 
 --
 
