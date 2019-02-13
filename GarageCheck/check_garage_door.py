@@ -50,9 +50,9 @@ if __name__ == "__main__":
                          Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
 
       with NetHelpers.no_stdout():
-        (retVal, IPparams) = mycam.get_ip_info(print_ipinfo)
         picture_data = mycam.snap_picture_2()
-      logging.debug("Got IP params: %s" % json.dumps(IPparams))
+#       (retVal, IPparams) = mycam.get_ip_info(print_ipinfo)
+#       logging.debug("Got IP params: %s" % json.dumps(IPparams))
 
       if args.save_image == True:
         if (len(picture_data) < 2 or picture_data[1] is None):

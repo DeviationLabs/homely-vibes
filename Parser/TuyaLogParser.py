@@ -250,7 +250,7 @@ def genSendMessage(always_email):
   }
 """
   message += "</style></head><body>\n"
-  message += "<a href=\"http://%s\">Dashboard</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
+  message += "<a href=\"http://%s/WaterMonitoring_html/\">Dashboard</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
   message += "<tr><th>Date</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
@@ -287,10 +287,9 @@ def genSendMessage(always_email):
   with open("%s/public_html/report.html" % Constants.HOME,'w') as fp:
     fp.write(message)
   alert = True if "fail" in message.lower() else False
-  # Get emails once a day even if no alerts.
-  if (lastEndTime.split('-')[3] == Constants.EMAIL_HOUR and lastEndTime.split('-')[4] < 15):
-    always_email = True
-  Mailer.sendmail("[PumpStats]", alert, message, always_email)
+  if always_email:
+    # Too many alerts, so use the always_email flag to gate email updates
+    Mailer.sendmail("[PumpStats]", alert, message, always_email)
 
 
 # Hacky: Assumes only drip zones have "D" in 1st half of zoneName

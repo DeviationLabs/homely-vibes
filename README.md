@@ -43,6 +43,7 @@ Project Timelines:
 * 01-25-2019: [v1.5.2] HTML emails part 2. Minor tweak to averaging computation. Installation notes for tensorflow
 * 01-28-2019: [v1.5.3] Minor tweaks on plotter/email. bug fix on check_deep_state. restartable background processes in cron.
 * 01-30-2019: [v1.5.4] Minor fix in rates computation. Post report on the website too. bug fixes on check_garage. Drop the non-alert day.
+* 02-13-2019: [v1.5.5] Maintenance release. TF finally working.
 
 --
 
@@ -65,13 +66,32 @@ Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
 
-Tensorflow install notes:
-* sudo apt-get install virtualenv
-* virtualenv --system-site-packages -p python3.5 ./python-tf/
-* wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
-* export CPATH=/usr/include/hdf5/serial/
-* \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
-* \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
-* If hitting odroid reboots: cpulimit -l 10 -- <command>
-* HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
-* python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.wh
+Tensorflow install notes (Note: As of 1/1/2019, tf only available for python3.5, and not 3.6)
+* Confirm that odroid has sufficent power (may fail if powered froma CPU usb port).
+* If still hitting odroid reboots: cpulimit -l 10 -- <command>
+* Increase system swap to 4GB.
+** grep SwapTotal /proc/meminfo
+** sudo swapoff -a
+** sudo dd if=/dev/zero of=/swapfile bs=1G count=4
+** sudo chmod 600 /swapfile
+** sudo mkswap /swapfile
+** sudo swapon /swapfile
+* Finally did not use virtual env, but if required.
+** sudo apt-get install virtualenv
+** virtualenv --system-site-packages -p python3.5 ./python-tf/
+* sudo apt update
+* sudo apt upgrade
+* sudo apt install gcc python3-dev python3-pip libxml2-dev libxslt1-dev zlib1g-dev g++
+* Note: keras is a part of tf, but inorder to support legacy code, we need
+** sudo apt-get install python3-pandas python3-numpy python3-scipy python3-tensorflow python3-keras
+** \# And a ton more libraries that need to be installed to get the pip compiler to work
+** sudo apt-get install libatlas-base-dev gfortran python-pip
+* TF needed manual wheel download, and pip install
+** wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
+** export CPATH=/usr/include/hdf5/serial/
+** \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
+** \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
+** HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
+** python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
+** python3.5 -m pip install scipy pandas
+

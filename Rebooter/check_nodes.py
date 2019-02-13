@@ -91,6 +91,9 @@ if __name__ == "__main__":
   for nodeName, nodeIP in nodes.items():
     if state[nodeName]:
       log_message("%s: %s healthy." % (args.mode, nodeName))
+      if args.mode == 'windows':
+        # If windows and alive, do a deep check
+        log_message(check_deep_state(nodeIP))
     else:
       log_message("%s: %s unhealthy." % (args.mode, nodeName))
 
