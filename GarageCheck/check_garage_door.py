@@ -44,10 +44,17 @@ if __name__ == "__main__":
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
   runState = True
+  mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
+             Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
+  msg = None
   while runState:
     try:
-      mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
-                         Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
+      currtime = time.localtime()
+      if currtime.tm_hour == 0 and currtime.tm_min == 0:
+        if send_email:
+          Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=send_email)
+        send_email = false
+        count = 0
 
       with NetHelpers.no_stdout():
         picture_data = mycam.snap_picture_2()
@@ -56,8 +63,9 @@ if __name__ == "__main__":
 
       if args.save_image == True:
         if (len(picture_data) < 2 or picture_data[1] is None):
-          raise Exception("No data in image file, or no image returned")
-        ts = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+          count += 1
+          raise Exception("No data in image file, or no image returned. Count = %d" % count)
+        ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
         filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
         fh = open(filename, "wb")
         fh.write(picture_data[1]) ## Ubuntu: Use "eog <filename>" to view
@@ -66,9 +74,9 @@ if __name__ == "__main__":
     except Exception as e:
       msg="Something failed in script execution:\n%s" % traceback.format_exc()
       logging.error(msg)
-      Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=True)
-      raise
-      runState = False
+      send_email = true
+#      raise
+#      runState = False
     time.sleep(30)
 
   logging.info('Done!')

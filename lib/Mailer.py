@@ -15,11 +15,7 @@ def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
   minute_today = today.minute
   ts = '%s %02d:%02d ' % (day_today, hour_today, minute_today)
 
-  # Always email, or soft alert only @ EMAIL_HOUR.
-  if always_email or \
-      ( alert and hour_today == Constants.EMAIL_HOUR \
-        and minute_today < 10 \
-      ):
+  if always_email or alert:
     try:
       msg = MIMEMultipart()
       msg['From'] = Constants.EMAIL_FROM

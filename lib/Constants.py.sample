@@ -22,7 +22,6 @@ JSON_PUMPRATES_FILE = '{}/tuya_logs/pump_rates.json'.format(HOME)
 EMAIL_FROM = 'user_from@gmail.com'
 EMAIL_TO = 'user_to@gmail.com'
 ALWAYS_EMAIL = False
-EMAIL_HOUR = 8
 DAYS_EMAIL_REPORT = 14
 MIN_SPRINKLER_ZONE_ALERT_TIME = 600
 MIN_DRIP_ZONE_ALERT_TIME = 1800

@@ -121,11 +121,11 @@ if __name__ == "__main__":
           # If windows and alive, do a deep check
           time.sleep(60) # generously wait for processes to stabilize
           log_message(check_deep_state(nodeIP))
-  if system_unhealthy:
-    log_message("Failed to restart nodes...")
-    logging.error('Hmm... overall badness')
-  else:
-    logging.info('All is well')
+    if system_unhealthy:
+      log_message("Failed to restart nodes...")
+      logging.error('Hmm... overall badness')
+    else:
+      logging.info('All is well')
 
   Mailer.sendmail(topic="[NodeCheck-%s]" %args.mode, alert=system_unhealthy, \
                   message=message, always_email=args.always_email)

@@ -17,12 +17,12 @@ USER_EMAIL=abutala@gmail.com
 # |   |      |  |  |
 #*/2  *      *  *  *     ping6 -q -c 3 2620:10d:c089:fff:3ac9:86ff:fe50:f377
 
-# Log file management: Note, special logic exists for WaterMonitoring
+# Log file management
 1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/Junk/log_rotate.status.txt ~/bin/log_rotate.conf
 
 # NodeCheck: Check on nodes every hour. Reboot Foscam daily and Alpha once a week
+50   *       *  *  *     ~/bin/Rebooter/check_nodes.py --mode='windows' > /dev/null
 55   *       *  *  *     ~/bin/Rebooter/check_nodes.py --mode='foscam' > /dev/null
-55   *       *  *  *     ~/bin/Rebooter/check_nodes.py --mode='windows' > /dev/null
 0    7       *  *  1-6   ~/bin/Rebooter/check_nodes.py --reboot --mode='foscam' > /dev/null
 0    7       *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='foscam' --always_email > /dev/null
 0    6       *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
@@ -30,14 +30,11 @@ USER_EMAIL=abutala@gmail.com
 # FTP folder management
 1    7       *  *  *     ~/bin/Rebooter/purge_old_foscam_files.sh > /dev/null
 
-# WaterMonitoring: Start scraper on reboot, and check every 5. 
-@reboot                  sleep 120 ; nohup ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
-*/5   *      *  *  *     run-one nohup ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
-# Update every 15, and daily email @7:00
+# WaterMonitoring: Start scraper on reboot, update every 15, and daily email @7:00
+@reboot                  sleep 120 ; nohup run-one-constantly ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
 5-59/15 *    *  *  *     ~/bin/Parser/compute_pump_stats.py &> /dev/null
-10    7      *  *  *     ~/bin/Parser/compute_pump_stats.py --always_email &> /dev/null
+0     7      *  *  *     ~/bin/Parser/compute_pump_stats.py --always_email &> /dev/null
 
 # GarageDoor: Start scraper on reboot and check every 5. 
 # @reboot                sleep 120 ; nohup watch -n 30 --precise ~/bin/GarageCheck/check_garage_door.py --save_image > /dev/null
-@reboot                 sleep 120 ; nohup ~/bin/GarageCheck/check_garage_door.py --out_dir /mnt/IPCam_Data/garage_images --save_image > /dev/null
-*/5   *      *  *  *    run-one nohup ~/bin/GarageCheck/check_garage_door.py --out_dir /mnt/IPCam_Data/garage_images --save_image > /dev/null
+@reboot                 sleep 120 ; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --out_dir /mnt/IPCam_Data/garage_images --save_image > /dev/null

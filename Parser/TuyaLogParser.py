@@ -56,14 +56,12 @@ class TuyaLogParser:
     prevZoneStats = None
     interStartTime = float('inf')
 
-    # Error Checking.
+    # If the most recent datapoint has error values (typically -2) then alert.
     if fetch(dataPoints[-1], 'CURRENT', 'int') < 0 or fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1:
-      logging.warn("Warn: Data logging failure during polling at %s. Ignoring..." % self.logEndTime)
-      Mailer.sendmail("[PumpStats]", alert=True, \
-                      message="Data logging failure during polling: %s. Rate limited, or worse? " % self.logEndTime, \
-                      always_email=self.email_errors)
+      msg = "Warning: Data logging failure during polling at %s.\n%s" % (self.logEndTime, " ".join(dataPoints[-1]) )
+      logging.warn(msg)
+      Mailer.sendmail("[PumpStats]", alert=True, message=msg, always_email=self.email_errors)
       self.email_errors = False
-
 
     for record in dataPoints:
       try:
