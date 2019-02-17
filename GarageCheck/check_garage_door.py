@@ -1,21 +1,22 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3.5
 import argparse
 from foscam.foscam import FoscamCamera, FOSCAM_SUCCESS
 import logging
 import json
+import os
 import sys
 import traceback
 import time
 import Constants
 import Mailer
 import NetHelpers
+import TFOneShot
 
 def print_ipinfo(returncode, params):
   if returncode != FOSCAM_SUCCESS:
     print('Failed to get IPInfo!')
     return
   print('IP: %s, Mask: %s' % (params['ip'], params['mask']))
-
 
 #### Main Routine ####
 if __name__ == "__main__":
@@ -31,10 +32,9 @@ if __name__ == "__main__":
                       help    ='Save images for ML training set',
                       action  ='store_true',
                       default =False)
-  parser.add_argument('--alert',
-                      help    ='Run ML and report on state',
-                      action  ='store_false',
-                      default =True)
+  parser.add_argument('--model_file',
+                      help    ='Trained model',
+                      default =None)
   args = parser.parse_args()
 
   logfile = '%s/Junk/check_garage_door.txt' % Constants.HOME
@@ -44,6 +44,9 @@ if __name__ == "__main__":
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
   runState = True
+  model = None
+  if os.path.isfile(args.model_file):
+    (model, model_labels) = TFOneShot.load_my_model(args.model_file)
   mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
              Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
   msg = None
@@ -71,12 +74,15 @@ if __name__ == "__main__":
         fh.write(picture_data[1]) ## Ubuntu: Use "eog <filename>" to view
         logging.debug("Saved image to %s" % filename)
         fh.close()
+
+        if model is not None:
+          label, msg = TFOneShot.run_predictor(model, model_labels, filename)
+          logging.debug(msg)
+
     except Exception as e:
       msg="Something failed in script execution:\n%s" % traceback.format_exc()
       logging.error(msg)
-      send_email = true
-#      raise
-#      runState = False
+      send_email = True
     time.sleep(30)
 
   logging.info('Done!')

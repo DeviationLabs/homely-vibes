@@ -24,6 +24,12 @@ parser.add_argument('--model_file',
                     default = 'my_model.h5')
 args = parser.parse_args()
 
+num_preds = 0
+if os.path.isdir(args.train_dir):
+  num_preds = sum(os.path.isdir("%s/%s" % (args.train_dir, i)) for i in os.listdir(args.train_dir))
+if num_preds == 0:
+  raise ValueError("Error reading data in training directory: %s" % args.train_dir)
+
 # In[1]:
 import tensorflow as tf
 import keras
@@ -47,7 +53,7 @@ x=GlobalAveragePooling2D()(x)
 x=Dense(1024,activation='relu')(x) #we add dense layers so that the model can learn more complex functions and classify for better results.
 x=Dense(1024,activation='relu')(x) #dense layer 2
 x=Dense(512,activation='relu')(x) #dense layer 3
-preds=Dense(3,activation='softmax')(x) #final layer with softmax activation
+preds=Dense(num_preds,activation='softmax')(x) #final layer with softmax activation # soft max predictions over the number of outcomes.
 
 # In[3]:
 model=Model(inputs=base_model.input,outputs=preds)

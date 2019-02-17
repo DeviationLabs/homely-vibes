@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3.5
 import calendar
 import datetime
 from email.mime.multipart import MIMEMultipart

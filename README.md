@@ -47,10 +47,14 @@ Project Timelines:
 * 02-14-2019: [v1.5.6] Some cleanup around email alerts
 * 02-16-2019: [v1.5.7] Bug fix on node check, simplified Mailer logic -> move complexity into cron
                        New TF model training and predictor script (but still not working for garage image)
+* 02-17-2019: [v1.6.0] First version of garage door detector (Recall: 0% :( )
+                       Note: Need to run, and save transferlearning output before first activation
+                       Moved everything down to python 3.5 to support TF.
+
 --
 
-Future:
-* Foscam ML garage door check.
+(Indefinite) Future:
+* ML detector in Foscam frontyard to open garage. [We are severely constrained on CPU, so will need to first find a cloud migration for this]
 
 --
 
@@ -61,39 +65,38 @@ Dependencies:
 * sudo tar -xzf node-v10.9.0-linux-arm64.tar.gz --strip-components=1 --group=root --no-same-owner -C /usr/local/
 * apt-get install npm
 * sudo npm -g i rachio
-* sudo -H python3.6 -m pip install pyfoscam
+* sudo -H python3.5 -m pip install pyfoscam
 * pip install tensorflow
+* pip install pymyq
+* bazel (To compile, modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m")
 
 Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
+* In python3.5/site-packages/foscam/__init__.py (from foscam.foscam import ... )
 
 Tensorflow install notes (Note: As of 1/1/2019, tf only available for python3.5, and not 3.6)
+* Note: keras is a part of tf, but inorder to support legacy code, we need the standalone package too.
 * Confirm that odroid has sufficent power (may fail if powered froma CPU usb port).
-* If still hitting odroid reboots: cpulimit -l 10 -- <command>
+  * If still hitting odroid reboots: cpulimit -l 10 -- <command>
 * Increase system swap to 4GB.
- * grep SwapTotal /proc/meminfo
- * sudo swapoff -a
- * sudo dd if=/dev/zero of=/swapfile bs=1G count=4
- * sudo chmod 600 /swapfile
- * sudo mkswap /swapfile
- * sudo swapon /swapfile
+  * grep SwapTotal /proc/meminfo
+  * sudo swapoff -a
+  * sudo dd if=/dev/zero of=/swapfile bs=1G count=4
+  * sudo chmod 600 /swapfile
+  * sudo mkswap /swapfile
+  * sudo swapon /swapfile
 * Finally did not use virtual env, but if required.
- * sudo apt-get install virtualenv
- * virtualenv --system-site-packages -p python3.5 ./python-tf/
-* sudo apt update
-* sudo apt upgrade
+  * sudo apt-get install virtualenv
+  * virtualenv --system-site-packages -p python3.5 ./python-tf/
 * sudo apt install gcc python3-dev python3-pip libxml2-dev libxslt1-dev zlib1g-dev g++
-* Note: keras is a part of tf, but inorder to support legacy code, we need
- * sudo apt-get install python3-pandas python3-numpy python3-scipy python3-tensorflow python3-keras
- * \# And a ton more libraries that need to be installed to get the pip compiler to work
- * sudo apt-get install libatlas-base-dev gfortran python-pip
-* TF needed manual wheel download, and pip install
- * wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
- * export CPATH=/usr/include/hdf5/serial/
- * \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
- * \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
- * HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
- * python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
- * python3.5 -m pip install scipy pandas
-* Install bazel (Modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m")
+  * sudo apt-get install python3.5-pandas python3.5-numpy python3.5-scipy python3.5-tensorflow python3.5-keras
+  * sudo apt-get install libatlas-base-dev gfortran python3.5-pip
+* If TF needed manual wheel download, and pip install (I realized late that you probably can do apt get for python3.5 libs)
+  * wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
+  * export CPATH=/usr/include/hdf5/serial/
+  * \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
+  * \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
+  * HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
+  * python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
+  * python3.5 -m pip install scipy pandas
