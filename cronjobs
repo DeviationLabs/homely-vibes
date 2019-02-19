@@ -18,7 +18,7 @@ USER_EMAIL=abutala@gmail.com
 #*/2  *      *  *  *     ping6 -q -c 3 2620:10d:c089:fff:3ac9:86ff:fe50:f377
 
 # Log file management
-1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/Junk/log_rotate.status.txt ~/bin/log_rotate.conf
+1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/logs/log_rotate.status.txt ~/bin/log_rotate.conf
 
 # NodeCheck: Check on nodes every hour. Reboot Foscam daily and Alpha once a week
 50   *       *  *  *     ~/bin/Rebooter/check_nodes.py --mode='windows' > /dev/null
@@ -35,6 +35,5 @@ USER_EMAIL=abutala@gmail.com
 5-59/15 *    *  *  *     ~/bin/Parser/compute_pump_stats.py &> /dev/null
 0     7      *  *  *     ~/bin/Parser/compute_pump_stats.py --always_email &> /dev/null
 
-# GarageDoor: Start scraper on reboot and check every 5. 
-# @reboot                sleep 120 ; nohup watch -n 30 --precise ~/bin/GarageCheck/check_garage_door.py --save_image > /dev/null
-@reboot                 sleep 120 ; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --out_dir /mnt/IPCam_Data/garage_images --save_image > /dev/null
+# GarageDoor: Start scraper on reboot
+@reboot                 sleep 120 ; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --model_file ~/bin/GarageCheck/garage.h5 > /dev/null

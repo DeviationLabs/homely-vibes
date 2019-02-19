@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.6
 # coding: utf-8
 # from https://towardsdatascience.com/keras-transfer-learning-for-beginners-6c9b8b7143e
 

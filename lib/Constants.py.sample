@@ -5,6 +5,7 @@ MY_EXTERNAL_IP="1234"
 SECONDS_IN_DAY = 86400
 MAX_ZONES = 16
 HOME = os.environ['HOME']
+LOGGING_DIR = "{}/logs".format(HOME)
 
 MAX_NEW_FILES = 2 # Number of recent raw log files that are reprocessed into summary json
 LOGROTATE_PER_DAY = 4

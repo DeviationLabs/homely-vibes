@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.6
 import argparse
 import logging
 import re
@@ -73,21 +73,18 @@ if __name__ == "__main__":
                       help    ='Send email report',
                       action  ='store_true',
                       default =False)
-  parser.add_argument('--out_dir',
-                      help    ='Folder for storing output files',
-                      default ='%s/Junk/' % Constants.HOME)
   args = parser.parse_args()
 
-  logfile = '%s/check_nodes.txt' % args.out_dir
+  logfile = '%s/Rebooter.txt' % Constants.LOGGING_DIR
   log_format = '%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s'
-  logging.basicConfig(filename=logfile, format=log_format, level=logging.DEBUG)
+  logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
   nodes = Constants.FOSCAM_NODES if args.mode == 'foscam' \
           else Constants.WINDOWS_NODES
 
-  check_state(desired_up=True, attempts=1)
+  check_state(desired_up=True, attempts=3) ## Seeing intermittent nwk failures. Let's mask these
   for nodeName, nodeIP in nodes.items():
     if state[nodeName]:
       log_message("%s: %s healthy." % (args.mode, nodeName))

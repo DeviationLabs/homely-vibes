@@ -50,7 +50,10 @@ Project Timelines:
 * 02-17-2019: [v1.6.0] First version of garage door detector (Recall: 0% :( )
                        Note: Need to run, and save transferlearning output before first activation
                        Moved everything down to python 3.5 to support TF.
-
+* 02-17-2019: [v1.6.1] Bug fix on alerting exposed by python3.5 not using ordered dicts. Fix logger level.
+                       Garage detector can now bypass image save to disk. Recall is still 0%. Install notes for OpenCV
+* 02-17-2019: [v1.6.2] OpenCV only available for python3.6. In general seems to ba a bad idea to stay with 3.5, built tf for 3.6 and we are cruising.
+                       some bugfixes.
 --
 
 (Indefinite) Future:
@@ -65,18 +68,18 @@ Dependencies:
 * sudo tar -xzf node-v10.9.0-linux-arm64.tar.gz --strip-components=1 --group=root --no-same-owner -C /usr/local/
 * apt-get install npm
 * sudo npm -g i rachio
-* sudo -H python3.5 -m pip install pyfoscam
+* python3.6 -m pip install pyfoscam
 * pip install tensorflow
 * pip install pymyq
 * bazel (To compile, modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m")
+* opencv -- Install notes here: https://medium.com/@JMoonTech/install-opencv-and-tensorflow-on-odroid-c2-e23f13484bc0
 
 Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
 * In python3.5/site-packages/foscam/__init__.py (from foscam.foscam import ... )
 
-Tensorflow install notes (Note: As of 1/1/2019, tf only available for python3.5, and not 3.6)
-* Note: keras is a part of tf, but inorder to support legacy code, we need the standalone package too.
+Tensorflow install notes (Needs bazel)
 * Confirm that odroid has sufficent power (may fail if powered froma CPU usb port).
   * If still hitting odroid reboots: cpulimit -l 10 -- <command>
 * Increase system swap to 4GB.
@@ -88,15 +91,17 @@ Tensorflow install notes (Note: As of 1/1/2019, tf only available for python3.5,
   * sudo swapon /swapfile
 * Finally did not use virtual env, but if required.
   * sudo apt-get install virtualenv
-  * virtualenv --system-site-packages -p python3.5 ./python-tf/
-* sudo apt install gcc python3-dev python3-pip libxml2-dev libxslt1-dev zlib1g-dev g++
-  * sudo apt-get install python3.5-pandas python3.5-numpy python3.5-scipy python3.5-tensorflow python3.5-keras
-  * sudo apt-get install libatlas-base-dev gfortran python3.5-pip
-* If TF needed manual wheel download, and pip install (I realized late that you probably can do apt get for python3.5 libs)
+  * virtualenv --system-site-packages -p python3.6 ./python-tf/
+* A ton of python packages
+  * sudo apt install gcc python3-dev python3-pip libxml2-dev libxslt1-dev zlib1g-dev g++
+  * sudo apt-get install python3-pandas python3-numpy python3-scipy python3-keras python3-matplotlib python3-opencv
+  * sudo apt-get install libatlas-base-dev gfortran python3-h5py
+  * Note: keras is a part of tf, but inorder to support legacy code, we need the standalone package too.
+* TF wheel based install (Note: As of 1/1/2019, only available for python3.5 on arm64 :()
   * wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
   * export CPATH=/usr/include/hdf5/serial/
   * \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
   * \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
   * HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
   * python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
-  * python3.5 -m pip install scipy pandas
+  * python3.5 -m pip install scipy pandas keras

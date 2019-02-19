@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.6
 import collections
 import csv
 from enum import Enum
@@ -13,7 +13,7 @@ class TuyaLogParser:
   ON_CURRENT_THRESH = 300
 
   def __init__(self, csvLogfile, jsonSummaryFile):
-    self.email_errors = True # TODO: Feeble attempt to prevent a flood of email notifications.
+    self.emailOnRuntimeErrors = True # TODO: Feeble attempt to prevent a flood of email notifications.
     self.totalToggles = 0
     self.interStartMin = float('inf')
     self.totalPumpTime = 0
@@ -42,8 +42,8 @@ class TuyaLogParser:
     if (len(dataPoints) == 0):
       logging.error("Warn: No records in file %s. Ignoring..." % csvLogfile)
       Mailer.sendmail("[PumpStats]", alert=True, message="Log file empty. Polling issue", \
-                      always_email=self.email_errors)
-      self.email_errors = False
+                      always_email=self.emailOnRuntimeErrors)
+      self.emailOnRuntimeErrors = False
       return
 
     self.logStartTime = fetch(dataPoints[0], 'TIME')
@@ -60,8 +60,8 @@ class TuyaLogParser:
     if fetch(dataPoints[-1], 'CURRENT', 'int') < 0 or fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1:
       msg = "Warning: Data logging failure during polling at %s.\n%s" % (self.logEndTime, " ".join(dataPoints[-1]) )
       logging.warn(msg)
-      Mailer.sendmail("[PumpStats]", alert=True, message=msg, always_email=self.email_errors)
-      self.email_errors = False
+      Mailer.sendmail("[PumpStats]", alert=True, message=msg, always_email=self.emailOnRuntimeErrors)
+      self.emailOnRuntimeErrors = False
 
     for record in dataPoints:
       try:
@@ -201,9 +201,10 @@ def genSendMessage(always_email):
   aggregatedPumpTime = 0
   aggregatedToggles = 0
   summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
+  sorted_summary_items = sorted(list(summary.items()))
   lastEndTime = None
 
-  for ts, record in list(summary.items())[-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):]:
+  for ts, record in sorted_summary_items[-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):]:
     zonesStats = record['zonesStats']
     lastEndTime = record['logEndTime']
     for zoneNumStr, zoneStats in zonesStats.items():
@@ -211,7 +212,7 @@ def genSendMessage(always_email):
       aggregated[zoneNumStr]['runTime'] += zoneStats.get('runTime', 0)
 
   # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement
-  for ts, record in list(summary.items())[:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
+  for ts, record in sorted_summary_items[:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
     if aggregatedToggles < Constants.PUMP_TOGGLES_COUNT:
       aggregatedToggles += record.get('totalToggles', 0)
@@ -249,10 +250,12 @@ def genSendMessage(always_email):
 """
   message += "</style></head><body>\n"
   message += "<a href=\"http://%s/WaterMonitoring_html/\">Dashboard</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
-  message += "<tr><th>Date</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
+  message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
     average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
+    if average == 0:
+      average = float('inf')
 
     if not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
       if zoneStats['pumpRate'] < average * Constants.ALERT_THRESH:
