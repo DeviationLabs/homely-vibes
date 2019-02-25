@@ -28,7 +28,8 @@ USER_EMAIL=abutala@gmail.com
 0    6       *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
 
 # FTP folder management
-1    7       *  *  *     ~/bin/Rebooter/purge_old_foscam_files.sh > /dev/null
+1    7       *  *  1-6   ~/bin/Rebooter/purge_old_foscam_files.sh > /dev/null
+1    7       *  *  0     ~/bin/Rebooter/purge_old_foscam_files.sh
 
 # WaterMonitoring: Start scraper on reboot, update every 15, and daily email @7:00
 @reboot                  sleep 120 ; nohup run-one-constantly ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null

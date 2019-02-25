@@ -5,6 +5,7 @@ import sys
 import traceback
 import Constants
 import Mailer
+import PumpReport
 import PumpStatsWriter
 import TuyaLogParser
 
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     # Gen Stats for the last N days.
     PumpStatsWriter.writeFromSummary()
 
-    TuyaLogParser.genSendMessage(args.always_email)
+    PumpReport.genSendMessage(args.always_email)
   except Exception as e:
     msg="Something failed in script execution:\n%s" % traceback.format_exc()
     logging.error(msg)

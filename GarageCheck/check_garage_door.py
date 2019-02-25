@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
       if (len(picture_data) < 2 or picture_data[1] is None):
         count += 1
-        raise Exception("[%s] No data in image file, or no image returned. Count = %d" % (ts, count))
+        raise Exception("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, count))
       imgBytes = picture_data[1]
       img = mpimg.imread(io.BytesIO(imgBytes), format='JPG')
 
@@ -98,8 +98,8 @@ if __name__ == "__main__":
         logging.info(msg)
 
     except Exception as e:
-      msg += "Something failed in script execution:\n%s" % traceback.format_exc()
-      logging.error(msg)
+      msg += traceback.format_exc()
+      logging.error(traceback.format_exc())
       send_email = True
     time.sleep(30)
 

@@ -52,8 +52,10 @@ Project Timelines:
                        Moved everything down to python 3.5 to support TF.
 * 02-17-2019: [v1.6.1] Bug fix on alerting exposed by python3.5 not using ordered dicts. Fix logger level.
                        Garage detector can now bypass image save to disk. Recall is still 0%. Install notes for OpenCV
-* 02-17-2019: [v1.6.2] OpenCV only available for python3.6. In general seems to ba a bad idea to stay with 3.5, built tf for 3.6 and we are cruising.
-                       some bugfixes.
+* 02-18-2019: [v1.6.2] OpenCV only available for python3.6. In general seems to be a bad idea to stay with 3.5, as apt-get will misbehave.
+                       Building TF for 3.6 and we expect cruising. Some cleanup - retry for nodecheck, config of "logs" directory.
+* 02-19-2019: [v1.6.3] favicon. Better error reporting on purge_foscam_files. Opencv install notes. refactor PumpReports.
+
 --
 
 (Indefinite) Future:
@@ -62,46 +64,65 @@ Project Timelines:
 --
 
 Dependencies:
-* https://github.com/TuyaAPI/cli
-* https://github.com/codetheweb/tuyapi
-* wget -c https://nodejs.org/dist/latest-v10.x/node-v10.9.0-linux-arm64.tar.gz
-* sudo tar -xzf node-v10.9.0-linux-arm64.tar.gz --strip-components=1 --group=root --no-same-owner -C /usr/local/
-* apt-get install npm
-* sudo npm -g i rachio
-* python3.6 -m pip install pyfoscam
-* pip install tensorflow
-* pip install pymyq
-* bazel (To compile, modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m")
-* opencv -- Install notes here: https://medium.com/@JMoonTech/install-opencv-and-tensorflow-on-odroid-c2-e23f13484bc0
+* Base:
+  * wget -c https://nodejs.org/dist/latest-v10.x/node-v10.9.0-linux-arm64.tar.gz
+  * sudo tar -xzf node-v10.9.0-linux-arm64.tar.gz --strip-components=1 --group=root --no-same-owner -C /usr/local/
+  * apt-get install npm
+  * apt-get install python3.6 python3-pandas python3-numpy python3-scipy python3-keras python3-matplotlib python3-opencv python3-h5py python3-pip
+  * Note: keras is a part of TF, but in order to support legacy code, we need the standalone package too.
+* Tuya/Rachio/Foscam/Liftmaster:
+  * https://github.com/TuyaAPI/cli
+  * https://github.com/codetheweb/tuyapi
+  * sudo npm -g i rachio
+  * pip3 install pyfoscam
+  * pip3 install pymyq
+* bazel-- modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m"
+* Tensorflow -- See below
 
 Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
-* In python3.5/site-packages/foscam/__init__.py (from foscam.foscam import ... )
+* In python3: site-packages/foscam/__init__.py (from foscam.foscam import ... )
 
 Tensorflow install notes (Needs bazel)
+* Note: building bazel will take ~1 day, building TF will take ~2 days!!
 * Confirm that odroid has sufficent power (may fail if powered froma CPU usb port).
   * If still hitting odroid reboots: cpulimit -l 10 -- <command>
-* Increase system swap to 4GB.
+* Increase system swap to 4GB:
   * grep SwapTotal /proc/meminfo
   * sudo swapoff -a
   * sudo dd if=/dev/zero of=/swapfile bs=1G count=4
   * sudo chmod 600 /swapfile
   * sudo mkswap /swapfile
   * sudo swapon /swapfile
-* Finally did not use virtual env, but if required.
+  * Also add to fstab
+* Finally did not use virtual env, but if required:
   * sudo apt-get install virtualenv
   * virtualenv --system-site-packages -p python3.6 ./python-tf/
-* A ton of python packages
-  * sudo apt install gcc python3-dev python3-pip libxml2-dev libxslt1-dev zlib1g-dev g++
-  * sudo apt-get install python3-pandas python3-numpy python3-scipy python3-keras python3-matplotlib python3-opencv
-  * sudo apt-get install libatlas-base-dev gfortran python3-h5py
-  * Note: keras is a part of tf, but inorder to support legacy code, we need the standalone package too.
-* TF wheel based install (Note: As of 1/1/2019, only available for python3.5 on arm64 :()
+* Build TF: https://www.tensorflow.org/install/source
+  * bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0"
+  * ./bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
+  * pip3 install --upgrade tensorflow-\*aarch64.whl
+* TF wheel based install (Note: As of 1/1/2019, only available for python3.5 on arm64, and now will need "pip installs" as apt-get only has for 3.6?!)
   * wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
   * export CPATH=/usr/include/hdf5/serial/
   * \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
   * \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
-  * HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
+  * HDF5_DIR=/usr/lib/x86_064-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
   * python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
   * python3.5 -m pip install scipy pandas keras
+* opencv -- Install notes here: https://medium.com/@JMoonTech/install-opencv-and-tensorflow-on-odroid-c2-e23f13484bc0
+  * cd <dir>; git clone https://github.com/Itseez/opencv.git; cd opencv; git checkout 3.0.0 / 4.0.1
+  * cd <dir>; git clone https://github.com/Itseez/opencv_contrib.git; cd opencv_contrib; git checkout 3.0.0 / 4.0.1
+  * cd /usr/include/aarch64-linux-gnu/ffmpeg; ln -sf /usr/include/aarch64-linux-gnu/libavformat/<avformat|avio>.h .
+  * In opencv/cmake/OpenCVDetectCXXCompiler.cmake change "dumpversion" to "dumpfullversion"
+  * mkdir build; cd build; cmake -DCMAKE_BUILD_TYPE=RELEASE
+    -DCMAKE_INSTALL_PREFIX=/usr/local -DINSTALL_PYTHON_EXAMPLES=ON
+    -DINSTALL_C_EXAMPLES=OFF
+    -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-<ver>/modules
+    -DPYTHON3_EXECUTABLE=/usr/bin/python3.5
+    -DPYTHON3_LIBRARY=/usr/lib/aarch64-linux-gnu/libpython3.5m.so
+    -DBUILD_EXAMPLES=OFF -DWITH_LIBV4L=OFF -DWITH_V4L=OFF
+    -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_OPENCV_PYTHON3=1 i
+    -DENABLE_PRECOMPILED_HEADERS=OFF
+    -Wno-dev ..
