@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3.5
 import argparse
 from foscam.foscam import FoscamCamera, FOSCAM_SUCCESS
 import logging

@@ -55,6 +55,7 @@ Project Timelines:
 * 02-18-2019: [v1.6.2] OpenCV only available for python3.6. In general seems to be a bad idea to stay with 3.5, as apt-get will misbehave.
                        Building TF for 3.6 and we expect cruising. Some cleanup - retry for nodecheck, config of "logs" directory.
 * 02-19-2019: [v1.6.3] favicon. Better error reporting on purge_foscam_files. Opencv install notes. refactor PumpReports.
+* 03-01-2019: [v1.6.4] Better sizing for charts. Stablize Garage TF on python3.5. Improvements to deletion of foscam logging directory
 
 --
 
@@ -112,8 +113,8 @@ Tensorflow install notes (Needs bazel)
   * python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
   * python3.5 -m pip install scipy pandas keras
 * opencv -- Install notes here: https://medium.com/@JMoonTech/install-opencv-and-tensorflow-on-odroid-c2-e23f13484bc0
-  * cd <dir>; git clone https://github.com/Itseez/opencv.git; cd opencv; git checkout 3.0.0 / 4.0.1
-  * cd <dir>; git clone https://github.com/Itseez/opencv_contrib.git; cd opencv_contrib; git checkout 3.0.0 / 4.0.1
+  * cd <dir>; git clone https://github.com/Itseez/opencv.git; cd opencv; git checkout 4.0.1
+  * cd <dir>; git clone https://github.com/Itseez/opencv_contrib.git; cd opencv_contrib; git checkout 4.0.1
   * cd /usr/include/aarch64-linux-gnu/ffmpeg; ln -sf /usr/include/aarch64-linux-gnu/libavformat/<avformat|avio>.h .
   * In opencv/cmake/OpenCVDetectCXXCompiler.cmake change "dumpversion" to "dumpfullversion"
   * mkdir build; cd build; cmake -DCMAKE_BUILD_TYPE=RELEASE
@@ -126,3 +127,4 @@ Tensorflow install notes (Needs bazel)
     -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_OPENCV_PYTHON3=1 i
     -DENABLE_PRECOMPILED_HEADERS=OFF
     -Wno-dev ..
+  * make -j2; ...
