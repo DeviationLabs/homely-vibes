@@ -4,8 +4,10 @@ import logging
 import re
 import sys
 import time
-import Mailer
+import traceback
 import Constants
+import FoscamImager
+import Mailer
 import NetHelpers
 
 system_unhealthy = False
@@ -34,6 +36,16 @@ def check_deep_state(node):
     output = "Up since %s" % foundStr
   return output
 
+def check_if_can_image(nodeName):
+  try:
+    myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName])
+    if myCam.getImage() is not None:
+      logging.info("Got image from node: %s" % nodeName)
+    return True
+  except Exception as e:
+    msg="Something failed in script execution:\n%s" % traceback.format_exc()
+    logging.error(msg)
+    return False
 
 def log_message(msg):
   global message
@@ -84,11 +96,14 @@ if __name__ == "__main__":
   nodes = Constants.FOSCAM_NODES if args.mode == 'foscam' \
           else Constants.WINDOWS_NODES
 
-  check_state(desired_up=True, attempts=3) ## Seeing intermittent nwk failures. Let's mask these
+  check_state(desired_up=True, attempts=5) ## Seeing intermittent nwk failures. Let's mask these
   for nodeName, nodeIP in nodes.items():
     if state[nodeName]:
       log_message("%s: %s healthy." % (args.mode, nodeName))
-      if args.mode == 'windows':
+      if args.mode == 'foscam':
+        node_healthy = check_if_can_image(nodeName)
+        system_unhealthy = not node_healthy
+      else:
         # If windows and alive, do a deep check
         log_message(check_deep_state(nodeIP))
     else:
@@ -114,9 +129,12 @@ if __name__ == "__main__":
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
         log_message("%s: %s back online." % (args.mode, nodeName))
-        if args.mode == 'windows':
+        time.sleep(60) # generously wait for nodes to stabilize
+        if args.mode == 'foscam':
+          node_healthy = check_if_can_image(nodeName)
+          system_unhealthy = not node_healthy
+        else:
           # If windows and alive, do a deep check
-          time.sleep(60) # generously wait for processes to stabilize
           log_message(check_deep_state(nodeIP))
     if system_unhealthy:
       log_message("Failed to restart nodes...")

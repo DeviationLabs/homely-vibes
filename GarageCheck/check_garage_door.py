@@ -1,26 +1,16 @@
 #!/usr/bin/env python3.5
 import argparse
-from foscam.foscam import FoscamCamera, FOSCAM_SUCCESS
 import logging
 import json
-import io
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
 import os
 import sys
 import traceback
 import time
 import Constants
+import FoscamImager
 import Mailer
 import NetHelpers
 
-def print_ipinfo(returncode, params):
-  if returncode != FOSCAM_SUCCESS:
-    print('Failed to get IPInfo!')
-    return
-  print('IP: %s, Mask: %s' % (params['ip'], params['mask']))
-
-#### Main Routine ####
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description = "ML detector for checking state of garage door")
   parser.add_argument('--always_email',
@@ -49,60 +39,37 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
+  filename = None
   runState = True
   model = None
-  msg = None
-  mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
-             Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
-  if args.debug_image:
-    plt.ion()
-    plt.tight_layout()
+  msg = ""
+  mycam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES['Garage'], args.debug_image)
   if args.model_file and os.path.isfile(args.model_file):
     import TFOneShot
     (model, model_labels) = TFOneShot.load_my_model(args.model_file)
   while runState:
-    try:
+#    try:
       currtime = time.localtime()
       ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
-      if currtime.tm_hour == 0 and currtime.tm_min == 0:
-        if send_email:
-          Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=send_email)
+      if currtime.tm_hour == 0 and currtime.tm_min == 0 and send_email:
+        Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=send_email)
         send_email = False
-        count = 0
-
-      with NetHelpers.no_stdout():
-        picture_data = mycam.snap_picture_2()
-#       (retVal, IPparams) = mycam.get_ip_info(print_ipinfo)
-#       logging.debug("Got IP params: %s" % json.dumps(IPparams))
-
-      if (len(picture_data) < 2 or picture_data[1] is None):
-        count += 1
-        raise Exception("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, count))
-      imgBytes = picture_data[1]
-      img = mpimg.imread(io.BytesIO(imgBytes), format='JPG')
-
-      if args.debug_image == True:
-        logging.info("Updating at %s" % ts)
-        plt.imshow(img)
-        plt.show()
-        plt.pause(0.001)
+        mycam.reset_errcount()
 
       if args.save_image == True:
         filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
-        with open(filename, "wb") as fh:
-          fh.write(imgBytes) ## Ubuntu: Use "eog <filename>" to view
-        logging.info("Saved image to %s" % filename)
+      img = mycam.getImage(filename)
 
       if model is not None:
         label, msg = TFOneShot.run_predictor(model, model_labels, img)
         logging.info(msg)
 
-    except Exception as e:
-      msg += traceback.format_exc()
-      logging.error(traceback.format_exc())
-      send_email = True
-    time.sleep(30)
-
-  logging.info('Done!')
-  print("Done!")
+#    except Exception as e:
+#      msg += traceback.format_exc()
+#      logging.error(traceback.format_exc())
+#      send_email = True
+#    time.sleep(30)
+#
+#  logging.info('Done!')
+#  print("Done!")
 

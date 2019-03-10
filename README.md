@@ -56,12 +56,13 @@ Project Timelines:
                        Building TF for 3.6 and we expect cruising. Some cleanup - retry for nodecheck, config of "logs" directory.
 * 02-19-2019: [v1.6.3] favicon. Better error reporting on purge_foscam_files. Opencv install notes. refactor PumpReports.
 * 03-01-2019: [v1.6.4] Better sizing for charts. Stablize Garage TF on python3.5. Improvements to deletion of foscam logging directory
-* 03-10-2019: [v1.6.5] Improvements to deletion of foscam logging directory
+* 03-10-2019: [v1.6.5] Improvements to deletion of foscam logging directory. Add focam image checking to Rebooter
 
 --
 Pending:
 * Fix broken ML detector in Foscam frontyard to open garage.
-
+* Eliminate Constants.sh using https://goo.gl/UgfwCr, Make purge_foscam a part of check_node?
+* Auth from Legal on open sourcing.
 
 --
 
