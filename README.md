@@ -56,11 +56,12 @@ Project Timelines:
                        Building TF for 3.6 and we expect cruising. Some cleanup - retry for nodecheck, config of "logs" directory.
 * 02-19-2019: [v1.6.3] favicon. Better error reporting on purge_foscam_files. Opencv install notes. refactor PumpReports.
 * 03-01-2019: [v1.6.4] Better sizing for charts. Stablize Garage TF on python3.5. Improvements to deletion of foscam logging directory
+* 03-10-2019: [v1.6.5] Improvements to deletion of foscam logging directory
 
 --
+Pending:
+* Fix broken ML detector in Foscam frontyard to open garage.
 
-(Indefinite) Future:
-* ML detector in Foscam frontyard to open garage. [We are severely constrained on CPU, so will need to first find a cloud migration for this]
 
 --
 
@@ -78,15 +79,17 @@ Dependencies:
   * pip3 install pyfoscam
   * pip3 install pymyq
 * bazel-- modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m"
-* Tensorflow -- See below
+* Tensorflow and opencv -- See below
 
 Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
 * In python3: site-packages/foscam/__init__.py (from foscam.foscam import ... )
 
-Tensorflow install notes (Needs bazel)
-* Note: building bazel will take ~1 day, building TF will take ~2 days!!
+Tensorflow/Opencv:
+* Two options here: Either install TF for Py3.6 [recommended] or Opencv for Py3.5 (Opencv is officially available for py3.6)
+* We tired v. hard to compile tf, but failed, so finalled compiled opencv
+* For TF: [Note: building bazel will take ~1 day, building TF will take ~2 days!!]
 * Confirm that odroid has sufficent power (may fail if powered froma CPU usb port).
   * If still hitting odroid reboots: cpulimit -l 10 -- <command>
 * Increase system swap to 4GB:
@@ -104,12 +107,8 @@ Tensorflow install notes (Needs bazel)
   * bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0"
   * ./bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
   * pip3 install --upgrade tensorflow-\*aarch64.whl
-* TF wheel based install (Note: As of 1/1/2019, only available for python3.5 on arm64, and now will need "pip installs" as apt-get only has for 3.6?!)
+* Alternative (we found a TF wheel for p3.5 and compiled openCV):
   * wget https://github.com/lhelontra/tensorflow-on-arm/releases/download/v1.12.0/tensorflow-1.12.0-cp35-none-linux_aarch64.whl
-  * export CPATH=/usr/include/hdf5/serial/
-  * \# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/aarch64-linux-gnu/hdf5/serial
-  * \# (Also add to /etc/ld.so.conf.d/libhdf5.conf && ldconfig --> did not work)
-  * HDF5_DIR=/usr/lib/x86_064-linux-gnu/hdf5/serial/ python3.5 -m pip install --upgrade h5py
   * python3.5 -m pip install --upgrade tensorflow-1.12.0-cp35-none-linux_aarch64.whl
   * python3.5 -m pip install scipy pandas keras
 * opencv -- Install notes here: https://medium.com/@JMoonTech/install-opencv-and-tensorflow-on-odroid-c2-e23f13484bc0
