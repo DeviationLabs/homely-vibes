@@ -36,16 +36,19 @@ def check_deep_state(node):
     output = "Up since %s" % foundStr
   return output
 
-def check_if_can_image(nodeName):
+def check_if_can_image(nodeName, display_image):
   try:
-    myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName])
+    myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
     if myCam.getImage() is not None:
       logging.info("Got image from node: %s" % nodeName)
-    return True
+      if display_image:
+        print ("Displaying %s ..." % nodeName)
+        time.sleep(5)
+      return True
   except Exception as e:
     msg="Something failed in script execution:\n%s" % traceback.format_exc()
     logging.error(msg)
-    return False
+  return False
 
 def log_message(msg):
   global message
@@ -81,6 +84,10 @@ if __name__ == "__main__":
                       help    ='Reboot or check only',
                       action  ='store_true',
                       default =False)
+  parser.add_argument('--display_image',
+                      help    ='Display captured image',
+                      action  ='store_true',
+                      default =False)
   parser.add_argument('--always_email',
                       help    ='Send email report',
                       action  ='store_true',
@@ -101,7 +108,7 @@ if __name__ == "__main__":
     if state[nodeName]:
       log_message("%s: %s healthy." % (args.mode, nodeName))
       if args.mode == 'foscam':
-        node_healthy = check_if_can_image(nodeName)
+        node_healthy = check_if_can_image(nodeName, args.display_image)
         system_unhealthy = not node_healthy
       else:
         # If windows and alive, do a deep check

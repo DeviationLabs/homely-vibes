@@ -16,8 +16,7 @@ def print_ipinfo(returncode, params):
 
 class FoscamImager:
   def __init__(self, nodeIP, display_images=False):
-    self.mycam = FoscamCamera(Constants.FOSCAM_NODES['Garage'], 88, \
-               Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
+    self.mycam = FoscamCamera(nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
     self.display_images = display_images
     self.count = 0
     if display_images:
@@ -42,7 +41,7 @@ class FoscamImager:
   def getImage(self, filename=None):
     currtime = time.localtime()
     ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
-    logging.info("Updating at %s" % ts)
+    logging.debug("Updating at %s" % ts)
 
     imgBytes  = self.getImageBytes()
     img = mpimg.imread(io.BytesIO(imgBytes), format='JPG')
@@ -53,5 +52,5 @@ class FoscamImager:
       if filename is not None:
         with open(filename, "wb") as fh:
           fh.write(imgBytes) ## Ubuntu: Use "eog <filename>" to view
-        logging.info("Saved image to %s" % filename)
+        logging.debug("Saved image to %s" % filename)
     return img

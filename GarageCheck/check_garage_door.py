@@ -20,7 +20,7 @@ if __name__ == "__main__":
   parser.add_argument('--out_dir',
                       help    ='Folder for storing output files',
                       default ='%s/garage_images/' % Constants.HOME)
-  parser.add_argument('--debug_image',
+  parser.add_argument('--display_image',
                       help    ='Display captured image',
                       action  ='store_true',
                       default =False)
@@ -40,15 +40,16 @@ if __name__ == "__main__":
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
   filename = None
-  runState = True
+  send_email = False
   model = None
   msg = ""
-  mycam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES['Garage'], args.debug_image)
+  mycam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES['Garage'], args.display_image)
+
   if args.model_file and os.path.isfile(args.model_file):
     import TFOneShot
     (model, model_labels) = TFOneShot.load_my_model(args.model_file)
-  while runState:
-#    try:
+  while True:
+    try:
       currtime = time.localtime()
       ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
       if currtime.tm_hour == 0 and currtime.tm_min == 0 and send_email:
@@ -64,12 +65,12 @@ if __name__ == "__main__":
         label, msg = TFOneShot.run_predictor(model, model_labels, img)
         logging.info(msg)
 
-#    except Exception as e:
-#      msg += traceback.format_exc()
-#      logging.error(traceback.format_exc())
-#      send_email = True
-#    time.sleep(30)
-#
-#  logging.info('Done!')
-#  print("Done!")
+    except Exception as e:
+      msg += traceback.format_exc()
+      logging.error(traceback.format_exc())
+      send_email = True
+    time.sleep(30)
+
+  logging.info('Done!')
+  print("Done!")
 
