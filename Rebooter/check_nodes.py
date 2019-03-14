@@ -138,7 +138,7 @@ if __name__ == "__main__":
         log_message("%s: %s back online." % (args.mode, nodeName))
         time.sleep(60) # generously wait for nodes to stabilize
         if args.mode == 'foscam':
-          node_healthy = check_if_can_image(nodeName)
+          node_healthy = check_if_can_image(nodeName, args.display_image)
           system_unhealthy = not node_healthy
         else:
           # If windows and alive, do a deep check

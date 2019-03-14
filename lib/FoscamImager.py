@@ -23,7 +23,7 @@ class FoscamImager:
       plt.ion()
       plt.tight_layout()
 
-  def reset_errcount():
+  def reset_errcount(self):
     self.count = 0
 
   def getImageBytes(self):
