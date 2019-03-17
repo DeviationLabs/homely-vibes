@@ -49,7 +49,7 @@ fi
 
 STEP4="Confirm all data beyond $PURGE days is culled..."
 echo "$STEP4"
-OUT4=$(find . -mindepth 2 -type f -mtime +$PURGE | cut -d "/" -f 2 | sort | uniq -c | grep "-")
+OUT4=$(find . -mindepth 2 -type f -mtime +$(expr $PURGE + 1) | cut -d "/" -f 2 | sort | uniq -c | grep "-")
 RETVAL=$?
 CUMULATIVE="$CUMULATIVE$STEP4\n$OUT4\n"
 if [[ $RETVAL -ne 1 ]]; then 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.6
 import argparse
 import logging
+import os
 import sys
 import traceback
 import Constants
@@ -17,7 +18,7 @@ if __name__ == "__main__":
                       default =False)
   args = parser.parse_args()
 
-  logfile = '%s/compute_pump_stats.txt' % Constants.LOGGING_DIR
+  logfile = '%s/%s.log' % (Constants.LOGGING_DIR, os.path.basename(__file__))
   log_format = '%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s'
   logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
   logging.info('============')
