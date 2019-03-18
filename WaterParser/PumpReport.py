@@ -69,7 +69,7 @@ def genSendMessage(always_email):
   }
 """
   message += "</style></head><body>\n"
-  message += "<a href=\"http://%s/WaterMonitoring_html/pump_rates.html\">Charts</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
+  message += "<a href=\"http://%s/WaterParser_html/pump_rates.html\">Charts</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
   message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
@@ -105,7 +105,7 @@ def genSendMessage(always_email):
 
   message += "</body></html>"
   logging.info(message)
-  with open("%s/../WaterMonitoring/html/report.html" % THIS_SCRIPT_DIR ,'w+') as fp:
+  with open("%s/html/report.html" % THIS_SCRIPT_DIR ,'w+') as fp:
     fp.write(message)
   alert = True if "fail" in message.lower() else False
   if always_email:

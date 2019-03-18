@@ -1,4 +1,6 @@
 #!/bin/bash
+## Note: Do not call directly, use the *.py wrapper to active email alerts. 
+
 DIR="/mnt/IPCam_Data"
 PURGE=90                  # Days to keep the files
 DEVICES=5                 # Number of foscams deployed

@@ -21,21 +21,21 @@ USER_EMAIL=abutala@gmail.com
 1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/logs/log_rotate.status.txt ~/bin/log_rotate.conf
 
 # NodeCheck: Check on nodes every hour. Reboot Foscam daily and Alpha once a week
-50   *       *  *  *     ~/bin/Rebooter/check_nodes.py --mode='windows' > /dev/null
-55   *       *  *  *     ~/bin/Rebooter/check_nodes.py --mode='foscam' > /dev/null
-0    7       *  *  1-6   ~/bin/Rebooter/check_nodes.py --reboot --mode='foscam' > /dev/null
-0    7       *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='foscam' --always_email > /dev/null
-0    6       *  *  0     ~/bin/Rebooter/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
+50   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='windows' > /dev/null
+55   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='foscam' > /dev/null
+0    7       *  *  1-6   ~/bin/NodeCheck/check_nodes.py --reboot --mode='foscam' > /dev/null
+0    7       *  *  0     ~/bin/NodeCheck/check_nodes.py --reboot --mode='foscam' --always_email > /dev/null
+0    6       *  *  0     ~/bin/NodeCheck/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
 
 # FTP folder management: System automount is kicked on first directory access. Purge NFS daily. 
 @reboot                  sleep 120; cd /mnt/IPCam_Data/; ls > /dev/null
-1    6       *  *  1-6   ~/bin/Rebooter/purge_old_foscam_files.py > /dev/null
-1    6       *  *  0     ~/bin/Rebooter/purge_old_foscam_files.py --always_email > /dev/null
+1    6       *  *  1-6   ~/bin/NodeCheck/purge_old_foscam_files.py > /dev/null
+1    6       *  *  0     ~/bin/NodeCheck/purge_old_foscam_files.py --always_email > /dev/null
 
 # WaterMonitoring: Start scraper on reboot, update every 15, and daily email @7:00
-@reboot                  sleep 120; nohup run-one-constantly ~/bin/WaterMonitoring/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
-5-59/15 *    *  *  *     ~/bin/Parser/compute_pump_stats.py &> /dev/null
-0     7      *  *  *     ~/bin/Parser/compute_pump_stats.py --always_email &> /dev/null
+@reboot                  sleep 120; nohup run-one-constantly ~/bin/WaterLogging/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
+5-59/15 *    *  *  *     ~/bin/WaterParser/compute_pump_stats.py &> /dev/null
+0     7      *  *  *     ~/bin/WaterParser/compute_pump_stats.py --always_email &> /dev/null
 
 # GarageDoor: Start scraper on reboot
 @reboot                 sleep 120; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --model_file ~/bin/GarageCheck/garage.h5 > /dev/null
