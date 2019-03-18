@@ -73,9 +73,12 @@ def genSendMessage(always_email):
   message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
-    average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
-    if average == 0:
-      average = float('inf')
+    if aggregated[zoneNumStr]['pumpTime'] == 0 or aggregated[zoneNumStr]['runTime'] == 0:
+      average = 0
+      deviation = 0
+    else:
+      average = aggregated[zoneNumStr]['pumpTime'] / aggregated[zoneNumStr]['runTime']
+      deviation = (zoneStats['pumpRate'] - average) * 100 / average
 
     if not meetsMinRunTime(zoneStats['zoneName'], zoneStats['runTime']):
       if zoneStats['pumpRate'] < average * Constants.ALERT_THRESH:
@@ -91,9 +94,7 @@ def genSendMessage(always_email):
     message += "<tr><td>[%s]</td><td>%s</td><td>%s</td>" % (date_brief, zoneStats['zoneName'], attrib)
 
     message +=  "<td align=\"right\">%+3d %%</td><td>%0.03f</td><td align=\"right\">%4d</td></tr>\n" \
-                % ( (zoneStats['pumpRate'] - average) * 100 / average,\
-                    zoneStats['pumpRate'],\
-                    zoneStats['runTime']/60 )
+                % ( deviation, zoneStats['pumpRate'], zoneStats['runTime']/60 )
 
   pumpDutyCycle = aggregatedPumpTime / aggregatedToggles
   message += "</table><br>Pump duty cycle %s= <b>%d</b> seconds" % \
