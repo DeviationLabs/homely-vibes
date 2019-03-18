@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3.5
 # coding: utf-8
 # from https://towardsdatascience.com/keras-transfer-learning-for-beginners-6c9b8b7143e
 
@@ -9,6 +9,8 @@ import pandas as pd
 import pickle
 import os
 import re
+import Constants
+import TFOneShot
 
 parser = argparse.ArgumentParser(description = "Transfer learning on imagenet model")
 parser.add_argument('--train_dir',
@@ -56,19 +58,23 @@ x=Dense(512,activation='relu')(x) #dense layer 3
 preds=Dense(num_preds,activation='softmax')(x) #final layer with softmax activation # soft max predictions over the number of outcomes.
 
 # In[3]:
+for layer in base_model.layers[:20]:
+    layer.trainable=False
+for layer in base_model.layers[20:]:
+    layer.trainable=True
 model=Model(inputs=base_model.input,outputs=preds)
 
 # In[4]:
-for layer in model.layers[:20]:
-    layer.trainable=False
-for layer in model.layers[20:]:
-    layer.trainable=True
+#for layer in model.layers[:20]:
+#    layer.trainable=False
+#for layer in model.layers[20:]:
+#    layer.trainable=True
 
 # In[5]:
 train_datagen=ImageDataGenerator(preprocessing_function=preprocess_input) #included in our dependencies
 
 print("Start training on dir: %s" % args.train_dir)
-train_generator=train_datagen.flow_from_directory(args.train_dir, # this is where you specify the path to the main data folder
+train_generator=train_datagen.flow_from_directory(args.train_dir, # the path to the main data folder
                                                  target_size=(224,224),
                                                  color_mode='rgb',
                                                  batch_size=32,
@@ -85,9 +91,16 @@ step_size_train=train_generator.n//train_generator.batch_size
 model.fit_generator(generator=train_generator,
                    steps_per_epoch=step_size_train,
                    epochs=args.training_epochs)
+model_labels = train_generator.class_indices
 
 print("Saving to file: %s" % args.model_file)
 model.save(args.model_file)
 with open(re.sub(r".h5$", ".pickle", args.model_file), "wb") as pickle_file:
-  pickle.dump(train_generator.class_indices, pickle_file)
+  pickle.dump(model_labels, pickle_file)
 model.summary()
+
+# Check if this still making sense..
+score = model.evaluate_generator(train_generator, 10)
+print("Loss: ", score[0], "Accuracy: ", score[1])
+
+print("Done!")

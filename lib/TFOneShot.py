@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3.5
 
 import argparse
 import matplotlib.pyplot as plt
@@ -9,8 +9,10 @@ import pickle
 import re
 import tensorflow as tf
 import keras
+from keras.applications.mobilenet import preprocess_input
 from keras.models import load_model
 from keras.preprocessing import image
+from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.generic_utils import CustomObjectScope
 
 tf.logging.set_verbosity(tf.logging.ERROR)
@@ -24,18 +26,19 @@ def load_my_model(model_file):
   with CustomObjectScope({'relu6': keras.applications.mobilenet.relu6,
                           'DepthwiseConv2D': keras.applications.mobilenet.DepthwiseConv2D}):
     model = load_model(model_file)
-    print("Compiling model ...")
-    model.compile(optimizer='Adam',
-                  loss='categorical_crossentropy',
-                  metrics=['accuracy'])
+#    print("Compiling model ...") ## APB: Not needed?
+#    model.compile(optimizer='Adam',
+#                  loss='categorical_crossentropy',
+#                  metrics=['accuracy'])
   print("Done")
   return (model, model_labels)
 
 def run_predictor(model, model_labels, img):
-  img = cv2.resize(img, dsize=(224, 224), interpolation=cv2.INTER_CUBIC)
   x = image.img_to_array(img)
+  x = cv2.resize(x, dsize=(224, 224), interpolation=cv2.INTER_CUBIC)
   x = np.expand_dims(x, axis=0)
-  y_pred1= model.predict(x)
+  x = preprocess_input(x)
+  y_pred1= model.predict(x, verbose=1)
 
   best_guess_index = np.argmax(y_pred1,axis=-1)[0]
   for key, val in model_labels.items():
@@ -50,30 +53,61 @@ if __name__ == "__main__":
   parser.add_argument('--predict_file',
                         help    ='image to run prediction',
                         default ='dummy.jpg')
+  parser.add_argument('--display_image',
+                        help    ='Show image to be predicted',
+                        action  ='store_true',
+                        default =False)
   parser.add_argument('--model_file',
                         help    ='Trained model',
                         default ='my_model.h5')
+  parser.add_argument('--train_dir',
+                        help    ='Folder with training images',
+                        default =None)
   args = parser.parse_args()
 
   #tf.enable_eager_execution()
   #tf.compat.v1.disable_eager_execution()
-  print(tf.reduce_sum(tf.random_normal([1000, 1000])))
+  try:
+    tf.reduce_sum(tf.random_normal([1000, 1000]))
+  except Exception as e:
+    raise
   print("Success with tensorflow dryrun. All packages validated !!")
 
   predicted = False
+  model, model_labels = None, None
   if os.path.isfile(args.model_file):
     model, model_labels = load_my_model(args.model_file)
 
-    if os.path.isfile(args.predict_file):
-      print("Predicting image: %s" % args.predict_file)
-      img = image.load_img(args.predict_file)
+  if model is not None and args.train_dir is not None:
+    print("Recheck model on training dir: %s" % args.train_dir)
+    train_datagen=ImageDataGenerator(preprocessing_function=preprocess_input) #included in our dependencies
+    train_generator=train_datagen.flow_from_directory(args.train_dir, # the path to the main data folder
+                                                       target_size=(224,224),
+                                                       color_mode='rgb',
+                                                       batch_size=32,
+                                                       class_mode='categorical',
+                                                       shuffle=True)
+    score = model.evaluate_generator(train_generator, 10)
+    print("Loss: ", score[0], "Accuracy: ", score[1])
+
+    # Two images from our library that should show an outcome
+    img = image.load_img("%s/image_classification/train_animals/horses/images.jpg" % Constants.HOME)
+    run_predictor(model, model_labels, img)
+    img = image.load_img("%s/image_classification/train_garage/door_open/Garage_2019-01-28_07-55-39.jpg" % Constants.HOME)
+    run_predictor(model, model_labels, img)
+
+  if os.path.isfile(args.predict_file) and model is not None:
+    print("Predicting image: %s" % args.predict_file)
+    img = image.load_img(args.predict_file)
+    label, msg = run_predictor(model, model_labels, img)
+    print(msg)
+    predicted = True
+    if (args.display_image):
       plt.ion()
-      plt.imshow(img) ## TODO: not working?
+      plt.imshow(img)
       plt.show()
       plt.pause(0.1)
-      label, msg = run_predictor(model, model_labels, img)
-      print(msg)
-      predicted = True
+      print("Press <Enter> to terminate..")
+      read()
 
-  if not predicted:
-    print("Invalid argument options. Skipped predictions")
+  print("Done!")

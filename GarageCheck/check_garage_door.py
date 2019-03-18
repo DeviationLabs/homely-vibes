@@ -10,6 +10,7 @@ import Constants
 import FoscamImager
 import Mailer
 import NetHelpers
+# import TFOneShot ## Imported on demand
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description = "ML detector for checking state of garage door")

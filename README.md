@@ -1,18 +1,17 @@
 # water-tracking and other IoT automata
-Primary function:
+### Primary function:
 IoT integration between Tuya smart switch and Rach.io irrigation control to track and alert on water consumption
 * Poll data from Tuya and Rach.io
 * Postprocessing to understand usage
 * Http service for plotting data
 * Email monitoring if current (short term filtered) rates exceed historical rates
 
-Secondary function:
-Simple script for monitoring Foscam IP cameras and Windows desktop, and reboot on demand with email reporting. Also manage ftp folder.
+### Secondary functions:
+* Simple script for monitoring Foscam IP cameras and Windows desktop, and reboot on demand with email reporting.
+* Manage log rotation on foscam videos ftp folder.
+* Image classifier for garage door status with email reporting
 
-Ternary (still in experimentation):
-Image classifier for garage door status with email reporting
-
-Project Timelines:
+## Project Timelines:
 * 08-10-2018: Initial concept for water-monitoring after n-th breakage of drip irrigation and many days of wasted water.
 * 08-22-2018: Buy smart switches with energy monitoring (aka: Tuya)
 * 08-25-2018: Energy monitor cli scraper tested
@@ -57,17 +56,23 @@ Project Timelines:
 * 02-19-2019: [v1.6.3] favicon. Better error reporting on purge_foscam_files. Opencv install notes. refactor PumpReports.
 * 03-01-2019: [v1.6.4] Better sizing for charts. Stablize Garage TF on python3.5. Improvements to deletion of foscam logging directory
 * 03-10-2019: [v1.6.5] Improvements to deletion of foscam logging directory. Add foscam image checking to Rebooter
-* 03-17-2019: [v1.6.6] Bring foscam deletion under the proper email control (instead of using cron reports)
+* 03-16-2019: [v1.6.6] Bring foscam deletion under the proper email control (instead of using cron reports)
+* 03-17-2019: [v1.6.7] Early Success on Garage ML! Worked on animals library...
+```
+    Loading model: /home/abutala/bin/GarageCheck/my_model.h5
+    Recheck model on training dir: /home/abutala/image_classification/train_animals/
+    Found 197 images belonging to 3 classes.
+    Loss:  0.2567218820632998 Accuracy:  0.9187817258883249
+    Predicting image: /home/abutala/image_classification/train_animals/horses/images.jpg
+    1/1 [==============================] - 4s 4s/step
+    Best Guess: horses (Confidence: 0.94)  -- [0.01,0.04,0.94]
+```
+* 03-18-2019: [v2.0.0] First working release of ML detector
 
---
-Pending:
-* Fix broken ML detector in Foscam frontyard to open garage.
-* Eliminate Constants.sh using https://goo.gl/UgfwCr, Make purge_foscam a part of check_node?
-* Auth from Legal on open sourcing.
+### Pending:
+* Eliminate Constants.sh using https://goo.gl/UgfwCr
 
---
-
-Dependencies:
+## Dependencies:
 * Base:
   * wget -c https://nodejs.org/dist/latest-v10.x/node-v10.9.0-linux-arm64.tar.gz
   * sudo tar -xzf node-v10.9.0-linux-arm64.tar.gz --strip-components=1 --group=root --no-same-owner -C /usr/local/
@@ -83,12 +88,12 @@ Dependencies:
 * bazel-- modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m"
 * Tensorflow and opencv -- See below
 
-Changes to libraries:
+### Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
 * In tuyaApi, add support for dps option
 * In python3: site-packages/foscam/__init__.py (from foscam.foscam import ... )
 
-Tensorflow/Opencv:
+### Tensorflow/Opencv:
 * Two options here: Either install TF for Py3.6 [recommended] or Opencv for Py3.5 (Opencv is officially available for py3.6)
 * We tired v. hard to compile tf, but failed, so finalled compiled opencv
 * For TF: [Note: building bazel will take ~1 day, building TF will take ~2 days!!]
@@ -118,7 +123,8 @@ Tensorflow/Opencv:
   * cd <dir>; git clone https://github.com/Itseez/opencv_contrib.git; cd opencv_contrib; git checkout 4.0.1
   * cd /usr/include/aarch64-linux-gnu/ffmpeg; ln -sf /usr/include/aarch64-linux-gnu/libavformat/<avformat|avio>.h .
   * In opencv/cmake/OpenCVDetectCXXCompiler.cmake change "dumpversion" to "dumpfullversion"
-  * mkdir build; cd build; cmake -DCMAKE_BUILD_TYPE=RELEASE
+  * ```
+     mkdir build; cd build; cmake -DCMAKE_BUILD_TYPE=RELEASE
     -DCMAKE_INSTALL_PREFIX=/usr/local -DINSTALL_PYTHON_EXAMPLES=ON
     -DINSTALL_C_EXAMPLES=OFF
     -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-<ver>/modules
@@ -128,4 +134,5 @@ Tensorflow/Opencv:
     -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_OPENCV_PYTHON3=1 i
     -DENABLE_PRECOMPILED_HEADERS=OFF
     -Wno-dev ..
+    ```
   * make -j2; ...
