@@ -14,6 +14,7 @@ from keras.models import load_model
 from keras.preprocessing import image
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.generic_utils import CustomObjectScope
+import Constants
 
 tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -26,10 +27,6 @@ def load_my_model(model_file):
   with CustomObjectScope({'relu6': keras.applications.mobilenet.relu6,
                           'DepthwiseConv2D': keras.applications.mobilenet.DepthwiseConv2D}):
     model = load_model(model_file)
-#    print("Compiling model ...") ## APB: Not needed?
-#    model.compile(optimizer='Adam',
-#                  loss='categorical_crossentropy',
-#                  metrics=['accuracy'])
   print("Done")
   return (model, model_labels)
 
@@ -92,9 +89,11 @@ if __name__ == "__main__":
 
     # Two images from our library that should show an outcome
     img = image.load_img("%s/image_classification/train_animals/horses/images.jpg" % Constants.HOME)
-    run_predictor(model, model_labels, img)
+    label, msg = run_predictor(model, model_labels, img)
+    print(msg)
     img = image.load_img("%s/image_classification/train_garage/door_open/Garage_2019-01-28_07-55-39.jpg" % Constants.HOME)
-    run_predictor(model, model_labels, img)
+    label, msg = run_predictor(model, model_labels, img)
+    print(msg)
 
   if os.path.isfile(args.predict_file) and model is not None:
     print("Predicting image: %s" % args.predict_file)

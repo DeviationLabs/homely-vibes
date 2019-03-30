@@ -40,7 +40,6 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  filename = None
   send_email = False
   model = None
   msg = ""
@@ -58,6 +57,7 @@ if __name__ == "__main__":
         send_email = False
         mycam.reset_errcount()
 
+      filename = None
       if args.save_image == True:
         filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
       img = mycam.getImage(filename)
