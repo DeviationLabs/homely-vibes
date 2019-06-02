@@ -11,7 +11,7 @@ import FoscamImager
 import Mailer
 import NetHelpers
 
-system_unhealthy = False
+system_healthy = True
 state = dict()
 message = ""
 
@@ -29,7 +29,7 @@ def reboot_windows(node):
   return NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
 
 
-def check_deep_state(node):
+def print_deep_state(node):
   winCmd = "net statistics workstation"
   output = NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
   if ("successful" in output):
@@ -41,13 +41,17 @@ def check_if_can_image(nodeName, display_image):
   try:
     myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
     if myCam.getImage() is not None:
-      logging.info("Got image from node: %s" % nodeName)
+      log_message("Got image from node: %s" % nodeName)
       if display_image:
         print ("Displaying %s ..." % nodeName)
         time.sleep(5)
       return True
+    else:
+      log_message("Image fetch failed from node: %s" % nodeName)
+      return False
   except Exception as e:
     msg="Something failed in script execution:\n%s" % traceback.format_exc()
+    log_message(msg)
     logging.error(msg)
   return False
 
@@ -59,7 +63,7 @@ def log_message(msg):
 
 def check_state(desired_up, attempts):
   global state
-  global system_unhealthy
+  global system_healthy
   for nodeName, nodeIP in nodes.items():
     state[nodeName] = False
   for attempt in range(attempts):
@@ -71,7 +75,7 @@ def check_state(desired_up, attempts):
       if not state[nodeName]:
         state[nodeName] = NetHelpers.ping_output(node=nodeIP, desired_up=desired_up)
   if not all(state.values()):
-    system_unhealthy = True
+    system_healthy = False
 
 
 #### Main Routine ####
@@ -104,18 +108,13 @@ if __name__ == "__main__":
   nodes = Constants.FOSCAM_NODES if args.mode == 'foscam' \
           else Constants.WINDOWS_NODES
 
+  log_message("Checking connectivity...")
   check_state(desired_up=True, attempts=5) ## Seeing intermittent nwk failures. Let's mask these
   for nodeName, nodeIP in nodes.items():
     if state[nodeName]:
-      log_message("%s: %s healthy." % (args.mode, nodeName))
-      if args.mode == 'foscam':
-        node_healthy = check_if_can_image(nodeName, args.display_image)
-        system_unhealthy = not node_healthy
-      else:
-        # If windows and alive, do a deep check
-        log_message(check_deep_state(nodeIP))
+      log_message("%s: %s online." % (args.mode, nodeName))
     else:
-      log_message("%s: %s unhealthy." % (args.mode, nodeName))
+      log_message("%s: %s offline." % (args.mode, nodeName))
 
   if args.reboot:
     log_message("Rebooting now...")
@@ -124,32 +123,35 @@ if __name__ == "__main__":
         logging.debug(reboot_foscam(nodeIP))
       else:
         logging.debug(reboot_windows(nodeIP))
-
     check_state(desired_up=False, attempts=180)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
         log_message("Confirmed node is down: %s" % nodeName)
       else:
         log_message("Oops! Failed to reboot: %s" % nodeName)
-
     log_message("Sleep until nodes restart...")
     check_state(desired_up=True, attempts=300)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
         log_message("%s: %s back online." % (args.mode, nodeName))
-        time.sleep(60) # generously wait for nodes to stabilize
-        if args.mode == 'foscam':
-          node_healthy = check_if_can_image(nodeName, args.display_image)
-          system_unhealthy = not node_healthy
-        else:
-          # If windows and alive, do a deep check
-          log_message(check_deep_state(nodeIP))
-    if system_unhealthy:
-      log_message("Failed to restart nodes...")
-      logging.error('Hmm... overall badness')
-    else:
-      logging.info('All is well')
+      else:
+        log_message("%s: %s failed online." % (args.mode, nodeName))
+    time.sleep(60) # generously wait for nodes to stabilize
 
-  Mailer.sendmail(topic="[NodeCheck-%s]" %args.mode, alert=system_unhealthy, \
+  # Do a deeper check
+  for nodeName, nodeIP in nodes.items():
+    if state[nodeName]:
+      if args.mode == 'foscam':
+        node_healthy = check_if_can_image(nodeName, args.display_image)
+        system_healthy = system_healthy and node_healthy
+      else:
+        # If windows and alive, do a deep check
+        log_message(print_deep_state(nodeIP))
+  if not system_healthy:
+    log_message("Something failed...")
+  else:
+    log_message('All is well')
+
+  Mailer.sendmail(topic="[NodeCheck-%s]" %args.mode, alert=not system_healthy, \
                   message=message, always_email=args.always_email)
   print("Done!")

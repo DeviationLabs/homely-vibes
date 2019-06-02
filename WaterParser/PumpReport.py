@@ -12,6 +12,7 @@ THIS_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Flag all zone where latest rate is greater than average of the last N days.
 def genSendMessage(always_email):
   aggregated = collections.defaultdict(lambda: {'pumpTime': 0,
+                                                'toggles': 0,
                                                 'runTime': 0 })
   latest = collections.defaultdict(lambda: {'pumpTime': 0,
                                             'pumpRate': 0,
@@ -24,14 +25,17 @@ def genSendMessage(always_email):
   sorted_summary_items = sorted(list(summary.items()))
   lastEndTime = None
 
-  for ts, record in sorted_summary_items[-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):]:
+  # Find the average, until we cover 10x the min time requirement for reporting. This is the average burn rate
+  # We dont want to include the last 14 days, since this is the window we want to validate
+  for ts, record in sorted_summary_items[-14:-(Constants.DAYS_LOOKBACK*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
-    lastEndTime = record['logEndTime']
     for zoneNumStr, zoneStats in zonesStats.items():
-      aggregated[zoneNumStr]['pumpTime'] += zoneStats.get('pumpTime', 0)
-      aggregated[zoneNumStr]['runTime'] += zoneStats.get('runTime', 0)
+      if aggregated[zoneNumStr]['toggles'] < Constants.PUMP_TOGGLES_COUNT:
+        aggregated[zoneNumStr]['toggles'] += zoneStats.get('toggles', 0)
+        aggregated[zoneNumStr]['pumpTime'] += zoneStats.get('pumpTime', 0)
+        aggregated[zoneNumStr]['runTime'] += zoneStats.get('runTime', 0)
 
-  # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement
+  # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement. This is the current burn rate
   for ts, record in sorted_summary_items[:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
     if aggregatedToggles < Constants.PUMP_TOGGLES_COUNT:
