@@ -34,7 +34,11 @@ class FoscamImager:
 
     if (len(picture_data) < 2 or picture_data[1] is None):
       self.count += 1
-      raise Exception("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.count))
+      currtime = time.localtime()
+      ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
+#      raise Exception("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.count))
+      logging.error("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.count))
+      return None
     imgBytes = picture_data[1]
     return imgBytes
 
