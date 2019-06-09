@@ -12,8 +12,7 @@ import Mailer
 class TuyaLogParser:
   ON_CURRENT_THRESH = 300
 
-  def __init__(self, csvLogfile, jsonSummaryFile):
-    self.emailOnRuntimeErrors = True # TODO: Feeble attempt to prevent a flood of email notifications.
+  def __init__(self, csvLogfile, jsonSummaryFile, isMostRecentLog):
     self.totalToggles = 0
     self.interStartMin = float('inf')
     self.totalPumpTime = 0
@@ -33,17 +32,16 @@ class TuyaLogParser:
                                                'toggles' : 0,
                                              })
     # Analyze the new log and update summary.json
-    self.analyzeCsv(csvLogfile)
+    self.analyzeCsv(csvLogfile, isMostRecentLog)
     self.writeSummaryFile(jsonSummaryFile)
 
 
-  def analyzeCsv(self, csvLogfile):
+  def analyzeCsv(self, csvLogfile, isMostRecentLog):
     dataPoints, self.logErrors = loadCsv(csvLogfile)
     if (len(dataPoints) == 0):
       logging.error("Warn: No records in file %s. Ignoring..." % csvLogfile)
-      Mailer.sendmail("[PumpStats]", alert=True, message="Log file empty. Polling issue", \
-                      always_email=self.emailOnRuntimeErrors)
-      self.emailOnRuntimeErrors = False
+      if (isMostRecentLog):
+        Mailer.sendmail("[PumpStats]", alert=True, message="Log file empty. Polling issue")
       return
 
     self.logStartTime = fetch(dataPoints[0], 'TIME')
@@ -57,11 +55,11 @@ class TuyaLogParser:
     interStartTime = float('inf')
 
     # If the most recent datapoint has error values (typically -2) then alert.
-    if fetch(dataPoints[-1], 'CURRENT', 'int') < 0 or fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1:
+    if (fetch(dataPoints[-1], 'CURRENT', 'int') < 0 or fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1) \
+       and isMostRecentLog:
       msg = "Warning: Data logging failure during polling at %s.\n%s" % (self.logEndTime, " ".join(dataPoints[-1]) )
       logging.warn(msg)
-      Mailer.sendmail("[PumpStats]", alert=True, message=msg, always_email=self.emailOnRuntimeErrors)
-      self.emailOnRuntimeErrors = False
+      Mailer.sendmail("[PumpStats]", alert=True, message=msg)
 
     for record in dataPoints:
       try:

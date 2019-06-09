@@ -28,7 +28,8 @@ if __name__ == "__main__":
     for fileCounter in range(Constants.MAX_NEW_FILES):
       csvLogfile = Constants.TUYA_LOG_BASE
       csvLogfile += '.{}'.format(fileCounter) if fileCounter > 0 else ''
-      csvLog = TuyaLogParser.TuyaLogParser(csvLogfile, Constants.JSON_SUMMARY_FILE)
+      isMostRecentLog = (fileCounter == 0)
+      csvLog = TuyaLogParser.TuyaLogParser(csvLogfile, Constants.JSON_SUMMARY_FILE, isMostRecentLog)
 
     # Poll data is very coarse. Let's refine using event log.
     PumpStatsWriter.patchWithRachioEvents()
