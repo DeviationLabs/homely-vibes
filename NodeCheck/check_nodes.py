@@ -122,6 +122,8 @@ if __name__ == "__main__":
       if args.mode == 'foscam':
         logging.debug(reboot_foscam(nodeIP))
       else:
+        # If windows and alive, do a deep check before rebooting.
+        log_message(print_deep_state(nodeIP))
         logging.debug(reboot_windows(nodeIP))
     check_state(desired_up=False, attempts=180)
     for nodeName, nodeIP in nodes.items():
