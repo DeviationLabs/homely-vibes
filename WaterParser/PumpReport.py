@@ -74,7 +74,7 @@ def genSendMessage(always_email):
 """
   message += "</style></head><body>\n"
   message += "<a href=\"http://%s/WaterParser_html/pump_rates.html\">Charts</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
-  message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th></tr>"
+  message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th><th>Usage</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items()):
     if aggregated[zoneNumStr]['pumpTime'] == 0 or aggregated[zoneNumStr]['runTime'] == 0:
@@ -94,11 +94,12 @@ def genSendMessage(always_email):
         attrib = "Good"
       else:
         attrib = "<b><font color=\"red\">Failed</font></b>"
+
     date_brief = time.strftime('%m-%d', time.localtime(zoneStats['startEpoch']))
     message += "<tr><td>[%s]</td><td>%s</td><td>%s</td>" % (date_brief, zoneStats['zoneName'], attrib)
-
-    message +=  "<td align=\"right\">%+3d %%</td><td>%0.03f</td><td align=\"right\">%4d</td></tr>\n" \
+    message +=  "<td align=\"right\">%+3d %%</td><td>%0.03f</td><td align=\"right\">%4d</td>" \
                 % ( deviation, zoneStats['pumpRate'], zoneStats['runTime']/60 )
+    message +=  "<td align=\"right\">%3d</td></tr>\n" % zoneStats['pumpTime']
 
   pumpDutyCycle = aggregatedPumpTime / aggregatedToggles
   message += "</table><br>Pump duty cycle %s= <b>%d</b> seconds" % \
