@@ -2,7 +2,7 @@
 ## Note: Do not call directly, use the *.py wrapper to active email alerts. 
 BASEDIR=$(dirname "$0")
 source "$BASEDIR/../lib/Constants.sh"
-
+SUCCESS=1
 KEEP=$(expr $PURGE_AFTER_DAYS - 10)  # Min days check
 CUMULATIVE="\n\nBacktrace:\n"
 
@@ -30,7 +30,7 @@ CUMULATIVE="$CUMULATIVE$STEP2\n$OUT2\n"
 if [[ $(echo "$OUT2" | wc -l) -lt $MIN_ACTIVE_DEVICES ]]; then 
   >&2 echo "Error: $STEP2 failed" 
   >&2 echo -en "$CUMULATIVE"
-  exit -1
+  SUCCESS=0
 else 
   echo "$OUT2"
 fi
@@ -42,7 +42,7 @@ CUMULATIVE="$CUMULATIVE$STEP3\n$OUT3\n"
 if [[ $(echo "$OUT3" | wc -l) -lt $MIN_ACTIVE_DEVICES ]]; then 
   >&2 echo "Error: $STEP3 failed" 
   >&2 echo -en "$CUMULATIVE"
-  exit -1
+  SUCCESS=0
 else 
   echo "$OUT3"
 fi
@@ -56,7 +56,7 @@ if [[ $RETVAL -ne 1 ]]; then
   >&2 echo "Error: $STEP4 failed" 
   >&2 echo -en "$CUMULATIVE\n"
   >&2 find . -mindepth 2 -type f -mtime +$PURGE_AFTER_DAYS
-  exit -1
+  SUCCESS=0
 else 
   echo "Success"
 fi
@@ -74,9 +74,14 @@ done
 if [[ $FAILED -ne 0 ]] ; then
   >&2 echo "Error: $STEP5 failed"
   >&2 echo "$OUT5"
-  exit -1
+  SUCCESS=0
 else
   echo "Success"
+fi
+
+if [[ $SUCCESS -eq 0 ]]; then 
+  >&2 echo "Something failed..."
+  exit -1
 fi
 
 echo "Done"

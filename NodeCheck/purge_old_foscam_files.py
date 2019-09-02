@@ -31,6 +31,8 @@ if __name__ == "__main__":
   except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
     msg = e.output
     alert = True
+  finally:
+    logging.info(msg)
 
   Mailer.sendmail(topic="[PurgeFoscam]", alert=alert, \
                   message=msg, always_email=args.always_email)
