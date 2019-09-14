@@ -11,6 +11,9 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * Manage log rotation on foscam videos ftp folder.
 * Image classifier for garage door status with email reporting
 
+### Ternary functions:
+* Add foscams to alexa via homebridge straddles.
+
 ## Project Timelines:
 * 08-10-2018: Initial concept for water-monitoring after n-th breakage of drip irrigation and many days of wasted water.
 * 08-22-2018: Buy smart switches with energy monitoring (aka: Tuya)
@@ -87,6 +90,8 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
   * pip3 install pymyq
 * bazel-- modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m"
 * Tensorflow and opencv -- See below
+* checkout homebridge.io
+  * Configuring it for alexa: https://gist.github.com/johannrichard/0ad0de1feb6adb9eb61a/
 
 ### Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
