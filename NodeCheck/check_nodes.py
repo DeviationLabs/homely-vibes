@@ -18,10 +18,17 @@ message = ""
 
 #### Helper Functions ####
 
-def reboot_foscam(node):
+def reboot_foscam(nodeName):
+  node = Constants.FOSCAM_NODES[nodeName]
   cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" \
         % (node, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
-  return NetHelpers.http_req(cmd)
+  try:
+    msg = NetHelpers.http_req(cmd)
+  except OSError as e:
+    err_msg = getattr(e, 'message', repr(e))
+    msg = ">> ERROR: When rebooting %s. Got %s..." % (nodeName, err_msg[:100])
+    log_message(msg)
+  return msg
 
 
 def reboot_windows(node):
@@ -76,6 +83,7 @@ def check_state(desired_up, attempts):
       # if state is false, then ping again to check if state is now true
       if not state[nodeName]:
         state[nodeName] = NetHelpers.ping_output(node=nodeIP, desired_up=desired_up)
+        logging.debug("Attempt {} for {}..".format(attempt, nodeName))
   if not all(state.values()):
     system_healthy = False
 
@@ -116,30 +124,30 @@ if __name__ == "__main__":
     if state[nodeName]:
       log_message("%s: %s online." % (args.mode, nodeName))
     else:
-      log_message("%s: %s offline." % (args.mode, nodeName))
+      log_message(">> ERROR %s: %s offline." % (args.mode, nodeName))
 
   if args.reboot:
     log_message("Rebooting now...")
     for nodeName, nodeIP in nodes.items():
       if args.mode == 'foscam':
-        logging.debug(reboot_foscam(nodeIP))
+        logging.debug(reboot_foscam(nodeName))
       else:
         # If windows and alive, do a deep check before rebooting.
         log_message(print_deep_state(nodeName))
         logging.debug(reboot_windows(nodeIP))
-    check_state(desired_up=False, attempts=180)
+    check_state(desired_up=False, attempts=20)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
         log_message("Confirmed node is down: %s" % nodeName)
       else:
-        log_message("Oops! Failed to reboot: %s" % nodeName)
+        log_message(">> ERROR: Oops! Node did not reboot: %s" % nodeName)
     log_message("Sleep until nodes restart...")
-    check_state(desired_up=True, attempts=300)
+    check_state(desired_up=True, attempts=50)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
         log_message("%s: %s back online." % (args.mode, nodeName))
       else:
-        log_message("%s: %s failed online." % (args.mode, nodeName))
+        log_message(">> ERROR: %s: %s failed online." % (args.mode, nodeName))
     time.sleep(60) # generously wait for nodes to stabilize
 
   # Do a deeper check
@@ -154,7 +162,7 @@ if __name__ == "__main__":
 
   # Cleanup and reporting
   if not system_healthy:
-    log_message("Something failed...")
+    log_message(">> ERROR: Node check failed!")
   else:
     log_message('All is well')
   Mailer.sendmail(topic="[NodeCheck-%s]" %args.mode, alert=not system_healthy, \

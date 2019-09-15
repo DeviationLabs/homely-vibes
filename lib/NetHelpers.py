@@ -37,11 +37,8 @@ def ssh_cmd(node, user, passwd, winCmd):
 # Run an http request and return string output
 def http_req(cmd):
   resp_text = '\n'
-  try:
-    resp = requests.get(cmd)
-    resp_text = ' '.join(resp.text.split('\n'))
-  except (OSError, Exception) as e:
-    resp_text = "Something failed in reboot request on node: %s" % node
+  resp = requests.get(cmd)
+  resp_text = ' '.join(resp.text.split('\n'))
   return(resp_text)
 
 
