@@ -20,6 +20,9 @@ USER_EMAIL=abutala@gmail.com
 # Log file management
 1     2-23/6 *  *  *     /usr/sbin/logrotate -s ~/logs/log_rotate.status.txt ~/bin/log_rotate.conf
 
+# Get my ip_address
+@reboot                  sleep 600; ~/bin/lib/EmailMyIP.py
+
 # NodeCheck: Check on nodes every hour. Reboot Foscam daily and Alpha once a week
 50   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='windows' > /dev/null
 55   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='foscam' > /dev/null
