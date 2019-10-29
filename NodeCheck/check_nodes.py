@@ -135,7 +135,7 @@ if __name__ == "__main__":
         # If windows and alive, do a deep check before rebooting.
         log_message(print_deep_state(nodeName))
         logging.debug(reboot_windows(nodeIP))
-    check_state(desired_up=False, attempts=20)
+    check_state(desired_up=False, attempts=60)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
         log_message("Confirmed node is down: %s" % nodeName)
