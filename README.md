@@ -10,6 +10,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * Simple script for monitoring Foscam IP cameras and Windows desktop, and reboot on demand with email reporting.
 * Manage log rotation on foscam videos ftp folder.
 * Image classifier for garage door status with email reporting
+* Test uplink for external IP address, and speedtest
 
 ### Ternary functions:
 * Add foscams to alexa via homebridge straddles.
@@ -71,6 +72,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
     Best Guess: horses (Confidence: 0.94)  -- [0.01,0.04,0.94]
 ```
 * 03-18-2019: [v2.0.0] First working release of ML detector
+* 02-16-2020: [v2.1.0] Add uplink test diagnostics
 
 ### Pending:
 * Eliminate Constants.sh using https://goo.gl/UgfwCr
@@ -92,6 +94,14 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * Tensorflow and opencv -- See below
 * checkout homebridge.io
   * Configuring it for alexa: https://gist.github.com/johannrichard/0ad0de1feb6adb9eb61a/
+* speedtest:
+  * sudo apt-get install gnupg1 apt-transport-https dirmngr, lsb-release
+  * export INSTALL_KEY=379CE192D401AB61
+  * export DEB_DISTRO=$(lsb_release -sc)
+  * sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys $INSTALL_KEY
+  * echo "deb https://ookla.bintray.com/debian ${DEB_DISTRO} main" | sudo tee  /etc/apt/sources.list.d/speedtest.list
+  * sudo apt-get update
+  * sudo apt-get install speedtest
 
 ### Changes to libraries:
 * In cli, modify get to passthrough config. Add support for dps option
