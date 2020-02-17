@@ -73,6 +73,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 ```
 * 03-18-2019: [v2.0.0] First working release of ML detector
 * 02-16-2020: [v2.1.0] Add uplink test diagnostics
+* 02-17-2020: [v2.1.1] Add reboot foscams to landing page. Refine stats sort order on landing page
 
 ### Pending:
 * Eliminate Constants.sh using https://goo.gl/UgfwCr

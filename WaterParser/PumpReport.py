@@ -12,11 +12,13 @@ THIS_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 def custom_sort(record):
   zoneName = record[1]["zoneName"].split()
   if len(zoneName) < 3:
-    return zoneName[0]
+    # Not a real zone, just return first char in name
+    return ord(zoneName[0][0])
   else:
-    zone = zoneName[1][1]
-    number = zoneName[0][0]
-    sortOrder = f"{zone}{number}"
+    zoneType = zoneName[1][1]
+    number = zoneName[0][1:]
+    offsets = {"D" : 400, "B": 200, "S": 100}  # Drip/Bubblers/Sprinkers
+    sortOrder = offsets.get(zoneType,0) + int(number)
     return sortOrder
 
 # Flag all zone where latest rate is greater than average of the last N days.
@@ -66,7 +68,7 @@ def genSendMessage(always_email):
         latestZoneStats['pumpRate'] = latestZoneStats['pumpTime'] / latestZoneStats['runTime']
 
   # Return a summary message.
-  message = "<html><head><link href=\"favicon.ico\"/><title>Summary Stats</title><style>"
+  message = "<html><head><link href=\"favicon.ico\"/><title>Eden Monitoring Systems (TM)</title><style>"
   message += """
   th {
     background-color: black;
@@ -84,7 +86,7 @@ def genSendMessage(always_email):
   }
 """
   message += "</style></head><body>\n"
-  message += "<a href=\"http://%s/WaterParser_html/pump_rates.html\">Charts</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
+  message += "<a href=\"http://%s/WaterParser_html/pump_rates.html\">Water Charts</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
   message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th><th>Usage</th></tr>"
 
   for zoneNumStr, zoneStats in sorted(latest.items(), key=custom_sort):
@@ -119,7 +121,7 @@ def genSendMessage(always_email):
   message += "<br><hr><br><small>Deviation alert @ %+d %%</small>" % (Constants.ALERT_THRESH * 100 - 100)
   message += "<br><small>Pump alert @ %d seconds</small>" % (Constants.PUMP_ALERT)
   message += "<br><small>Last Update: %s</small>" % lastEndTime
-  message += "<br><small><a href=\"http://%s/reboot_foscam.php\">Reboot Foscams</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
+  message += "<br><small><a href=\"http://%s/reboot_foscam.php\">Reboot Foscams</a></small>\n" % Constants.MY_EXTERNAL_IP
 
   message += "</body></html>"
   logging.info(message)

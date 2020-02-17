@@ -28,7 +28,7 @@ if __name__ == "__main__":
     ulW_mbps = payload.get("upload", {}).get("bandwidth", 0)*8/1024/1024
     ext_ip = payload.get("interface", {}).get("externalIp", "UNK")
     if (dlW_mbps > Constants.MIN_DL_BW and ulW_mbps > Constants.MIN_UL_BW):
-        msg = "Link good"
+        msg = "Link good "
     else:
         msg = "Error: Failed processing output %s\n" % out
         alert = True
