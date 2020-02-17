@@ -28,11 +28,11 @@ if __name__ == "__main__":
     ulW_mbps = payload.get("upload", {}).get("bandwidth", 0)*8/1024/1024
     ext_ip = payload.get("interface", {}).get("externalIp", "UNK")
     if (dlW_mbps > Constants.MIN_DL_BW and ulW_mbps > Constants.MIN_UL_BW):
-        msg = "Link good [%s] DL: %.1f Mbps UL: %.1f Mbps" % (ext_ip, dlW_mbps, ulW_mbps)
+        msg = "Link good"
     else:
-        msg = "Error: Failed processing output %s" % out
+        msg = "Error: Failed processing output %s\n" % out
         alert = True
-#    import pdb; pdb.set_trace()
+    msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps" % (ext_ip, dlW_mbps, ulW_mbps)
   except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
     msg = e.output
     alert = True

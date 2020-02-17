@@ -9,6 +9,16 @@ from TuyaLogParser import readSummaryFile
 
 THIS_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+def custom_sort(record):
+  zoneName = record[1]["zoneName"].split()
+  if len(zoneName) < 3:
+    return zoneName[0]
+  else:
+    zone = zoneName[1][1]
+    number = zoneName[0][0]
+    sortOrder = f"{zone}{number}"
+    return sortOrder
+
 # Flag all zone where latest rate is greater than average of the last N days.
 def genSendMessage(always_email):
   aggregated = collections.defaultdict(lambda: {'pumpTime': 0,
@@ -38,6 +48,7 @@ def genSendMessage(always_email):
   # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement. This is the current burn rate
   for ts, record in sorted_summary_items[:-(Constants.DAYS_EMAIL_REPORT*Constants.LOGROTATE_PER_DAY):-1]:
     zonesStats = record['zonesStats']
+    lastEndTime = lastEndTime or record['logEndTime']
     if aggregatedToggles < Constants.PUMP_TOGGLES_COUNT:
       aggregatedToggles += record.get('totalToggles', 0)
       aggregatedPumpTime += record.get('totalPumpTime', 0)
@@ -76,7 +87,7 @@ def genSendMessage(always_email):
   message += "<a href=\"http://%s/WaterParser_html/pump_rates.html\">Charts</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
   message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th><th>Usage</th></tr>"
 
-  for zoneNumStr, zoneStats in sorted(latest.items()):
+  for zoneNumStr, zoneStats in sorted(latest.items(), key=custom_sort):
     if aggregated[zoneNumStr]['pumpTime'] == 0 or aggregated[zoneNumStr]['runTime'] == 0:
       average = 0
       deviation = 0
@@ -108,6 +119,7 @@ def genSendMessage(always_email):
   message += "<br><hr><br><small>Deviation alert @ %+d %%</small>" % (Constants.ALERT_THRESH * 100 - 100)
   message += "<br><small>Pump alert @ %d seconds</small>" % (Constants.PUMP_ALERT)
   message += "<br><small>Last Update: %s</small>" % lastEndTime
+  message += "<br><small><a href=\"http://%s/reboot_foscam.php\">Reboot Foscams</a>\n<br><br><table>\n" % Constants.MY_EXTERNAL_IP
 
   message += "</body></html>"
   logging.info(message)
