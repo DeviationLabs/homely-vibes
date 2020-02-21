@@ -1,5 +1,6 @@
 #!/usr/bin/env python3.5
 
+import argparse
 import json
 import logging
 import os
@@ -11,6 +12,13 @@ import Mailer
 
 #### Main Routine ####
 if __name__ == "__main__":
+  parser = argparse.ArgumentParser(description = "Speedtest and External IP detection utility`")
+  parser.add_argument('--always_email',
+                      help    ='Send email report',
+                      action  ='store_true',
+                      default =False)
+  args = parser.parse_args()
+
   logfile = '%s/%s.log' % (Constants.LOGGING_DIR, os.path.basename(__file__))
   log_format = '%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s'
   logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
@@ -39,7 +47,8 @@ if __name__ == "__main__":
   finally:
     logging.info(msg)
 
-  Mailer.sendmail(topic="[SpeedTest]", message=msg, always_email=True, alert=alert)
+  Mailer.sendmail(topic="[SpeedTest]", message=msg, \
+          always_email=args.always_email, alert=alert)
   print(msg)
   print("Done")
 

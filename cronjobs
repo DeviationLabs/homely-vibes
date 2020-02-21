@@ -22,10 +22,11 @@ USER_EMAIL=abutala@gmail.com
 
 # Get my ip_address
 @reboot                  sleep 600; ~/bin/lib/EmailMyIP.py
-@reboot                  sleep 700; ~/bin/NetworkCheck/test_uplink.py
+@reboot                  sleep 700; ~/bin/NetworkCheck/test_uplink.py > /dev/null
 
-# Network check: Once a week
-0    6       *  *  0     ~/bin/NetworkCheck/test_uplink.py
+# Network check: Everyday
+0    6       *  *  1-6   ~/bin/NetworkCheck/test_uplink.py > /dev/null  
+0    6       *  *  0     ~/bin/NetworkCheck/test_uplink.py --always_email > /dev/null  
 
 # NodeCheck: Check on nodes every hour. Reboot Foscam daily and Alpha once a week
 50   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='windows' > /dev/null
