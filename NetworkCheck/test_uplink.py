@@ -6,6 +6,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 import Constants
 import Mailer
 
@@ -27,20 +28,27 @@ if __name__ == "__main__":
 
   msg=""
   cmd = "/usr/bin/speedtest -f json"
-  alert = False
+  alert = True
   try:
-    out = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=False,
-        universal_newlines=True, timeout=600)
-    payload = json.loads(out)
-    dlW_mbps = payload.get("download", {}).get("bandwidth", 0)*8/1024/1024
-    ulW_mbps = payload.get("upload", {}).get("bandwidth", 0)*8/1024/1024
-    ext_ip = payload.get("interface", {}).get("externalIp", "UNK")
-    if (dlW_mbps > Constants.MIN_DL_BW and ulW_mbps > Constants.MIN_UL_BW):
-        msg = "Link good "
-    else:
-        msg = "Error: Failed processing output %s\n" % out
-        alert = True
-    msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps" % (ext_ip, dlW_mbps, ulW_mbps)
+    count = 0
+    msg = ""
+    while (alert and count < Constants.MAX_RETRIES):
+        count += 1
+        out = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=False,
+            universal_newlines=True, timeout=600)
+        payload = json.loads(out)
+        dlW_mbps = payload.get("download", {}).get("bandwidth", 0)*8/1024/1024
+        ulW_mbps = payload.get("upload", {}).get("bandwidth", 0)*8/1024/1024
+        ext_ip = payload.get("interface", {}).get("externalIp", "UNK")
+        if (dlW_mbps > Constants.MIN_DL_BW and ulW_mbps > Constants.MIN_UL_BW):
+            msg += "Link good: "
+            alert = False
+        elif (dlW_mbps > Constants.MIN_DL_BW * 0.8 and ulW_mbps > Constants.MIN_UL_BW * 0.8):
+            msg += "Link degraded (>80%): "
+        else:
+            msg += "Link bad (<80%): "
+        msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps\n" % (ext_ip, dlW_mbps, ulW_mbps)
+        time.sleep(120)
   except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
     msg = e.output
     alert = True

@@ -3,8 +3,6 @@ import os
 
 MY_EXTERNAL_IP="1234"
 SECONDS_IN_DAY = 86400
-MIN_DL_BW = 150  # Mbps
-MIN_UL_BW = 4    # Mbps
 
 # Directories
 HOME = os.environ['HOME']
@@ -52,3 +50,8 @@ FOSCAM_PASSWORD="YYY"
 WINDOWS_NODES={'Alpha': "192.168.1.100"}
 WINDOWS_USERNAME="user_from"
 WINDOWS_PASSWORD="YYY"
+
+# Network Check
+MIN_DL_BW = 150  # Mbps
+MIN_UL_BW = 4    # Mbps
+MAX_RETRIES = 5
