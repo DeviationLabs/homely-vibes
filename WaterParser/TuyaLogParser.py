@@ -54,10 +54,14 @@ class TuyaLogParser:
     prevZoneStats = None
     interStartTime = float('inf')
 
-    # If the most recent datapoint has error values (typically -2) then alert.
+    # If the most recent datapoint has error values then alert.
     if (fetch(dataPoints[-1], 'CURRENT', 'int') < 0 or fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1) \
        and isMostRecentLog:
       msg = "Warning: Data logging failure during polling at %s.\n%s" % (self.logEndTime, " ".join(dataPoints[-1]) )
+      if (fetch(dataPoints[-1], 'CURRENT', 'int') < 0:
+        msg += "Recommended Action: Manually power cycle the Tuya switch for pump"
+      elif fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1):
+        msg += "Recommended Action: Check if Rachio online from iOS app"
       logging.warn(msg)
       Mailer.sendmail("[PumpStats]", alert=True, message=msg)
 
