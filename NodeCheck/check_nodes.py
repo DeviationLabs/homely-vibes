@@ -49,19 +49,23 @@ def print_deep_state(nodeName):
 
 # Note: For Foscam nodes only
 def check_if_can_image(nodeName, display_image):
-  msg = "Image fetch failed from node: %s" % nodeName
-  try:
-    myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
-    if myCam.getImage() is not None:
-      log_message("Got image from node: %s" % nodeName)
-      if display_image:
-        print ("Displaying %s ..." % nodeName)
-        time.sleep(5)
-      return True
-  except Exception as e:
-    msg += "\n%s" % traceback.format_exc()
-    logging.error(msg)
-  log_message(msg)
+  MAX_COUNT = 2
+  count = 0
+  while count < MAX_COUNT:
+    count += 1
+    try:
+      myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
+      if myCam.getImage() is not None:
+        log_message("   Got image from node: %s" % nodeName)
+        if display_image:
+          print ("Displaying %s ..." % nodeName)
+          time.sleep(5)
+        return True
+    except Exception as e:
+      temp = "\n%s" % traceback.format_exc()
+      logging.error(temp)
+      time.sleep(30)
+  log_message(">> ERROR: Got image, but failed to preview from: %s" % nodeName)
   return False
 
 def log_message(msg):
@@ -122,7 +126,7 @@ if __name__ == "__main__":
   check_state(desired_up=True, attempts=5) ## Seeing intermittent nwk failures. Let's mask these
   for nodeName, nodeIP in nodes.items():
     if state[nodeName]:
-      log_message("%s: %s online." % (args.mode, nodeName))
+      log_message("   %s: %s online." % (args.mode, nodeName))
     else:
       log_message(">> ERROR %s: %s offline." % (args.mode, nodeName))
 
@@ -138,14 +142,14 @@ if __name__ == "__main__":
     check_state(desired_up=False, attempts=180)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
-        log_message("Confirmed node is down: %s" % nodeName)
+        log_message("   Confirmed node is down: %s" % nodeName)
       else:
         log_message(">> ERROR: Oops! Node did not reboot: %s" % nodeName)
     log_message("Sleep until nodes restart...")
     check_state(desired_up=True, attempts=180)
     for nodeName, nodeIP in nodes.items():
       if state[nodeName]:
-        log_message("%s: %s back online." % (args.mode, nodeName))
+        log_message("   %s: %s back online." % (args.mode, nodeName))
       else:
         log_message(">> ERROR: %s: %s failed online." % (args.mode, nodeName))
     time.sleep(60) # generously wait for nodes to stabilize
@@ -153,6 +157,7 @@ if __name__ == "__main__":
   # Do a deeper check
   for nodeName, nodeIP in random.sample(nodes.items(), len(nodes)):
     if state[nodeName]:
+      log_message("Check if foscams are healthy...")
       if args.mode == 'foscam':
         node_healthy = check_if_can_image(nodeName, args.display_image)
         system_healthy = system_healthy and node_healthy
