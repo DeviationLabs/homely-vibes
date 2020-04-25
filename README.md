@@ -75,6 +75,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * 02-16-2020: [v2.1.0] Add uplink test diagnostics
 * 02-17-2020: [v2.1.1] Add reboot foscams to landing page. Refine stats sort order on landing page
 * 03-22-2020: [v2.1.2] uplink test retry logic
+* 04-25-2020: [v2.1.3] Rollup of minor enhancements to error handling
 
 ### Pending:
 * Eliminate Constants.sh using https://goo.gl/UgfwCr

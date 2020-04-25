@@ -49,7 +49,7 @@ if __name__ == "__main__":
           msg += "Link bad (<80%): "
       msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps\n" % (ext_ip, dlW_mbps, ulW_mbps)
       time.sleep(120)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.decoder.JSONDecodeError) as e:
       msg += e.output
 
   logging.info(msg)

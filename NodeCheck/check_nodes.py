@@ -50,18 +50,22 @@ def print_deep_state(nodeName):
 # Note: For Foscam nodes only
 def check_if_can_image(nodeName, display_image):
   msg = "Image fetch failed from node: %s" % nodeName
-  try:
-    myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
-    if myCam.getImage() is not None:
-      log_message("Got image from node: %s" % nodeName)
-      if display_image:
-        print ("Displaying %s ..." % nodeName)
-        time.sleep(5)
-      return True
-  except Exception as e:
-    msg += "\n%s" % traceback.format_exc()
-    logging.error(msg)
-  log_message(msg)
+
+  MAX_COUNT = 2
+  while count < MAX_COUNT:
+    try:
+      myCam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
+      if myCam.getImage() is not None:
+        log_message("Got image from node: %s" % nodeName)
+        if display_image:
+          print ("Displaying %s ..." % nodeName)
+          time.sleep(5)
+        return True
+    except Exception as e:
+      temp = "\n%s" % traceback.format_exc()
+      logging.error(temp)
+      time.sleep(30)
+  log_message("Got image, but failed to preview from: %s" % nodeName)
   return False
 
 def log_message(msg):

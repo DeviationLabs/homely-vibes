@@ -10,6 +10,7 @@ source $scriptdir/../lib/Constants.sh
 ENERGY_FIELD=4
 SLEEP=3
 RACHIO_INTVL=120 # Rachio rate limits on 1700 API calls, so let's stay south of this. 
+TUYA_BAD_READING=-2500
 
 # Cleanup 
 # >&2 echo "Recommended invocation: nohup $script >> ~/tuya_logs/tuya_logs.csv &"
@@ -30,7 +31,7 @@ do
   line_tuya=$(tuya-cli get --id $TUYA_ID --dps $ENERGY_FIELD)
   if ! [[ $line_tuya =~ $re ]] ; then
     # echo "error: Not a number" >&2
-    line_tuya=-2
+    line_tuya=$TUYA_BAD_READING
   fi
   if [[ $latchedEpoch < $((currEpoch - $RACHIO_INTVL)) ]]; then
       latchedEpoch=$currEpoch
