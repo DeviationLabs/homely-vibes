@@ -155,9 +155,9 @@ if __name__ == "__main__":
     time.sleep(60) # generously wait for nodes to stabilize
 
   # Do a deeper check
+  log_message("Check if foscams are healthy...")
   for nodeName, nodeIP in random.sample(nodes.items(), len(nodes)):
     if state[nodeName]:
-      log_message("Check if foscams are healthy...")
       if args.mode == 'foscam':
         node_healthy = check_if_can_image(nodeName, args.display_image)
         system_healthy = system_healthy and node_healthy
