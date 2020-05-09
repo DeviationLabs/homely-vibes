@@ -15,9 +15,13 @@ import Mailer
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description = "Speedtest and External IP detection utility`")
   parser.add_argument('--always_email',
-                      help    ='Send email report',
-                      action  ='store_true',
-                      default =False)
+                      help    = 'Send email report',
+                      action  = 'store_true',
+                      default = False)
+  parser.add_argument('--max_retries',
+                      help    = 'Retry if low score on first try',
+                      type    = int,
+                      default = 1)
   args = parser.parse_args()
 
   logfile = '%s/%s.log' % (Constants.LOGGING_DIR, os.path.basename(__file__))
@@ -26,13 +30,13 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  msg=""
   cmd = "/usr/bin/speedtest -f json"
   alert = True
   count = 0
-  msg = ""
-  while (alert and count < Constants.MAX_RETRIES):
+  agg_msg = ""
+  while (alert and count < args.max_retries):
     count += 1
+    msg=""
     try:
       out = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=False,
           universal_newlines=True, timeout=600)
@@ -48,12 +52,16 @@ if __name__ == "__main__":
       else:
           msg += "Link bad (<80%): "
       msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps\n" % (ext_ip, dlW_mbps, ulW_mbps)
-      time.sleep(120)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.decoder.JSONDecodeError) as e:
-      msg += e.output
+      msg += f"{e.output}\n\n"
+    print(msg)
+    logging.info(msg)
+    agg_msg += msg
+    if alert:
+      # Wait to retry
+      time.sleep(120)
 
-  logging.info(msg)
-  Mailer.sendmail(topic="[SpeedTest]", message=msg, \
+  Mailer.sendmail(topic="[SpeedTest]", message=agg_msg, \
           always_email=args.always_email, alert=alert)
   print(msg)
   print("Done")
