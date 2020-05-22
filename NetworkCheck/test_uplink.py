@@ -36,7 +36,7 @@ if __name__ == "__main__":
   agg_msg = ""
   while (alert and count < args.max_retries):
     count += 1
-    msg=""
+    msg = ""
     try:
       out = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=False,
           universal_newlines=True, timeout=600)
@@ -45,24 +45,25 @@ if __name__ == "__main__":
       ulW_mbps = payload.get("upload", {}).get("bandwidth", 0)*8/1024/1024
       ext_ip = payload.get("interface", {}).get("externalIp", "UNK")
       if (dlW_mbps > Constants.MIN_DL_BW and ulW_mbps > Constants.MIN_UL_BW):
-          msg += "Link good: "
-          alert = False
+        msg += "Link good: "
+        alert = False
       elif (dlW_mbps > Constants.MIN_DL_BW * 0.8 and ulW_mbps > Constants.MIN_UL_BW * 0.8):
-          msg += "Link degraded (>80%): "
+        msg += "Link degraded (>80%): "
       else:
-          msg += "Link bad (<80%): "
+        msg += "Link bad (<80%): "
       msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps\n" % (ext_ip, dlW_mbps, ulW_mbps)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.decoder.JSONDecodeError) as e:
-      msg += f"{e.output}\n\n"
+      msg += "%s\n\n" % (e)
+      msg += "Got: %s\n\n" % (out)
+
     print(msg)
     logging.info(msg)
     agg_msg += msg
-    if alert:
+    if alert and count < args.max_retries:
       # Wait to retry
       time.sleep(120)
 
   Mailer.sendmail(topic="[SpeedTest]", message=agg_msg, \
           always_email=args.always_email, alert=alert)
-  print(msg)
   print("Done")
 
