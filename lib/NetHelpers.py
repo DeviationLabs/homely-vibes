@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.6
 import contextlib
 import logging
+from paramiko import SSHClient
 import requests
 import subprocess
 import sys
@@ -28,10 +29,24 @@ def ssh_cmd(node, user, passwd, winCmd):
   cmd = "sshpass -p %s ssh %s %s@%s %s 2> /dev/null" \
         % (passwd, sshOpts, user, node, winCmd)
   try:
-    output = subprocess.check_output(cmd.split(), timeout=10)
+    output = subprocess.check_output(cmd.split(), timeout=10).decode('utf-8')
   except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-    output = e.output
-  return output.decode('utf-8')
+    output = f'{e}'
+  return output
+
+
+# run a command in ssh and return string output
+def ssh_cmd_v2(node, user, passwd, remote_cmd):
+  client = SSHClient()
+  client.load_system_host_keys()
+  client.connect(node, username=user, password=passwd, timeout=10)
+  stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=5)
+#  import pdb; pdb.set_trace()
+  errors = stderr.readlines()
+  if len(errors) > 0:
+    return ''.join(errors)
+  else:
+    return ''.join(stdout.readlines())
 
 
 # Run an http request and return string output

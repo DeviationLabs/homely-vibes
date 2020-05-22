@@ -47,3 +47,6 @@ USER_EMAIL=abutala@gmail.com
 
 # GarageDoor: Active periodic door state check. 
 # @reboot                 sleep 120; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --model_file ~/bin/GarageCheck/garage.h5 > /dev/null
+
+# Browser Monitor for Rian
+@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --send_sms > /dev/null

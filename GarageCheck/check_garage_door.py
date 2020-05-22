@@ -40,7 +40,7 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  send_email = False
+  send_email = args.always_email
   model = None
   msg = ""
   mycam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES['Garage'], args.display_image)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
       ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
       if currtime.tm_hour == 0 and currtime.tm_min == 0 and send_email:
         Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=send_email)
-        send_email = False
+        send_email = args.always_email
         mycam.reset_errcount()
 
       filename = None
