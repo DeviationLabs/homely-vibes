@@ -37,6 +37,7 @@ if __name__ == "__main__":
   while (alert and count < args.max_retries):
     count += 1
     msg = ""
+    out = ""
     try:
       out = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=False,
           universal_newlines=True, timeout=600)

@@ -11,9 +11,9 @@ import Mailer
 import MyTwilio
 import NetHelpers
 
+
 records = {}
 parse_start_time = 0
-
 
 def refresh_dns_cache():
   # Purge DNS cache before start of tailer...
@@ -46,7 +46,7 @@ def run_monitor_one_shot(ignore_patterns):
     data[0] = int(data[0])
     if data[0] <= parse_start_time:
       # We've already digested this record
-      pass
+      continue
     elif re.search(ignore_patterns, data[2]):
       msg += f"Ignoring: "
     elif any([re.search(pattern, data[2]) for pattern in Constants.BLACKLIST]):
@@ -105,21 +105,18 @@ if __name__ == "__main__":
       (alert, msg, matched) = run_monitor_one_shot(args.ignore_patterns)
     except Exception as e:
       msg = f'{e}'
-      raise(e)
 
+    print(f'{count}: {msg}')
     logging.info(f'{count}: {msg}')
-    if count < 2 and not args.always_email:
-      # Bootstrap, don't run alerting
-      print(f'{count}: {msg}')
-    elif alert and (args.always_email or \
+    if alert and (count > 2 or args.always_email):
+      temp = msg.split('\n')[0]
+      if (args.send_sms and (args.always_email or
         (currtime.tm_hour >= Constants.HR_START_MONITORING and \
-        currtime.tm_hour < Constants.HR_STOP_MONITORING) ):
-      if args.send_sms:
-        temp = msg.split('\n')[0]
-        logging.info(f"Sending SMS: {temp}")
+         currtime.tm_hour < Constants.HR_STOP_MONITORING) ) ):
+        logging.info(f"Badness Sending SMS: {temp}")
         MyTwilio.sendsms(f"Matched: {matched}")
       else:
-        print(f'{count}: {msg}')
+        logging.info(f"Badness No SMS: {temp}")
         for i in range(3):
           print("\a") # , end='') ## Doesn't work
           time.sleep(1)
@@ -128,6 +125,6 @@ if __name__ == "__main__":
       if args.always_email or \
           (currtime.tm_hour == Constants.HR_EMAIL and currtime.tm_min == 0):
         msg = "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
-        records = {} # Email has gone out. Let's reset
         Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=args.always_email)
+        records = {} # Email has gone out. Let's reset
     time.sleep(Constants.REFRESH_DELAY)
