@@ -19,6 +19,14 @@ ALWAYS_EMAIL = False
 GMAIL_USERNAME = 'user_from'
 GMAIL_PASSWORD = 'XXX'
 
+
+
+# Twilio SMS
+TWILIO_SID = 'sid'
+AUTH_TOKEN = 'token'
+SMS_TO = ['+18002345678']
+SMS_FROM = '+18001234567' # Amit's Twilio account
+
 # WaterMonitor: Processing
 MAX_ZONES = 16
 MAX_NEW_FILES = 2 # Number of recent raw log files that are reprocessed into summary json
@@ -54,4 +62,16 @@ WINDOWS_PASSWORD="YYY"
 # Network Check
 MIN_DL_BW = 150  # Mbps
 MIN_UL_BW = 4    # Mbps
-MAX_RETRIES = 5
+
+# Browser Alert
+GARMOUGAL_IP="192.168.1.24"
+GARMOUGAL_USERNAME="user"
+GARMOUGAL_PASSWORD=None
+ORIGIN='path_to_google_chrome_profile'
+REFRESH_DELAY=60
+HR_START_MONITORING = 8
+HR_STOP_MONITORING = 13
+HR_EMAIL = 19
+BLACKLIST=[
+  "pokemon",
+]

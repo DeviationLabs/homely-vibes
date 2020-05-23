@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import time
+from tld import get_tld
 import Constants
 import Mailer
 import MyTwilio
@@ -47,13 +48,14 @@ def run_monitor_one_shot(ignore_patterns):
       # We've already digested this record
       pass
     elif re.search(ignore_patterns, data[2]):
-      msg += f"Ignoring: [{data[1]}] {data[2]}\n"
-    else:
-      for pattern in Constants.BLACKLIST:
-        if re.search(pattern, data[2]):
-          alert = True
-          msg += f"ALERT!! [{data[1]}] {data[2]})\n"
-          matched = pattern
+      msg += f"Ignoring: "
+    elif any([re.search(pattern, data[2]) for pattern in Constants.BLACKLIST]):
+      alert = True
+      msg += f"ALERT!! "
+      res = get_tld(data[2], as_object=True) #Get the root as an object
+      matched = res.fld
+    msg += f"[{data[1]}] {data[2]})\n"
+
     if data[0] > parse_start_time:
       parse_start_time = data[0]
       records[data[1]] = data[2]

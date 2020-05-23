@@ -11,6 +11,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * Manage log rotation on foscam videos ftp folder.
 * Image classifier for garage door status with email reporting
 * Test uplink for external IP address, and speedtest
+* Monitor laptop "GARMOUGAL" for blacklisted websites
 
 ### Ternary functions:
 * Add foscams to alexa via homebridge straddles.
