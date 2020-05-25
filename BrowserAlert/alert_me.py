@@ -28,16 +28,17 @@ def run_monitor_one_shot(ignore_patterns):
   alert = False
   matched = None
 
-  # Make user editable copy
-  remote_cmd = f'cp {Constants.ORIGIN} {temp_dest} && chmod 777 {temp_dest} && stat -f "%Sm %N" {Constants.ORIGIN}'
-  remote_su_cmd = f'sudo -- sh -c "{remote_cmd}"'
-  msg = NetHelpers.ssh_cmd_v2(Constants.GARMOUGAL_IP, Constants.GARMOUGAL_USERNAME, Constants.GARMOUGAL_PASSWORD, remote_su_cmd)
+  # Make User History and fetch minimal info
+  remote_cmd  = f'sudo cp -p {Constants.ORIGIN} {temp_dest}'
+  remote_cmd += f' && sudo chmod 777 {temp_dest}'
+  remote_cmd += f' && sudo stat -f "%Sm %N" {temp_dest}'
+  remote_cmd += f" && sqlite3 {temp_dest} \"SELECT last_visit_time, datetime(datetime(last_visit_time / 1000000 + (strftime('%s', '1601-01-01')), 'unixepoch'), 'localtime'), url FROM urls ORDER BY last_visit_time DESC LIMIT 15\""
+  remote_cmd += f' && rm {temp_dest}'
+  msg = NetHelpers.ssh_cmd_v2(Constants.GARMOUGAL_IP, Constants.GARMOUGAL_USERNAME, Constants.GARMOUGAL_PASSWORD, remote_cmd)
 
-  # Process and fetch minimal info
-  remote_cmd=f"sqlite3 {temp_dest} \"SELECT last_visit_time, datetime(datetime(last_visit_time / 1000000 + (strftime('%s', '1601-01-01')), 'unixepoch'), 'localtime'), url FROM urls ORDER BY last_visit_time DESC LIMIT 15\" && rm {temp_dest}"
-  msg2 = NetHelpers.ssh_cmd_v2(Constants.GARMOUGAL_IP, Constants.GARMOUGAL_USERNAME, Constants.GARMOUGAL_PASSWORD, remote_cmd)
-
-  for record in reversed(msg2.split("\n")):
+  response = msg.split("\n");
+  msg = f"{response[0]}\n"
+  for record in reversed(response[1:]):
     data = record.split("|")
     if len(data) != 3:
       # Malformed. Ignore.
