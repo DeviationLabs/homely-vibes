@@ -148,12 +148,11 @@ if __name__ == "__main__":
           print("\a") # , end='') ## Doesn't work
           time.sleep(1)
 
-    if len(records) > 0:
-      if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and email_hr != currtime.tm_hour:
-        # email on the correct hour
-        msg = "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
-        Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=args.always_email)
-        records = {} # Email has gone out. Let's reset
-      else:
-        email_hr = currtime.tm_hour
+    if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and email_hr != currtime.tm_hour:
+      # email on the correct hour
+      msg = "Found records:\n" + "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
+      Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=args.always_email)
+      records = {} # Email has gone out. Let's reset
+      email_hr = currtime.tm_hour
+
     time.sleep(Constants.REFRESH_DELAY)
