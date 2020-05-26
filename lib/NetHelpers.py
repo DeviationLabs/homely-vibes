@@ -36,10 +36,10 @@ def ssh_cmd(node, user, passwd, winCmd):
 
 
 # run a command in ssh and return string output
-def ssh_connect(node, user, passwd):
+def ssh_connect(node_ip, user, passwd):
   client = SSHClient()
   client.load_system_host_keys()
-  client.connect(node, username=user, password=passwd, timeout=10)
+  client.connect(node_ip, username=user, password=passwd, timeout=10)
   return client
 
 

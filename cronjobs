@@ -49,4 +49,6 @@ USER_EMAIL=abutala@gmail.com
 # @reboot                 sleep 120; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --model_file ~/bin/GarageCheck/garage.h5 > /dev/null
 
 # Browser Monitor for Rian
-@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --send_sms > /dev/null
+@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --send_sms --machine garmougal> /dev/null
+@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --send_sms --always_email --machine ditto> /dev/null
+

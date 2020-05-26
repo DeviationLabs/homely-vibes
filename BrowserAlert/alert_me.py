@@ -23,7 +23,7 @@ def refresh_dns_cache(client):
   return NetHelpers.ssh_cmd_v2(client, cmd)
 
 
-def run_monitor_one_shot(client, ignore_patterns):
+def run_monitor_one_shot(client, origin_file, ignore_patterns):
   global records
   global parse_start_time
   temp_dest="~/.gc_history"
@@ -31,7 +31,7 @@ def run_monitor_one_shot(client, ignore_patterns):
   matched = None
 
   # Make User History and fetch minimal info
-  remote_cmd  = f'sudo cp -p {Constants.ORIGIN} {temp_dest}'
+  remote_cmd  = f'sudo cp -p {origin_file} {temp_dest}'
   remote_cmd += f' && sudo chmod 777 {temp_dest}'
   remote_cmd += f' && sudo stat -f "%Sm %N" {temp_dest}'
   remote_cmd += f" && sqlite3 {temp_dest} \"SELECT last_visit_time, datetime(datetime(last_visit_time / 1000000 + (strftime('%s', '1601-01-01')), 'unixepoch'), 'localtime'), url FROM urls ORDER BY last_visit_time DESC LIMIT 15\""
@@ -77,6 +77,10 @@ if __name__ == "__main__":
                       help    = 'Additional Regexes to ignore',
                       type    = str,
                       default = "LALA")
+  parser.add_argument('--machine',
+                      help    = 'short name of machine to monitor',
+                      type    = str,
+                      default = "garmougal")
   parser.add_argument('--send_sms',
                       help    = 'Send SMS',
                       action  = 'store_true',
@@ -93,19 +97,18 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  client = SSHClient()
-  client.load_system_host_keys()
-  client.connect(
-    Constants.GARMOUGAL_IP,
-    username=Constants.GARMOUGAL_USERNAME,
-    password=Constants.GARMOUGAL_PASSWORD,
-    timeout=10
-  )
-
-  msg = refresh_dns_cache(client)
-  print(f"Refreshed DNS at {msg}")
-  print(f"Start monitoring after {args.start_after_seconds} seconds ...")
   time.sleep(args.start_after_seconds)
+
+  host = Constants.HOSTS[args.machine]
+  try:
+    client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
+    msg = refresh_dns_cache(client)
+    print(f"Refreshed DNS at {msg}")
+    print(f"Start monitoring after {args.start_after_seconds} seconds ...")
+  except Exception as e:
+    client = None
+    print(f"Machine offline, but still continuing...")
+    logging.info(f"Machine offline, but still continuing...")
 
   count = 0
   email_hr = -1
@@ -115,27 +118,23 @@ if __name__ == "__main__":
     currtime = time.localtime()
 
     try:
-      (alert, msg, matched) = run_monitor_one_shot(client, args.ignore_patterns)
+      (alert, msg, matched) = run_monitor_one_shot(client, host["origin"], args.ignore_patterns)
     except Exception as e:
       msg = f'{e}'
       try:
         # Most probable explanation is ssh has failed, so reconnect
         # TODO: Do only on the right exception messages
-        client.connect(
-            Constants.GARMOUGAL_IP,
-            username=Constants.GARMOUGAL_USERNAME,
-            password=Constants.GARMOUGAL_PASSWORD,
-            timeout=10
-        )
+        client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
       except Exception as e:
         # Take a cooling off period.
+        client = None
         msg += f'{e}'
         msg += '\n\n SSH reconnect failed. Take a 300s cooloff period...\n'
         time.sleep(300)
 
     print(f'{count}: {msg}')
     logging.info(f'{count}: {msg}')
-    if alert and (count > 2 or args.always_email):
+    if alert and (count > 1 or args.always_email):
       temp = msg.split('\n')[0]
       if (args.send_sms and (args.always_email or
         (currtime.tm_hour >= Constants.HR_START_MONITORING and \
@@ -147,6 +146,8 @@ if __name__ == "__main__":
         for i in range(3):
           print("\a") # , end='') ## Doesn't work
           time.sleep(1)
+    else:
+      logging.info("Suppressing alerting during bootstrap [{count}] ...")
 
     if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and email_hr != currtime.tm_hour:
       # email on the correct hour
