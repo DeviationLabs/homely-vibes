@@ -36,12 +36,15 @@ def ssh_cmd(node, user, passwd, winCmd):
 
 
 # run a command in ssh and return string output
-def ssh_cmd_v2(node, user, passwd, remote_cmd):
+def ssh_connect(node, user, passwd):
   client = SSHClient()
   client.load_system_host_keys()
   client.connect(node, username=user, password=passwd, timeout=10)
+  return client
+
+
+def ssh_cmd_v2(client, remote_cmd):
   stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=5)
-#  import pdb; pdb.set_trace()
   errors = stderr.readlines()
   if len(errors) > 0:
     return ''.join(errors)

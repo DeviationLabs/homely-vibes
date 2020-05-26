@@ -2,6 +2,7 @@
 import argparse
 import logging
 import os
+from paramiko import SSHClient
 import re
 import sys
 import time
@@ -15,13 +16,14 @@ import NetHelpers
 records = {}
 parse_start_time = 0
 
-def refresh_dns_cache():
+
+def refresh_dns_cache(client):
   # Purge DNS cache before start of tailer...
   cmd = "sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder && date"
-  return NetHelpers.ssh_cmd_v2(Constants.GARMOUGAL_IP, Constants.GARMOUGAL_USERNAME, Constants.GARMOUGAL_PASSWORD, cmd)
+  return NetHelpers.ssh_cmd_v2(client, cmd)
 
 
-def run_monitor_one_shot(ignore_patterns):
+def run_monitor_one_shot(client, ignore_patterns):
   global records
   global parse_start_time
   temp_dest="~/.gc_history"
@@ -34,7 +36,7 @@ def run_monitor_one_shot(ignore_patterns):
   remote_cmd += f' && sudo stat -f "%Sm %N" {temp_dest}'
   remote_cmd += f" && sqlite3 {temp_dest} \"SELECT last_visit_time, datetime(datetime(last_visit_time / 1000000 + (strftime('%s', '1601-01-01')), 'unixepoch'), 'localtime'), url FROM urls ORDER BY last_visit_time DESC LIMIT 15\""
   remote_cmd += f' && rm {temp_dest}'
-  msg = NetHelpers.ssh_cmd_v2(Constants.GARMOUGAL_IP, Constants.GARMOUGAL_USERNAME, Constants.GARMOUGAL_PASSWORD, remote_cmd)
+  msg = NetHelpers.ssh_cmd_v2(client, remote_cmd)
 
   response = msg.split("\n");
   msg = f"{response[0]}\n"
@@ -91,21 +93,45 @@ if __name__ == "__main__":
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
-  msg = refresh_dns_cache()
+  client = SSHClient()
+  client.load_system_host_keys()
+  client.connect(
+    Constants.GARMOUGAL_IP,
+    username=Constants.GARMOUGAL_USERNAME,
+    password=Constants.GARMOUGAL_PASSWORD,
+    timeout=10
+  )
+
+  msg = refresh_dns_cache(client)
   print(f"Refreshed DNS at {msg}")
   print(f"Start monitoring after {args.start_after_seconds} seconds ...")
   time.sleep(args.start_after_seconds)
 
   count = 0
+  email_hr = -1
   while True:
     count += 1
     alert = False
     currtime = time.localtime()
 
     try:
-      (alert, msg, matched) = run_monitor_one_shot(args.ignore_patterns)
+      (alert, msg, matched) = run_monitor_one_shot(client, args.ignore_patterns)
     except Exception as e:
       msg = f'{e}'
+      try:
+        # Most probable explanation is ssh has failed, so reconnect
+        # TODO: Do only on the right exception messages
+        client.connect(
+            Constants.GARMOUGAL_IP,
+            username=Constants.GARMOUGAL_USERNAME,
+            password=Constants.GARMOUGAL_PASSWORD,
+            timeout=10
+        )
+      except Exception as e:
+        # Take a cooling off period.
+        msg += f'{e}'
+        msg += '\n\n SSH reconnect failed. Take a 300s cooloff period...\n'
+        time.sleep(300)
 
     print(f'{count}: {msg}')
     logging.info(f'{count}: {msg}')
@@ -123,9 +149,11 @@ if __name__ == "__main__":
           time.sleep(1)
 
     if len(records) > 0:
-      if args.always_email or \
-          (currtime.tm_hour == Constants.HR_EMAIL and currtime.tm_min == 0):
+      if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and email_hr != currtime.tm_hour:
+        # email on the correct hour
         msg = "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
         Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=args.always_email)
         records = {} # Email has gone out. Let's reset
+      else:
+        email_hr = currtime.tm_hour
     time.sleep(Constants.REFRESH_DELAY)
