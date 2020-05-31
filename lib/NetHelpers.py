@@ -34,8 +34,7 @@ def ssh_cmd(node, user, passwd, winCmd):
     output = f'{e}'
   return output
 
-
-# run a command in ssh and return string output
+# Create a paramiko SSH Client
 def ssh_connect(node_ip, user, passwd):
   client = SSHClient()
   client.load_system_host_keys()
@@ -43,7 +42,10 @@ def ssh_connect(node_ip, user, passwd):
   return client
 
 
+# Run a command on client and return string output
 def ssh_cmd_v2(client, remote_cmd):
+  if client is None:
+    raise AssertionError("No Client\n")
   stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=5)
   errors = stderr.readlines()
   if len(errors) > 0:

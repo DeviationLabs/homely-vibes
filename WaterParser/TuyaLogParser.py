@@ -57,7 +57,7 @@ class TuyaLogParser:
     # If the most recent datapoint has error values then alert.
     if (fetch(dataPoints[-1], 'CURRENT', 'int') < 0 or fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1) \
        and isMostRecentLog:
-      msg = "Warning: Data logging failure during polling at %s.\n%s" % (self.logEndTime, " ".join(dataPoints[-1]) )
+      msg = "Warning: Data logging failure during polling at %s.\n%s\n" % (self.logEndTime, " ".join(dataPoints[-1]) )
       if fetch(dataPoints[-1], 'CURRENT', 'int') < 0:
         msg += "Recommended Action: Manually power cycle the Tuya switch for pump"
       elif fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1:

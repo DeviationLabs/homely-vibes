@@ -1,8 +1,8 @@
 #!/usr/bin/env python3.6
 import argparse
+from importlib import reload
 import logging
 import os
-from paramiko import SSHClient
 import re
 import sys
 import time
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                       default = False)
   args = parser.parse_args()
 
-  logfile = '%s/%s.log' % (Constants.LOGGING_DIR, os.path.basename(__file__))
+  logfile = '%s/%s.%s.log' % (Constants.LOGGING_DIR, os.path.basename(__file__), args.machine)
   log_format = '%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s'
   logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
   logging.info('============')
@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
   time.sleep(args.start_after_seconds)
 
-  host = Constants.HOSTS[args.machine]
+  host = Constants.NODES[args.machine]
   try:
     client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
     msg = refresh_dns_cache(client)
@@ -111,14 +111,17 @@ if __name__ == "__main__":
     logging.info(f"Machine offline, but still continuing...")
 
   count = 0
-  email_hr = -1
+  last_checked_hr = -1
   while True:
     count += 1
     alert = False
     currtime = time.localtime()
+    sleep_time = Constants.REFRESH_DELAY
 
     try:
-      (alert, msg, matched) = run_monitor_one_shot(client, host["origin"], args.ignore_patterns)
+      Constants = reload(Constants)
+      host = Constants.NODES[args.machine]
+      (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], args.ignore_patterns)
     except Exception as e:
       msg = f'{e}'
       try:
@@ -129,31 +132,30 @@ if __name__ == "__main__":
         # Take a cooling off period.
         client = None
         msg += f'{e}'
-        msg += '\n\n SSH reconnect failed. Take a 300s cooloff period...\n'
-        time.sleep(300)
+        sleep_time = 300
+        msg += f'\nSSH reconnect failed. Take a {sleep_time}s cooloff period...\n'
 
     print(f'{count}: {msg}')
     logging.info(f'{count}: {msg}')
-    if alert and (count > 1 or args.always_email):
+    if alert:
       temp = msg.split('\n')[0]
       if (args.send_sms and (args.always_email or
-        (currtime.tm_hour >= Constants.HR_START_MONITORING and \
+        (count > 1 and currtime.tm_hour >= Constants.HR_START_MONITORING and \
          currtime.tm_hour < Constants.HR_STOP_MONITORING) ) ):
         logging.info(f"Badness Sending SMS: {temp}")
-        MyTwilio.sendsms(f"Matched: {matched}")
+        for rcpt in host["sms_inform"]:
+          MyTwilio.sendsms(rcpt, f"[BLACKLIST] Host: {args.machine}, Site: {matched}")
       else:
         logging.info(f"Badness No SMS: {temp}")
         for i in range(3):
           print("\a") # , end='') ## Doesn't work
           time.sleep(1)
-    else:
-      logging.info("Suppressing alerting during bootstrap [{count}] ...")
 
-    if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and email_hr != currtime.tm_hour:
-      # email on the correct hour
+    if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and last_checked_hr != currtime.tm_hour:
+      # Email on the correct hour
       msg = "Found records:\n" + "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
-      Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=args.always_email)
+      Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=True)
       records = {} # Email has gone out. Let's reset
-      email_hr = currtime.tm_hour
+    last_checked_hr = currtime.tm_hour
 
-    time.sleep(Constants.REFRESH_DELAY)
+    time.sleep(sleep_time)

@@ -64,11 +64,15 @@ MIN_DL_BW = 150  # Mbps
 MIN_UL_BW = 4    # Mbps
 
 # Browser Alert
-GARMOUGAL_IP="192.168.1.24"
-GARMOUGAL_USERNAME="user"
-GARMOUGAL_PASSWORD=None
-ORIGIN='path_to_google_chrome_profile'
-REFRESH_DELAY=60
+HOSTS={
+   "ditto": {
+     "username": <user>,
+     "password": None,
+     "origin": 'path_to_google_chrome_profile'
+     "ip": "192.168.1.37",
+   },
+}
+REFRESH_DELAY=90
 HR_START_MONITORING = 8
 HR_STOP_MONITORING = 13
 HR_EMAIL = 19
