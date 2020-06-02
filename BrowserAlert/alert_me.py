@@ -73,16 +73,12 @@ if __name__ == "__main__":
                       help    = 'Seconds to sleep/not alert after starting',
                       type    = int,
                       default = 0)
-  parser.add_argument('--ignore_patterns',
-                      help    = 'Additional Regexes to ignore',
-                      type    = str,
-                      default = "LALA")
   parser.add_argument('--machine',
                       help    = 'short name of machine to monitor',
                       type    = str,
                       default = "garmougal")
   parser.add_argument('--send_sms',
-                      help    = 'Send SMS',
+                      help    = 'Send email report',
                       action  = 'store_true',
                       default = False)
   parser.add_argument('--always_email',
@@ -96,6 +92,18 @@ if __name__ == "__main__":
   logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
+
+  SEND_SMS_FLAG = f"/tmp/sms_enabled.{args.machine}"
+  if args.send_sms:
+    with open(SEND_SMS_FLAG, 'w') as fp:
+      pass
+    logging.info("Enabling SMS")
+  else:
+    try:
+      os.remove(SEND_SMS_FLAG)
+    except OSError:
+      pass
+    logging.info("Disabling SMS")
 
   time.sleep(args.start_after_seconds)
 
@@ -121,7 +129,7 @@ if __name__ == "__main__":
     try:
       Constants = reload(Constants)
       host = Constants.NODES[args.machine]
-      (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], args.ignore_patterns)
+      (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], host.get("whitelist", ""))
     except Exception as e:
       msg = f'{e}'
       try:
@@ -139,7 +147,7 @@ if __name__ == "__main__":
     logging.info(f'{count}: {msg}')
     if alert:
       temp = msg.split('\n')[0]
-      if (args.send_sms and (args.always_email or
+      if (os.path.exists(SEND_SMS_FLAG) and (args.always_email or
         (count > 1 and currtime.tm_hour >= Constants.HR_START_MONITORING and \
          currtime.tm_hour < Constants.HR_STOP_MONITORING) ) ):
         logging.info(f"Badness Sending SMS: {temp}")

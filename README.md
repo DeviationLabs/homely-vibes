@@ -78,6 +78,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * 03-22-2020: [v2.1.2] uplink test retry logic
 * 04-25-2020: [v2.1.3] Rollup of minor enhancements to error handling
 * 05-22-2020: [v2.2.0] New module for remote browser web usage alerting. Also add Twilio SMSing
+* 06-02-2020: [v2.2.1] Dynamically reload-able config
 
 ### Pending:
 * Eliminate Constants.sh using https://goo.gl/UgfwCr
