@@ -37,8 +37,8 @@ USER_EMAIL=abutala@gmail.com
 
 # FTP folder management: System automount is kicked on first directory access. Purge NFS daily. 
 @reboot                  sleep 120; cd /mnt/IPCam_Data/; ls > /dev/null
-1    4       *  *  1-6   ~/bin/NodeCheck/purge_old_foscam_files.py > /dev/null
-1    4       *  *  0     ~/bin/NodeCheck/purge_old_foscam_files.py --always_email > /dev/null
+45   6       *  *  1-6   ~/bin/NodeCheck/purge_old_foscam_files.py > /dev/null
+45   6       *  *  0     ~/bin/NodeCheck/purge_old_foscam_files.py --always_email > /dev/null
 
 # WaterMonitoring: Start scraper on reboot, update every 15, and daily email @7:00
 @reboot                  sleep 120; nohup run-one-constantly ~/bin/WaterLogging/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null

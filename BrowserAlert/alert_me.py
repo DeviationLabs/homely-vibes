@@ -120,6 +120,7 @@ if __name__ == "__main__":
 
   count = 0
   last_checked_hr = -1
+  ssh_is_healthy = True
   while True:
     count += 1
     alert = False
@@ -130,17 +131,25 @@ if __name__ == "__main__":
       Constants = reload(Constants)
       host = Constants.NODES[args.machine]
       (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], host.get("whitelist", ""))
+      ssh_is_healthy = True
     except Exception as e:
       msg = f'{e}'
       try:
-        # Most probable explanation is ssh has failed, so reconnect
-        # TODO: Do only on the right exception messages
+        # Most probable explanation is ssh has failed, so reconnect and retry
         client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
+        (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], host.get("whitelist", ""))
       except Exception as e:
+        # Is ping succeeding? Then we have an SSH issue. Escalate
+        if NetHelpers.ping_output(node=host["ip"]) and ssh_is_healthy:
+            for rcpt in host["sms_inform"]:
+                MyTwilio.sendsms(rcpt, f"[Error] Ping up but ssh failing. Needs manual debug")
+                ssh_is_healthy = False
+
+
         # Take a cooling off period.
         client = None
         msg += f'{e}'
-        sleep_time = 300
+        sleep_time = Constants.REFRESH_DELAY * 10
         msg += f'\nSSH reconnect failed. Take a {sleep_time}s cooloff period...\n'
 
     print(f'{count}: {msg}')
