@@ -18,13 +18,13 @@ class FoscamImager:
   def __init__(self, nodeIP, display_images=False):
     self.mycam = FoscamCamera(nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
     self.display_images = display_images
-    self.count = 0
+    self.err_count = 0
     if display_images:
       plt.ion()
       plt.tight_layout()
 
   def reset_errcount(self):
-    self.count = 0
+    self.err_count = 0
 
   def getImageBytes(self):
     with NetHelpers.no_stdout():
@@ -33,11 +33,11 @@ class FoscamImager:
 #     logging.debug("Got IP params: %s" % json.dumps(IPparams))
 
     if (len(picture_data) < 2 or picture_data[1] is None):
-      self.count += 1
+      self.err_count += 1
       currtime = time.localtime()
       ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
-#      raise Exception("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.count))
-      logging.error("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.count))
+#      raise Exception("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.err_count))
+      logging.error("[%s] No data in image file, or no image returned. Count = %d\n" % (ts, self.err_count))
       return None
     imgBytes = picture_data[1]
     return imgBytes
