@@ -49,12 +49,12 @@ class FoscamImager:
 
     imgBytes  = self.getImageBytes()
     img = mpimg.imread(io.BytesIO(imgBytes), format='JPG')
+    if filename is not None:
+      with open(filename, "wb") as fh:
+        fh.write(imgBytes) ## Ubuntu: Use "eog <filename>" to view
+      logging.debug("Saved image to %s" % filename)
     if self.display_images == True:
       plt.imshow(img)
       plt.show()
       plt.pause(0.001)
-      if filename is not None:
-        with open(filename, "wb") as fh:
-          fh.write(imgBytes) ## Ubuntu: Use "eog <filename>" to view
-        logging.debug("Saved image to %s" % filename)
     return img

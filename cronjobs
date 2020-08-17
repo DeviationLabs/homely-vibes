@@ -25,20 +25,17 @@ USER_EMAIL=abutala@gmail.com
 @reboot                  sleep 700; ~/bin/NetworkCheck/test_uplink.py --always_email > /dev/null
 
 # Network check: Everyday
-0    6       *  *  1-6   ~/bin/NetworkCheck/test_uplink.py --max_retries 5 > /dev/null  
-0    6       *  *  0     ~/bin/NetworkCheck/test_uplink.py --always_email --max_retries 5 > /dev/null  
+0    6       *  *  *     ~/bin/NetworkCheck/test_uplink.py --max_retries 5 > /dev/null  
 
 # NodeCheck: Check on nodes every hour. Reboot Foscam daily and Alpha once a week
 50   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='windows' > /dev/null
 55   *       *  *  *     ~/bin/NodeCheck/check_nodes.py --mode='foscam' > /dev/null
-0    7       *  *  1-6   ~/bin/NodeCheck/check_nodes.py --reboot --mode='foscam' > /dev/null
-0    7       *  *  0     ~/bin/NodeCheck/check_nodes.py --reboot --mode='foscam' --always_email > /dev/null
+0    7       *  *  *     ~/bin/NodeCheck/check_nodes.py --reboot --mode='foscam' > /dev/null
 0    5       *  *  0     ~/bin/NodeCheck/check_nodes.py --reboot --mode='windows' --always_email > /dev/null
 
 # FTP folder management: System automount is kicked on first directory access. Purge NFS daily. 
 @reboot                  sleep 120; cd /mnt/IPCam_Data/; ls > /dev/null
-45   6       *  *  1-6   ~/bin/NodeCheck/purge_old_foscam_files.py > /dev/null
-45   6       *  *  0     ~/bin/NodeCheck/purge_old_foscam_files.py --always_email > /dev/null
+45   6       *  *  *     ~/bin/NodeCheck/purge_old_foscam_files.py > /dev/null
 
 # WaterMonitoring: Start scraper on reboot, update every 15, and daily email @7:00
 @reboot                  sleep 120; nohup run-one-constantly ~/bin/WaterLogging/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null

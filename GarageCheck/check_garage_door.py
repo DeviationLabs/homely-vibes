@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.6
 import argparse
 import logging
 import json
@@ -52,24 +52,31 @@ if __name__ == "__main__":
     try:
       currtime = time.localtime()
       ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
+
+      filename = None
+      if args.save_image == True:
+        filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
+        print("Saving image to %s" % filename)
+      img = mycam.getImage(filename)
+
+      if model is not None:
+        label, tmp_msg = TFOneShot.run_predictor(model, model_labels, img)
+        logging.info(tmp_msg)
+        msg += f"\n{tmp_msg}"
+      else:
+        # We've already saved the image. don't keep looping
+        break
+
       if currtime.tm_hour == 0 and currtime.tm_min == 0 and send_email:
         Mailer.sendmail(topic="[GarageCheck]", alert=True, message=msg, always_email=send_email)
         send_email = args.always_email
         mycam.reset_errcount()
 
-      filename = None
-      if args.save_image == True:
-        filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
-      img = mycam.getImage(filename)
-
-      if model is not None:
-        label, msg = TFOneShot.run_predictor(model, model_labels, img)
-        logging.info(msg)
-
     except Exception as e:
       msg += traceback.format_exc()
       logging.error(traceback.format_exc())
       send_email = True
+
     time.sleep(30)
 
   logging.info('Done!')
