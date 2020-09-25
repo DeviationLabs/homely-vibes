@@ -39,6 +39,15 @@ def ssh_connect(node_ip, user, passwd):
   client = SSHClient()
   client.load_system_host_keys()
   client.connect(node_ip, username=user, password=passwd, timeout=10)
+  # kill stale sshd processes if any. looks like this
+  # will not kill current logged in process, but
+  # double check
+  ssh_cmd_v2(client, "sudo pkill sshd")
+  try:
+    ssh_cmd_v2(client, "ls")
+  except:
+    print("Did I just shoot myself in the foot?")
+    client.connect(node_ip, username=user, password=passwd, timeout=10)
   return client
 
 
@@ -47,11 +56,8 @@ def ssh_cmd_v2(client, remote_cmd):
   if client is None:
     raise AssertionError("No Client\n")
   stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=5)
-  errors = stderr.readlines()
-  if len(errors) > 0:
-    return ''.join(errors)
-  else:
-    return ''.join(stdout.readlines())
+  import pdb; pdb.set_trace()
+  return ''.join(stdout.readlines()) + ''.join(stderr.readlines())
 
 
 # Run an http request and return string output

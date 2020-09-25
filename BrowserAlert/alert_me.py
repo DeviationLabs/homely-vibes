@@ -121,6 +121,7 @@ if __name__ == "__main__":
   count = 0
   last_checked_hr = -1
   only_ssh_fails_count = 0
+  SSH_ALERT_DELAY_COUNT = 20
   while True:
     count += 1
     alert = False
@@ -131,7 +132,7 @@ if __name__ == "__main__":
       Constants = reload(Constants)
       host = Constants.NODES[args.machine]
       (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], host.get("whitelist", ""))
-      if only_ssh_fails_count > 0:
+      if only_ssh_fails_count > SSH_ALERT_DELAY_COUNT:
         MyTwilio.sendsms(rcpt, f"[Success] Ssh failure has self healed")
       only_ssh_fails_count = 0
     except Exception as e:
@@ -148,8 +149,8 @@ if __name__ == "__main__":
         msg += f'\nSSH reconnect failed. Take a {sleep_time}s cooloff period...\n'
         if NetHelpers.ping_output(node=host["ip"]):
           only_ssh_fails_count += 1
-          if only_ssh_fails_count == (1800/sleep_time):
-            # ping succeeds but ssh failing for 1/2 hr. Escalate
+          if only_ssh_fails_count == SSH_ALERT_DELAY_COUNT:
+            # ping succeeds but ssh failing for a while
             for rcpt in host["sms_inform"]:
               MyTwilio.sendsms(rcpt, f"[Error] Ping up but ssh failing. Needs manual debug")
 
