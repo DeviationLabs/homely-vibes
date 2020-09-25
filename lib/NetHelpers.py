@@ -56,7 +56,6 @@ def ssh_cmd_v2(client, remote_cmd):
   if client is None:
     raise AssertionError("No Client\n")
   stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=5)
-  import pdb; pdb.set_trace()
   return ''.join(stdout.readlines()) + ''.join(stderr.readlines())
 
 
