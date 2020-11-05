@@ -118,12 +118,13 @@ if __name__ == "__main__":
     print(f"Machine offline, but still continuing...")
     logging.info(f"Machine offline, but still continuing...")
 
-  count = 0
+  cool_down_attempts = Constants.MIN_REPORTING_GAP
+
   last_checked_hr = -1
   only_ssh_fails_count = 0
   SSH_ALERT_DELAY_COUNT = 20
   while True:
-    count += 1
+    cool_down_attempts -= 1
     alert = False
     currtime = time.localtime()
     sleep_time = Constants.REFRESH_DELAY
@@ -154,14 +155,15 @@ if __name__ == "__main__":
             for rcpt in host["sms_inform"]:
               MyTwilio.sendsms(rcpt, f"[Error] Ping up but ssh failing. Needs manual debug")
 
-    print(f'{count}: {msg}')
-    logging.info(f'{count}: {msg}')
+    print(msg)
+    logging.info(msg)
     if alert:
       temp = msg.split('\n')[0]
       if (os.path.exists(SEND_SMS_FLAG) and (args.always_email or
-        (count > 1 and currtime.tm_hour >= Constants.HR_START_MONITORING and \
+        (cool_down_attempts <= 0 and currtime.tm_hour >= Constants.HR_START_MONITORING and \
          currtime.tm_hour < Constants.HR_STOP_MONITORING) ) ):
         logging.info(f"Badness Sending SMS: {temp}")
+        cool_down_attempts = Constants.MIN_REPORTING_GAP
         for rcpt in host["sms_inform"]:
           MyTwilio.sendsms(rcpt, f"[BLACKLIST] Host: {args.machine}, Site: {matched}")
       else:

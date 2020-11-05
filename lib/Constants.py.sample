@@ -63,19 +63,48 @@ WINDOWS_PASSWORD="YYY"
 MIN_DL_BW = 150  # Mbps
 MIN_UL_BW = 4    # Mbps
 
-# Browser Alert
-HOSTS={
-   "ditto": {
-     "username": <user>,
+# Info on all nodes.
+# Note: sms_inform and histfile is only used by BrowserAlert
+# TODO: Still need to move all other nodes to this new canonical config
+NODES={
+  "garmougal": {
+     "ip": "192.168.1.24",
+     "username": "abutala",
      "password": None,
-     "origin": 'path_to_google_chrome_profile'
+     "histfile": '/Users/rianbutala/Library/Application\ Support/Google/Chrome/Default/History',
+     "sms_inform": ['+1408-------'],
+     "whitelist": "kahoot", # Full python regex
+   },
+   "ditto": {
      "ip": "192.168.1.37",
+     "username": "abutala",
+     "password": None,
+     "histfile": '/Users/abutala/Library/Application\ Support/Google/Chrome/Default/History',
+     "sms_inform": ['+1408-------'],
    },
 }
-REFRESH_DELAY=90
-HR_START_MONITORING = 8
-HR_STOP_MONITORING = 13
+
+# Browser Alert
+REFRESH_DELAY = 30     # In seconds, how soon should we check?
+MIN_REPORTING_GAP = 6  # If we already got an alert, then don't need a followup right away
+HR_START_MONITORING = 2 # When do the SMSs start firing
+HR_STOP_MONITORING = 23 # 13
 HR_EMAIL = 19
 BLACKLIST=[
   "pokemon",
+  "surviv",
+  "charmeleon",
+  "dutrigo",
+  "veekun",
+  "github",
+  "soraapp",
+  "emulator",
+  "gba",
+  "garfield",
+  "shellshock",
+  "youtube",
+  "scratch",
+  "clashman2.github.io",
+  ".io/",
+  "dragapult",
 ]
