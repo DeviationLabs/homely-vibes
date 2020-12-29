@@ -134,7 +134,7 @@ if __name__ == "__main__":
       host = Constants.NODES[args.machine]
       (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], host.get("whitelist", ""))
       if only_ssh_fails_count > SSH_ALERT_DELAY_COUNT:
-        MyTwilio.sendsms(rcpt, f"[Success] Ssh failure has self healed")
+        MyTwilio.sendsms(rcpt, f"[Success][{args.machine}] Ssh failure has self healed")
       only_ssh_fails_count = 0
     except Exception as e:
       msg = f'{e}'
@@ -153,7 +153,7 @@ if __name__ == "__main__":
           if only_ssh_fails_count == SSH_ALERT_DELAY_COUNT:
             # ping succeeds but ssh failing for a while
             for rcpt in host["sms_inform"]:
-              MyTwilio.sendsms(rcpt, f"[Error] Ping up but ssh failing. Needs manual debug")
+              MyTwilio.sendsms(rcpt, f"[Error][{args.machine}] Ping up but ssh failing. Needs manual debug")
 
     print(msg)
     logging.info(msg)
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         logging.info(f"Badness Sending SMS: {temp}")
         cool_down_attempts = Constants.MIN_REPORTING_GAP
         for rcpt in host["sms_inform"]:
-          MyTwilio.sendsms(rcpt, f"[BLACKLIST] Host: {args.machine}, Site: {matched}")
+          MyTwilio.sendsms(rcpt, f"[BLACKLIST][{args.machine}] : {matched}")
       else:
         logging.info(f"Badness No SMS: {temp}")
         for i in range(3):
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and last_checked_hr != currtime.tm_hour:
       # Email on the correct hour
       msg = "Found records:\n" + "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
-      Mailer.sendmail(topic="[BrowsingMonitor]", alert=False, message=msg, always_email=True)
+      Mailer.sendmail(topic=f"[BrowsingMonitor][args.machine]", alert=False, message=msg, always_email=True)
       records = {} # Email has gone out. Let's reset
     last_checked_hr = currtime.tm_hour
 
