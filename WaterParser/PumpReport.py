@@ -114,7 +114,7 @@ def genSendMessage(always_email):
                 % ( deviation, zoneStats['pumpRate'], zoneStats['runTime']/60 )
     message +=  "<td align=\"right\">%3d</td></tr>\n" % zoneStats['pumpTime']
 
-  pumpDutyCycle = aggregatedPumpTime / aggregatedToggles
+  pumpDutyCycle = aggregatedPumpTime / aggregatedToggles if aggregatedToggles else 0
   message += "</table><br>Pump duty cycle %s= <b>%d</b> seconds" % \
               ("<font color=\"red\">[Failed: Too Low] </font>" if pumpDutyCycle < Constants.PUMP_ALERT else "",
               pumpDutyCycle)
