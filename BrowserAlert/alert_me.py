@@ -175,7 +175,7 @@ if __name__ == "__main__":
     if (args.always_email or currtime.tm_hour == Constants.HR_EMAIL) and last_checked_hr != currtime.tm_hour:
       # Email on the correct hour
       msg = "Found records:\n" + "\n".join([ f"[{k}]: {v}" for k,v in records.items()])
-      Mailer.sendmail(topic=f"[BrowsingMonitor][args.machine]", alert=False, message=msg, always_email=True)
+      Mailer.sendmail(topic=f"[BrowserAlert][{args.machine}]", alert=False, message=msg, always_email=True)
       records = {} # Email has gone out. Let's reset
     last_checked_hr = currtime.tm_hour
 
