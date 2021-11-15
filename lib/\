@@ -1,10 +1,8 @@
-#!/bin/python3
+#!/usr/bin/env python3.6
 
 # https://github.com/jrester/tesla_powerwall
 from tesla_powerwall import Powerwall
-from ..lib import Constants
-
-import pdb; pdb.set_trace()
+import Constants
 
 # Create a simple powerwall object by providing the IP
 powerwall = Powerwall(Constants.POWERWALL_IP)
@@ -35,7 +33,7 @@ from tesla_powerwall import User
 #=> <LoginResponse ...>
 
 # Login as customer with email
-powerwall.login(POWERWALL_PASSWORD, POWERWALL_EMAIL)
+powerwall.login(Constants.POWERWALL_PASSWORD, Constants.POWERWALL_EMAIL)
 #=> <LoginResponse ...>
 
 # Login with different user
@@ -48,8 +46,6 @@ powerwall.login(POWERWALL_PASSWORD, POWERWALL_EMAIL)
 powerwall.is_authenticated()
 #=> True
 
-# Logout
-powerwall.logout()
 
 from tesla_powerwall import API
 
@@ -74,5 +70,8 @@ powerwall.detect_and_pin_version()
 
 powerwall.get_charge()
 #=> 97.59281925744594
+
+# Logout
+powerwall.logout()
 
 
