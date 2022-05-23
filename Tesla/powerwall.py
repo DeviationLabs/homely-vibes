@@ -45,16 +45,16 @@ api = powerwall.get_api()
 
 # Perform get on 'system_status/soe'
 soe = api.get_system_status_soe()
-print(f"Got SOE:{soe}")
+#print(f"Got SOE:{soe}")
 
 installer = api.get_installer()
-print(f"Got installer:{installer}")
+#print(f"Got installer:{installer}")
 
 charge = powerwall.get_charge()
 print(f"Got Charge:{charge}")
 
 status = powerwall.get_status()
-print(f"Got Status: {status}")
+#print(f"Got Status: {status}")
 
 '''
 status.version
@@ -72,7 +72,7 @@ capacity = powerwall.get_capacity()
 print(f"Got Capacity: {capacity}")
 
 batteries = powerwall.get_batteries()
-print (f"Batteries: {batteries}")
+#print (f"Batteries: {batteries}")
 '''
 #=> [<Battery ...>, <Battery ...>]
 batteries[0].part_number
@@ -91,7 +91,7 @@ batteries[0].wobble_detected
 '''
 
 meters = powerwall.get_meters()
-print (f"Meters: {meters}")
+#print (f"Meters: {meters}")
 '''
 meters.solar.get_power()
 #=> 0.4 (in kWh)
@@ -108,6 +108,14 @@ meters.battery.is_active(precision=5)
 #=> True
 '''
 
+'''
+(Pdb) powerwall.get_batteries()[0].energy_remaining
+12878
+(Pdb) powerwall.get_batteries()[0].capacity
+13667
+'''
+
+import pdb; pdb.set_trace()
 try:
     powerwall.logout()
 except Exception as e:

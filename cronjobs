@@ -49,3 +49,6 @@ USER_EMAIL=abutala@gmail.com
 #@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --machine garmougal --send_sms > /dev/null
 #@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --machine ditto --send_sms > /dev/null
 
+
+# Tesla Powerwall Smarts
+@reboot                 sleep 120; nohup run-one-constantly ~/bin/Tesla/manage_power.py --send_sms -d > /dev/null
