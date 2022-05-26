@@ -14,9 +14,10 @@ import Mailer
 import MyTwilio
 from TeslaPy.teslapy import Tesla, Vehicle, Battery, SolarPanel
 
+
 SMS_RCPT = '+14083757351' # Move to Constants.
 POLL_TIME = 180 ## 300
-DECISION_CONFIDENCE = 3
+DECISION_CONFIDENCE = 2
 
 @dataclass
 class OpModeConfig:
@@ -38,16 +39,19 @@ class OpModeConfig:
 # hence multiple thresholds.
 # -- We dump powerwall to grid twice. Once, opportunistically just before peak rate ends. And
 # then everything left before end of shoulder.
+# Recall = 1% is 0.135 kWh => base drain rate  or ~0.5kWh is 3.5%/hr
 decision_points = [
-  OpModeConfig(2000, 2100, 100, 38, "autonomous", "Peak hour and surplus. Discharge.."),
-  OpModeConfig(2000, 2300,  35,  0, "self_consumption", "Keep some for shoulder"),
-  OpModeConfig(2340, 9900, 100,  0, "autonomous", "Get ready to recharge from grid. Discharge everything."),
-  OpModeConfig( 000, 1500, 100, 30, "self_consumption", "Reserves rebuilt. Hold at threshold"),
-  OpModeConfig(1200, 1500,  60,  0, "autonomous", "Prepare for shoulder. Thresh1"),
-  OpModeConfig(1400, 1500,  90,  0, "autonomous", "Prepare for shoulder. Thresh2"),
-  OpModeConfig(1600, 2000, 100,  0, "self_consumption", "In Peak. Start discharging"),
+  OpModeConfig(2000, 2100, 100, 35, "autonomous", "Peak surplus #1. Dump.."),
+  OpModeConfig(2040, 2100, 100, 32, "autonomous", "Peak surplus #2. Dump.."),
+  OpModeConfig(2000, 2300,  35,  0, "self_consumption", "Reserve for shoulder. No dump"),
+  OpModeConfig(2340, 9900, 100,  0, "autonomous", "Prep for recharge from grid."),
+  OpModeConfig( 000, 1500, 100, 30, "self_consumption", "Reserves rebuilt. Hold"),
+  OpModeConfig(1200, 1500,  60,  0, "autonomous", "Prep for shoulder #1. Drawdown.."),
+  OpModeConfig(1400, 1500,  90,  0, "autonomous", "Prep for shoulder #2. Drawdown..2"),
+  OpModeConfig(1600, 2000, 100,  0, "self_consumption", "In Peak. Discharge"),
   OpModeConfig( 000, 2359, 100,  0, None, "Do Nothing..."),
 ]
+
 
 def main(args):
   try:
@@ -67,23 +71,23 @@ def main(args):
 
         try:
           product.get_battery_data()
-          fail_count = 0
           pct = product["energy_left"]/product["total_pack_energy"] * 100
-          assert pct > 0
+          assert pct > 0, "Suprious 0 in battery read"
+
+          op_mode = product["operation"]
+          can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
+          can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
+          assert (can_export == "battery_ok" and can_grid_charge), f"Error in config for export:{can_export} and grid_charge:{can_grid_charge}"
+
+          fail_count = 0
         except Exception as e:
           logging.warn(f"Powerwall read failed with {e}")
           fail_count += 1
           if fail_count > 10:
-            if args.send_sms:
-              MyTwilio.sendsms(SMS_RCPT, f"Continuously failing to read powerwall. Aborting... ")
-            raise AssertionError("Unrecoverable, dying...")
+            raise AssertionError(f"Continuously failing PW test. Error:{e}")
           time.sleep(POLL_TIME)
           continue
         logging.debug(json.dumps(product))
-
-        op_mode = product["operation"]
-        can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
-        can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
         logging.info(f"%:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
 
         for point in decision_points:
@@ -104,43 +108,18 @@ def main(args):
                   MyTwilio.sendsms(SMS_RCPT, f"Updating to: {point.reason} Status: {status}")
               break  # out of for loop
 
-        ''' Old way
-        # If battery is not already charged by noon, then panic and send all solar to battery
-        # This then continues through peak hour.
-        # Else early morning, we want to be nice and self power.
-        if currtime.tm_hour >= 12:
-          if op_mode != "autonomous":
-            status = product.api('OPERATION_MODE',default_real_mode="autonomous")
-            if args.send_sms:
-              MyTwilio.sendsms(SMS_RCPT, f"Switching to autonomous {status}")
-        else:
-          if op_mode != "self_consumption":
-            status = product.set_operation("self_consumption")
-            if args.send_sms:
-              MyTwilio.sendsms(SMS_RCPT, f"Switching to self_consumption {status}")
-
-        # If we are in off peak, and battery is depleted, give it some juice from grid
-        if currtime.tm_hour < 10 and pct < 50 and not can_grid_charge:
-          logging.info("Add logic for grid charging")
-#          status = product.api('OPERATION_MODE',default_real_mode="autonomous")
-        elif pct > 50 and can_grid_charge:
-          logging.info("Let's disable grid charging")
-#          status = product.api('OPERATION_MODE',default_real_mode="autonomous")
-
-        # If it's getting late in the evening, and battery has juice, send surplus to grid.
-        if currtime.tm_hour > 20  and pct > 35 and can_export == 'pv_only':
-          logging.info("Add logic for export")
-        elif pct < 35 and can_export == 'battery_ok':
-          logging.info("Stop exporting -- We need for ourselves")
-        '''
-
-        # Check once a minute (Maybe 5 mins would be fine too?)
+        # Sleep, then while True loop...
         time.sleep(POLL_TIME)
 
   except EnvironmentError as e:
     logging.error(f"Oops. Telsa token expired? Run gui.py direclty from TeslaPy. Error: {e}")
     if args.send_sms:
       MyTwilio.sendsms(SMS_RCPT, "Oops. Telsa token expired? Run gui.py direclty from TeslaPy")
+  except Exception as e:
+    logging.error(e)
+    if args.send_sms:
+       MyTwilio.sendsms(SMS_RCPT, e.__repr__())
+  return
 
 
 if __name__ == "__main__":
@@ -168,5 +147,3 @@ if __name__ == "__main__":
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
   main(args)
-
-
