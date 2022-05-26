@@ -51,4 +51,4 @@ USER_EMAIL=abutala@gmail.com
 
 
 # Tesla Powerwall Smarts
-@reboot                 sleep 120; nohup run-one-constantly ~/bin/Tesla/manage_power.py --send_sms -d > /dev/null
+@reboot                 sleep 120; cd ~/bin/Tesla && nohup run-one-constantly ./manage_power.py --send_sms -d -q > /dev/null
