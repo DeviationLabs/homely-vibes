@@ -25,6 +25,7 @@ class OpModeConfig:
   time_end: int
   pct_thresh_upper: int
   pct_thresh_lower: int
+  pct_min: int
   op_mode: str
   reason: str
 
@@ -41,15 +42,18 @@ class OpModeConfig:
 # then everything left before end of shoulder.
 # Recall = 1% is 0.135 kWh => base drain rate  or ~0.5kWh is 3.5%/hr
 decision_points = [
-  OpModeConfig(2000, 2100, 100, 35, "autonomous", "Peak surplus #1. Dump.."),
-  OpModeConfig(2040, 2100, 100, 32, "autonomous", "Peak surplus #2. Dump.."),
-  OpModeConfig(2000, 2300,  35,  0, "self_consumption", "Reserve for shoulder. No dump"),
-  OpModeConfig(2340, 9900, 100,  0, "autonomous", "Prep for recharge from grid."),
-  OpModeConfig( 000, 1500, 100, 30, "self_consumption", "Reserves rebuilt. Hold"),
-  OpModeConfig(1200, 1500,  60,  0, "autonomous", "Prep for shoulder #1. Drawdown.."),
-  OpModeConfig(1400, 1500,  90,  0, "autonomous", "Prep for shoulder #2. Drawdown..2"),
-  OpModeConfig(1600, 2000, 100,  0, "self_consumption", "In Peak. Discharge"),
-  OpModeConfig( 000, 2359, 100,  0, None, "Do Nothing..."),
+  OpModeConfig(1900, 2100, 100, 70, 35, "autonomous", "Peak surplus #1. Dump.."),
+  OpModeConfig(1930, 2300, 100, 53, 35, "autonomous", "Peak surplus #2. Dump.."),
+  OpModeConfig(1945, 2300, 100, 42, 35, "autonomous", "Peak surplus #3. Dump.."),
+  OpModeConfig(2000, 2300, 100, 35, 32, "autonomous", "Peak surplus #4. Dump.."),
+  OpModeConfig(2040, 2100, 100, 32, 30, "autonomous", "Peak surplus #5. Dump.."),
+  OpModeConfig(1900, 2300,  35,  0, 20, "self_consumption", "Reserve for shoulder. No dump"),
+  OpModeConfig(2340, 2359, 100,  0, 20, "autonomous", "Prep for recharge from grid."),
+  OpModeConfig( 000, 1500, 100, 30, 40, "self_consumption", "Reserves rebuilt. Hold"),
+  OpModeConfig(1200, 1500,  60,  0, 20, "autonomous", "Prep for shoulder #1. Drawdown.."),
+  OpModeConfig(1400, 1500,  90,  0, 20, "autonomous", "Prep for shoulder #2. Drawdown..2"),
+  OpModeConfig(1600, 2000, 100,  0, 20, "self_consumption", "In Peak. Discharge"),
+  OpModeConfig( 000, 2359, 100,  0, 20, None, "Do Nothing..."),
 ]
 
 
@@ -103,9 +107,11 @@ def main(args):
                 decision = [point.op_mode]
               if point.op_mode and op_mode != point.op_mode and len(decision) >= DECISION_CONFIDENCE:
                 status = product.set_operation(point.op_mode)
-                logging.warn(f"Updating to: {point.reason} Status: {status}")
+                status2 = product.set_backup_reserve_percent(int(point.pct_min))
+                msg = f"Updating to: {point.reason}, bkp = {point.pct_min}%% Status: {status} // status2"
+                logging.warn(msg)
                 if args.send_sms:
-                  MyTwilio.sendsms(SMS_RCPT, f"Updating to: {point.reason} Status: {status}")
+                  MyTwilio.sendsms(SMS_RCPT, msg)
               break  # out of for loop
 
         # Sleep, then while True loop...
