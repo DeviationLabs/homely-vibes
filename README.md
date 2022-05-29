@@ -79,6 +79,7 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * 04-25-2020: [v2.1.3] Rollup of minor enhancements to error handling
 * 05-22-2020: [v2.2.0] New module for remote browser web usage alerting. Also add Twilio SMSing
 * 06-02-2020: [v2.2.1] Dynamically reload-able config
+* 05-29-2022: [v2.3.0] Telsa Powerwall state machine
 
 ### Pending:
 * Eliminate Constants.sh using https://goo.gl/UgfwCr
@@ -90,12 +91,13 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
   * apt-get install npm
   * apt-get install python3.6 python3-pandas python3-numpy python3-scipy python3-keras python3-matplotlib python3-opencv python3-h5py python3-pip
   * Note: keras is a part of TF, but in order to support legacy code, we need the standalone package too.
-* Tuya/Rachio/Foscam/Liftmaster:
+* Tuya/Rachio/Foscam/Liftmaster/TeslaPy:
   * https://github.com/TuyaAPI/cli
   * https://github.com/codetheweb/tuyapi
   * sudo npm -g i rachio
   * pip3 install pyfoscam
   * pip3 install pymyq
+  * https://github.com/tdorssers/TeslaPy.git
 * bazel-- modify scripts/bootstrap/compile.sh with .. BAZEL_JAVAC_OPTS="-J-Xms384m -J-Xmx512m"
 * Tensorflow and opencv -- See below
 * checkout homebridge.io

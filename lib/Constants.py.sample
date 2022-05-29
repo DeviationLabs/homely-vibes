@@ -1,5 +1,6 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3
 import os
+from dataclasses import dataclass
 
 MY_EXTERNAL_IP="1234"
 SECONDS_IN_DAY = 86400
@@ -24,7 +25,6 @@ GMAIL_PASSWORD = 'XXX'
 # Twilio SMS
 TWILIO_SID = 'sid'
 AUTH_TOKEN = 'token'
-SMS_TO = ['+18002345678']
 SMS_FROM = '+18001234567' # Amit's Twilio account
 
 # WaterMonitor: Processing
@@ -47,15 +47,12 @@ PUMP_ALERT = 22 # If pump cycles off faster than this in seconds, then alert.
 PUMP_TOGGLES_COUNT = 25
 
 # Nodes
-FOSCAM_NODES={'Frontyard':    "192.168.1.51",
-              'MainEntrance': "192.168.1.52",
-              'Backyard':     "192.168.1.53",
-              'Kitchen':      "192.168.1.54",
-              'Garage' :      "192.168.1.55"}
+FOSCAM_NODES={'Frontyard':    "192.168.1.A",
+              'Garage' :      "192.168.1.B"}
 FOSCAM_USERNAME="user_from"
 FOSCAM_PASSWORD="YYY"
 
-WINDOWS_NODES={'Alpha': "192.168.1.100"}
+WINDOWS_NODES={'Alpha': "192.168.1.C"}
 WINDOWS_USERNAME="user_from"
 WINDOWS_PASSWORD="YYY"
 
@@ -68,16 +65,16 @@ MIN_UL_BW = 4    # Mbps
 # TODO: Still need to move all other nodes to this new canonical config
 NODES={
   "garmougal": {
-     "ip": "192.168.1.24",
-     "username": "abutala",
+     "ip": "192.168.1.D",
+     "username": "XYZA",
      "password": None,
      "histfile": '/Users/rianbutala/Library/Application\ Support/Google/Chrome/Default/History',
      "sms_inform": ['+1408-------'],
      "whitelist": "kahoot", # Full python regex
    },
    "ditto": {
-     "ip": "192.168.1.37",
-     "username": "abutala",
+     "ip": "192.168.1.E",
+     "username": "XYZA",
      "password": None,
      "histfile": '/Users/abutala/Library/Application\ Support/Google/Chrome/Default/History',
      "sms_inform": ['+1408-------'],
@@ -93,18 +90,49 @@ HR_EMAIL = 19
 BLACKLIST=[
   "pokemon",
   "surviv",
-  "charmeleon",
-  "dutrigo",
-  "veekun",
-  "github",
-  "soraapp",
-  "emulator",
-  "gba",
-  "garfield",
-  "shellshock",
-  "youtube",
-  "scratch",
-  "clashman2.github.io",
-  ".io/",
   "dragapult",
 ]
+
+# Tesla Powerwall
+POWERWALL_IP="192.168.X.Y"
+POWERWALL_EMAIL="a@aa.aa"
+POWERWALL_PASSWORD="XYZA"
+POWERWALL_SMS_RCPT = '+18001234567'
+POWERWALL_POLL_TIME = 180
+POWERWALL_DECISION_CONFIDENCE = 1
+
+TESLA_EMAIL="a@aa.aa"
+TESLA_PASSWORD="XTZA"
+
+@dataclass
+class OpModeConfig:
+  time_start: int
+  time_end: int
+  pct_gradient_per_hr: int
+  pct_thresh: int
+  iff_higher: bool
+  pct_min: int
+  op_mode: str
+  reason: str
+
+# How this works: Both ""customer_preferred_export_rule", "allow_charge_from_grid_with_solar_installed"
+# are enforced to False for "self_consumption" mode, so we permanently set these to True in the tesla
+# app, then simply have to toggle the self_consumption mode at the right time.
+#
+# -- Set the min battery threshold per your convenience. The last 5% cannot be extracted, so at 20%
+# threshold, we have just about 2 hours of power reserves - Scary, so we will charge back up to 30%
+# as soon as rates drop, then go back to self_consumption.
+# -- For rainy days, we want to top just before we enter peak rates, but careful - it takes time to top off.
+# hence multiple thresholds.
+# -- We dump powerwall to grid twice. Once, opportunistically just before peak rate ends. And
+# then everything left before end of shoulder.
+# Recall: 1% is 0.135kWh ==> base drain rate of 0.5kWh is 3.5%/hr
+POWERWALL_DECISION_POINTS = [
+  OpModeConfig( 000, 1500,  0,  30,  True, 35, "self_consumption", "Nightly reserves rebuilt. Hold"),
+  OpModeConfig(1200, 1500, 35, 100,  True, 20, "autonomous", "Prep for shoulder. Drawdown.."),
+  OpModeConfig(1500, 1900,  0,   0,  True, 20, "self_consumption", "In Peak. Discharge"),
+  OpModeConfig(1900, 2100, -5,  35,  True, 20, "autonomous", "End of peak surplus. Dump.."),
+  OpModeConfig(1900, 2340, -5,  22, False, 20, "self_consumption", "Reserve for rest of day. No dump"),
+  OpModeConfig(2340, 9900,  0,   0,  True, 20, "autonomous", "Prep for recharge. Dump residuals "),
+]
+
