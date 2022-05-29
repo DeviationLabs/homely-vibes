@@ -118,12 +118,10 @@ class OpModeConfig:
 # How this works: Both ""customer_preferred_export_rule", "allow_charge_from_grid_with_solar_installed"
 # are enforced to False for "self_consumption" mode, so we permanently set these to True in the tesla
 # app, then simply have to toggle the self_consumption mode at the right time.
-#
 # -- Set the min battery threshold per your convenience. The last 5% cannot be extracted, so at 20%
 # threshold, we have just about 2 hours of power reserves - Scary, so we will charge back up to 30%
 # as soon as rates drop, then go back to self_consumption.
-# -- For rainy days, we want to top just before we enter peak rates, but careful - it takes time to top off.
-# hence multiple thresholds.
+# -- For rainy days, we want to top just before we enter peak rates
 # -- We dump powerwall to grid twice. Once, opportunistically just before peak rate ends. And
 # then everything left before end of shoulder.
 # Recall: 1% is 0.135kWh ==> base drain rate of 0.5kWh is 3.5%/hr
@@ -131,8 +129,7 @@ POWERWALL_DECISION_POINTS = [
   OpModeConfig( 000, 1500,  0,  30,  True, 35, "self_consumption", "Nightly reserves rebuilt. Hold"),
   OpModeConfig(1200, 1500, 35, 100,  True, 20, "autonomous", "Prep for shoulder. Drawdown.."),
   OpModeConfig(1500, 1900,  0,   0,  True, 20, "self_consumption", "In Peak. Discharge"),
-  OpModeConfig(1900, 2100, -5,  35,  True, 20, "autonomous", "End of peak surplus. Dump.."),
-  OpModeConfig(1900, 2340, -5,  22, False, 20, "self_consumption", "Reserve for rest of day. No dump"),
-  OpModeConfig(2340, 9900,  0,   0,  True, 20, "autonomous", "Prep for recharge. Dump residuals "),
+  OpModeConfig(1900, 2100, -5,  35,  True, 20, "autonomous", "Dump surplus before end of peak"),
+  OpModeConfig(1900, 2340, -5,  22, False, 20, "self_consumption", "Reserve for rest of evening. No dump"),
+  OpModeConfig(2340, 9900,  0,   0,  True, 20, "autonomous", "Prep for midnight recharge. Dump residuals "),
 ]
-

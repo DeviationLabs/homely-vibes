@@ -52,18 +52,19 @@ def main(args):
           backup_pct = product["backup"]["backup_reserve_percent"]
           can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
-          assert (can_export == "battery_ok" and can_grid_charge), f"Error in config for export:{can_export} and grid_charge:{can_grid_charge}"
+          assert (can_export == "battery_ok" and can_grid_charge), f"Error in PW config. Got export: {can_export}, grid_charge: {can_grid_charge}"
 
           fail_count = 0
         except Exception as e:
-          logging.warn(f"Powerwall read failed with {e}")
+          logging.warn(f"Powerwall read failed with {e}. Ignoring...")
+          logging.debug("Got:{product}")
           fail_count += 1
           if fail_count > 10:
             raise AssertionError(f"Continuously failing PW test. Error:{e}")
           time.sleep(POLL_TIME)
           continue
         logging.debug(json.dumps(product))
-        logging.info(f"%:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
+        logging.info(f"Read %:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
 
         for point in DECISION_POINTS:
           currtime_val = currtime.tm_hour * 100 + currtime.tm_min
@@ -78,23 +79,27 @@ def main(args):
               logging.info(f"Matched rule at {trigger_pct}%: {point}")
               decision.append(point.op_mode)
               if len(set(decision)) > 1:
-                logging.warn(f"Oops. some spurious decision averted...{decision}")
+                logging.warn(f"Evaluate new decision {decision} on count {DECISION_CONFIDENCE}")
                 decision = [point.op_mode]
               status = status2 = None
               if op_mode != point.op_mode and len(decision) >= DECISION_CONFIDENCE:
-                status = product.set_operation(point.op_mode)
+                status = f"{point.op_mode} "
+                status += product.set_operation(point.op_mode)
               if backup_pct !=  point.pct_min:
-                status2 = product.set_backup_reserve_percent(int(point.pct_min))
+                status2 = f"{point.pct_min} "
+                status2 += product.set_backup_reserve_percent(int(point.pct_min))
+
               if status or status2:
-                msg = f"At:{pct}% Set rule: {point.reason}, Mode:{status} Reserve %:{status2}"
+                msg = f"At:{pct}% Rule: {point.reason}" + \
+                      f"  Mode:{status or 'No change'}  Reserve %:{status2 or 'No change'}"
                 logging.warn(msg)
                 if args.send_sms:
                   MyTwilio.sendsms(SMS_RCPT, msg)
               break  # out of for loop
             else:
-              logging.info(f"Skip: Trig:{trigger_pct}% {point}")
+              logging.info(f"In time window, but skip: Trig:{trigger_pct}% {point}")
         else:
-          logging.info(f"Matched no rule. Is that okay?")
+          logging.warn(f"Matched no rule. Is that okay?")
 
         # Sleep, then while True loop...
         time.sleep(POLL_TIME)
@@ -107,6 +112,7 @@ def main(args):
     logging.error(e)
     if args.send_sms:
        MyTwilio.sendsms(SMS_RCPT, e.__repr__())
+  time.sleep(3600) # Don't quit early, as we'll just keep respawning
   return
 
 
