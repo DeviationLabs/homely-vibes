@@ -56,7 +56,7 @@ def main(args):
 
           fail_count = 0
         except Exception as e:
-          logging.warn(f"Powerwall read failed with {e}. Ignoring...")
+          logging.warning(f"Powerwall read failed with {e}. Ignoring...")
           logging.debug("Got:{product}")
           fail_count += 1
           if fail_count > 10:
@@ -79,7 +79,7 @@ def main(args):
               logging.info(f"Matched rule at {trigger_pct}%: {point}")
               decision.append(point.op_mode)
               if len(set(decision)) > 1:
-                logging.warn(f"Evaluate new decision {decision} on count {DECISION_CONFIDENCE}")
+                logging.warning(f"Evaluate new decision {decision} on count {DECISION_CONFIDENCE}")
                 decision = [point.op_mode]
               status = status2 = None
               if op_mode != point.op_mode and len(decision) >= DECISION_CONFIDENCE:
@@ -92,14 +92,14 @@ def main(args):
               if status or status2:
                 msg = f"At:{pct}% Rule: {point.reason}" + \
                       f"  Mode:{status or 'No change'}  Reserve %:{status2 or 'No change'}"
-                logging.warn(msg)
+                logging.warning(msg)
                 if args.send_sms:
                   MyTwilio.sendsms(SMS_RCPT, msg)
               break  # out of for loop
             else:
               logging.info(f"In time window, but skip: Trig:{trigger_pct}% {point}")
         else:
-          logging.warn(f"Matched no rule. Is that okay?")
+          logging.warning(f"Matched no rule. Is that okay?")
 
         # Sleep, then while True loop...
         time.sleep(POLL_TIME)

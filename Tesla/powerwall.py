@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 
 # https://github.com/jrester/tesla_powerwall
 from tesla_powerwall import Powerwall

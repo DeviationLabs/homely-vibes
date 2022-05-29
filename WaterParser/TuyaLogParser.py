@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 import collections
 import csv
 from enum import Enum
@@ -62,7 +62,7 @@ class TuyaLogParser:
         msg += "Recommended Action: Manually power cycle the Tuya switch for pump"
       elif fetch(dataPoints[-1], 'ZONE_NUM', 'int') < -1:
         msg += "Recommended Action: Check if Rachio online from iOS app"
-      logging.warn(msg)
+      logging.warning(msg)
       Mailer.sendmail("[PumpStats]", alert=True, message=msg)
 
     for record in dataPoints:
@@ -119,7 +119,7 @@ class TuyaLogParser:
     try:
       summary = readSummaryFile(jsonSummaryFile)
     except:
-      logging.warn('Warn: Failed to read old JSON file. Discarding ..')
+      logging.warning('Warn: Failed to read old JSON file. Discarding ..')
 
     summary[self.logStartTime] = self.__dict__
     with open(jsonSummaryFile, 'w') as fp:
@@ -181,7 +181,7 @@ def loadCsv(csvLogfile):
         else:
           logErrors += 1
   except IOError as e:
-    logging.warn("Warn: Failed to load file: %s. Ignoring..." % csvLogfile)
+    logging.warning("Warn: Failed to load file: %s. Ignoring..." % csvLogfile)
   return [dataPoints, logErrors]
 
 

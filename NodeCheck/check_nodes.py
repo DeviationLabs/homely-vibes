@@ -1,8 +1,7 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 import argparse
 import logging
 import os
-import random
 import re
 import sys
 import time
@@ -156,7 +155,7 @@ if __name__ == "__main__":
 
   # Do a deeper check
   log_message("Check if foscams are healthy...")
-  for nodeName, nodeIP in random.sample(nodes.items(), len(nodes)):
+  for nodeName, nodeIP in nodes.items():
     if state[nodeName]:
       if args.mode == 'foscam':
         node_healthy = check_if_can_image(nodeName, args.display_image)

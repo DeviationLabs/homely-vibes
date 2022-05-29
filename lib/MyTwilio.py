@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 from twilio.rest import Client
 import Constants
 import logging
@@ -14,4 +14,7 @@ def sendsms(rcpt, msg):
 
     logging.debug(f'Sent message to {rcpt} with id: {message.sid}')
   except Exception as e:
-    logging.warn(f'{e}')
+    logging.warning(f'{e}')
+
+if __name__ == "__main__":
+    sendsms(Constants.POWERWALL_SMS_RCPT, "test notification")

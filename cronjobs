@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
-PYTHONPATH=/home/abutala/bin/lib:$PYTHONPATH
+PYTHONPATH=/home/abutala/bin/lib:/home/abutala/bin/ext_lib:$PYTHONPATH
 NODE_PATH=/usr/local/lib/node_modules
 MAILTO=abutala@gmail.com
 USER_EMAIL=abutala@gmail.com
@@ -51,4 +51,4 @@ USER_EMAIL=abutala@gmail.com
 
 
 # Tesla Powerwall Smarts
-@reboot                 sleep 120; cd ~/bin/Tesla && nohup run-one-constantly ./manage_power.py --send_sms -d -q > /dev/null
+@reboot                 sleep 120; cd /home/abutala/bin/Tesla && nohup run-one-constantly ./manage_power.py --send_sms -d -q > /dev/null

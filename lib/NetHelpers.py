@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 import contextlib
 import logging
 from paramiko import SSHClient

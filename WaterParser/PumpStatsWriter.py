@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 from enum import Enum
 import collections
 import json
@@ -45,7 +45,7 @@ def patchWithRachioEvents():
             # Not this zone. Try the next
             continue
           if not thisZoneModified['touched'] and eventZoneActive == False:
-            logging.warn("Warning: Ahh...Found off before on (%s: zone %s). Ignore" \
+            logging.warning("Warning: Ahh...Found off before on (%s: zone %s). Ignore" \
                     % (zoneStats['zoneName'], record['logStartTime']))
             continue
 

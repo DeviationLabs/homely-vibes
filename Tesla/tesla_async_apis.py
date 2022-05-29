@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#!/usr/bin/env python3
 
 import asyncio
 from tesla_api import TeslaApiClient
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     email, password, token = initialize()
     asyncio.run(main_energy(email, password, token))
 
-    # This is python3.6
+    # This is python3
 #    loop = asyncio.get_event_loop()
 #    loop.run_until_complete(main_vehicle())
 #    loop.run_until_complete(main_energy(email, password, token))
