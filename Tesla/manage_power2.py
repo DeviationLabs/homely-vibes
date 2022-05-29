@@ -2,7 +2,6 @@
 # Uses TelsaPy written by Tim Dorssers
 import argparse
 import ast
-from dataclasses import dataclass
 from importlib import reload
 import json
 import logging
@@ -15,42 +14,10 @@ import MyTwilio
 from TeslaPy.teslapy import Tesla, Vehicle, Battery, SolarPanel
 
 
-SMS_RCPT = '+14083757351' # Move to Constants.
-POLL_TIME = 10 # 80 ## 300
-DECISION_CONFIDENCE = 2
-
-@dataclass
-class OpModeConfig:
-  time_start: int
-  time_end: int
-  pct_gradient_per_hr: int
-  pct_thresh: int
-  iff_higher: bool
-  pct_min: int
-  op_mode: str
-  reason: str
-
-# How this works: Both ""customer_preferred_export_rule", "allow_charge_from_grid_with_solar_installed"
-# are enforced to False for "self_consumption" mode, so we permanently set these to True in the tesla
-# app, then simply have to toggle the self_consumption mode at the right time.
-#
-# -- Set the min battery threshold per your convenience. The last 5% cannot be extracted, so at 20%
-# threshold, we have just about 2 hours of power reserves - Scary, so we will charge back up to 30%
-# as soon as rates drop, then go back to self_consumption.
-# -- For rainy days, we want to top just before we enter peak rates, but careful - it takes time to top off.
-# hence multiple thresholds.
-# -- We dump powerwall to grid twice. Once, opportunistically just before peak rate ends. And
-# then everything left before end of shoulder.
-# Recall: 1% is 0.135kWh ==> base drain rate of 0.5kWh is 3.5%/hr
-decision_points = [
-  OpModeConfig( 000, 1500,  0,  30,  True, 35, "self_consumption", "Nightly reserves rebuilt. Hold"),
-  OpModeConfig(1200, 1500, 35, 100,  True, 20, "autonomous", "Prep for shoulder. Drawdown.."),
-  OpModeConfig(1500, 1900,  0,   0,  True, 20, "self_consumption", "In Peak. Discharge"),
-  OpModeConfig(1900, 2100, -5,  35,  True, 35, "autonomous", "End of peak surplus. Dump.."),
-  OpModeConfig(1900, 2359, -4,  20, False, 20, "self_consumption", "Reserve for rest of day. No dump"),
-  OpModeConfig(2340, 9900,  0,   0,  True, 20, "autonomous", "Prep for recharge. Dump residuals "),
-]
-
+SMS_RCPT = Constants.POWERWALL_SMS_RCPT
+POLL_TIME = Constants.POWERWALL_POLL_TIME
+DECISION_CONFIDENCE = Constants.POWERWALL_DECISION_CONFIDENCE
+DECISION_POINTS = Constants.POWERWALL_DECISION_POINTS
 
 def condition_matches(lhs, rhs, direction_up):
   if lhs > rhs and direction_up == True:
@@ -80,10 +47,11 @@ def main(args):
 
         try:
           product.get_battery_data()
-          pct = product["energy_left"]/product["total_pack_energy"] * 100
+          pct = round(product["energy_left"]/product["total_pack_energy"] * 100, 2)
           assert pct > 0, "Spurious 0 in battery read"
 
           op_mode = product["operation"]
+          backup_pct = product["backup"]["backup_reserve_percent"]
           can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
           assert (can_export == "battery_ok" and can_grid_charge), f"Error in config for export:{can_export} and grid_charge:{can_grid_charge}"
@@ -99,14 +67,13 @@ def main(args):
         logging.debug(json.dumps(product))
         logging.info(f"%:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
 
-#        pct = 34 # for debug - then delete
-        for point in decision_points:
+        for point in DECISION_POINTS:
           currtime_val = currtime.tm_hour * 100 + currtime.tm_min
           # Rules are in strict precedence. Find the first rule that applies.
           if currtime_val >= point.time_start and currtime_val <= point.time_end:
             hrs_to_end = (int(point.time_end/100) - currtime.tm_hour) + \
                     (point.time_end%100 - currtime.tm_min) / 60
-            trigger_pct = point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end)
+            trigger_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
 
             if condition_matches(pct, trigger_pct, point.iff_higher):
               # Rule applies. Send command if needed, do not process further
@@ -115,10 +82,13 @@ def main(args):
               if len(set(decision)) > 1:
                 logging.warn(f"Oops. some spurious decision averted...{decision}")
                 decision = [point.op_mode]
+              status = status2 = None
               if op_mode != point.op_mode and len(decision) >= DECISION_CONFIDENCE:
                 status = product.set_operation(point.op_mode)
+              if backup_pct !=  point.pct_min:
                 status2 = product.set_backup_reserve_percent(int(point.pct_min))
-                msg = f"At: {pct}% Set rule: {point.reason}, Status: {status} // {status2}"
+              if status or status2:
+                msg = f"At: {pct}% Set rule: {point.reason}, Mode: {status} Reserve:{status2}"
                 logging.warn(msg)
                 if args.send_sms:
                   MyTwilio.sendsms(SMS_RCPT, msg)
@@ -146,7 +116,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser(description='Tesla Owner API CLI')
   parser.add_argument('-d', '--debug', action='store_true',
                        help='set logging level to debug')
-  parser.add_argument('-e', dest='email', help='login email', default='abutala@gmail.com')
+  parser.add_argument('-e', dest='email', help='login email', default=Constants.POWERWALL_EMAIL)
   parser.add_argument('-k', dest='keyvalue', help='API parameter (key=value)',
             action='append', type=lambda kv: kv.split('=', 1))
   parser.add_argument('-q','--quiet', action='store_true', help="Don't print to stdout")

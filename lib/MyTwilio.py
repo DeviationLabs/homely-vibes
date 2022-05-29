@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.6
 from twilio.rest import Client
 import Constants
+import logging
 
 def sendsms(rcpt, msg):
   client = Client(Constants.TWILIO_SID, Constants.AUTH_TOKEN)
@@ -11,6 +12,6 @@ def sendsms(rcpt, msg):
       from_=Constants.SMS_FROM
     )
 
-    print(f'Sent message to {rcpt} with id: {message.sid}')
+    logging.debug(f'Sent message to {rcpt} with id: {message.sid}')
   except Exception as e:
-    print(f'{e}')
+    logging.warn(f'{e}')
