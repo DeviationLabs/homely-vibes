@@ -57,7 +57,7 @@ def main(args):
           fail_count = 0
         except Exception as e:
           logging.warning(f"Powerwall read failed with {e}. Ignoring...")
-          logging.debug("Got:{product}")
+          logging.debug(f"Got:{product}")
           fail_count += 1
           if fail_count > 10:
             raise AssertionError(f"Continuously failing PW test. Error:{e}")
@@ -79,7 +79,7 @@ def main(args):
               logging.info(f"Matched rule at {trigger_pct}%: {point}")
               decision.append(point.op_mode)
               if len(set(decision)) > 1:
-                logging.warning(f"Evaluate new decision {decision} on count {DECISION_CONFIDENCE}")
+                logging.warning(f"New decision {point.op_mode} indicated. Waiting for count: {DECISION_CONFIDENCE}")
                 decision = [point.op_mode]
               status = status2 = None
               if op_mode != point.op_mode and len(decision) >= DECISION_CONFIDENCE:
