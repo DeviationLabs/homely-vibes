@@ -5,21 +5,25 @@ from paramiko import SSHClient
 import requests
 import subprocess
 import sys
+from typing import Optional
 
 
 # ping output, 1 line per row. Suppress bash retval
-def ping_output(node, count=1, desired_up=True):
-  node_state = None
+def ping_output(node, count=1, desired_up=True) -> bool:
+  node_state = False
   cmd = "ping -c%d %s" % (count, node)
   try:
-    output = subprocess.check_output(cmd.split(), timeout=5)
-  except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-    output = e.output
-  for line in output.decode('utf-8').splitlines():
-    if '0 received' in line:
-       node_state = False
-    elif 'received' in line:
-       node_state = True
+    output = subprocess.check_output(cmd.split(), timeout=5).decode('utf-8').splitlines()
+    if not output:
+      raise AssertionError(f"No data returned for {cmd=}. Needs debug")
+    for line in output:
+      if '0 received' in line:
+        node_state = False
+      elif 'received' in line:
+        node_state = True
+  except (subprocess.CalledProcessError, subprocess.TimeoutExpired, AssertionError) as e:
+    logging.debug(f"Ping failed. Got {e.__repr__()}")
+    pass
   logging.debug("node %s: got %s" % (node, node_state))
   return node_state if desired_up else not node_state
 

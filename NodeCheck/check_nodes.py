@@ -75,10 +75,11 @@ def log_message(msg):
 
 def check_state(desired_up, attempts):
   global state
-  global system_healthy
+  global system_healthy # We do something strange here with global state. Do not touch
   for nodeName, nodeIP in nodes.items():
     state[nodeName] = False
   for attempt in range(attempts):
+    logging.debug(f"{state.values()=}")
     if all(state.values()):
       return
     time.sleep(1)
@@ -86,8 +87,8 @@ def check_state(desired_up, attempts):
       # if state is false, then ping again to check if state is now true
       if not state[nodeName]:
         state[nodeName] = NetHelpers.ping_output(node=nodeIP, desired_up=desired_up)
-        logging.debug("Attempt {} for {}..".format(attempt, nodeName))
-  if not all(state.values()):
+        logging.debug(f"{attempt=} for {nodeName}, {desired_up=} In desired state: {state[nodeName]}")
+  else:
     system_healthy = False
 
 
@@ -110,11 +111,15 @@ if __name__ == "__main__":
                       help    ='Send email report',
                       action  ='store_true',
                       default =False)
+  parser.add_argument('-d', '--debug', action='store_true',
+                       help='set logging level to debug')
   args = parser.parse_args()
 
   logfile = '%s/%s.log' % (Constants.LOGGING_DIR, os.path.basename(__file__))
   log_format = '%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s'
   logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
+  if args.debug:
+      logging.getLogger().setLevel(logging.DEBUG)
   logging.info('============')
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 

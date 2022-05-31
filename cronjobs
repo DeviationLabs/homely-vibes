@@ -37,18 +37,21 @@ USER_EMAIL=abutala@gmail.com
 @reboot                  sleep 120; cd /mnt/IPCam_Data/; ls > /dev/null
 45   6       *  *  *     ~/bin/NodeCheck/purge_old_foscam_files.py > /dev/null
 
+# Tesla Powerwall Smarts
+@reboot                 sleep 120; cd /home/abutala/bin/Tesla && nohup run-one-constantly ./manage_power.py --send_sms -d -q > /dev/null
+
+##### Retired #### 
+
 # WaterMonitoring: Start scraper on reboot, update every 15, and daily email @7:00
-@reboot                  sleep 120; nohup run-one-constantly ~/bin/WaterLogging/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
-#5-59/15 *    *  *  *     ~/bin/WaterParser/compute_pump_stats.py &> /dev/null
-#0     7      *  *  *     ~/bin/WaterParser/compute_pump_stats.py --always_email &> /dev/null
+# @reboot                  sleep 120; nohup run-one-constantly ~/bin/WaterLogging/poll_tuya.sh >> ~/tuya_logs/tuya_logs.csv 2> /dev/null
+# 5-59/15 *    *  *  *     ~/bin/WaterParser/compute_pump_stats.py &> /dev/null
+# 0     7      *  *  *     ~/bin/WaterParser/compute_pump_stats.py --always_email &> /dev/null
 
 # GarageDoor: Active periodic door state check. 
 # @reboot                 sleep 120; nohup run-one-constantly ~/bin/GarageCheck/check_garage_door.py --model_file ~/bin/GarageCheck/garage.h5 > /dev/null
 
 # Browser Monitor for Rian
-#@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --machine garmougal --send_sms > /dev/null
-#@reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --machine ditto --send_sms > /dev/null
+# @reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --machine garmougal --send_sms > /dev/null
+# @reboot                 sleep 120; nohup run-one-constantly ~/bin/BrowserAlert/alert_me.py --machine ditto --send_sms > /dev/null
 
 
-# Tesla Powerwall Smarts
-@reboot                 sleep 120; cd /home/abutala/bin/Tesla && nohup run-one-constantly ./manage_power.py --send_sms -d -q > /dev/null
