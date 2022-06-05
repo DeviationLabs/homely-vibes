@@ -71,7 +71,7 @@ def main(args):
           # Rules are in strict precedence. Find the first rule that applies.
           if currtime_val >= point.time_start and currtime_val <= point.time_end:
             hrs_to_end = (int(point.time_end/100) - currtime.tm_hour) + \
-                    (point.time_end%100 - currtime.tm_min) / 60
+                    (point.time_end%100 - currtime.tm_min - (POLL_TIME/2)) / 60
             trigger_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
 
             if condition_matches(pct, trigger_pct, point.iff_higher):
@@ -112,6 +112,7 @@ def main(args):
     logging.error(e)
     if args.send_sms:
        MyTwilio.sendsms(SMS_RCPT, e.__repr__())
+  logging.error(f"Will hard exit after delay of 3600 seconds to prevent respawn churn...\n\n\n\n\n")
   time.sleep(3600) # Don't quit early, as we'll just keep respawning
   return
 
@@ -141,3 +142,5 @@ if __name__ == "__main__":
   logging.info('Invoked command: %s' % ' '.join(sys.argv))
 
   main(args)
+
+  logging.warn(f"Exiting..\n\n")
