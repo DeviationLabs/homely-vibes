@@ -32,9 +32,13 @@ def main(args):
       loop_count = 0
       fail_count = 0
       decision = list()
+      pct = old_pct = 00
 
       while True:
         loop_count += 1
+        if fail_count > 10:
+          raise AssertionError(f"Continuously failing PW test. Exiting..")
+
         currtime = time.localtime()
         reload(Constants)
         SMS_RCPT = Constants.POWERWALL_SMS_RCPT
@@ -45,22 +49,25 @@ def main(args):
 
         try:
           product.get_battery_data()
-          pct = round(product["energy_left"]/product["total_pack_energy"] * 100, 2)
-          assert pct > 0, "Spurious 0 in battery read"
-
           op_mode = product["operation"]
           backup_pct = product["backup"]["backup_reserve_percent"]
           can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
           assert (can_export == "battery_ok" and can_grid_charge), f"Error in PW config. Got export: {can_export}, grid_charge: {can_grid_charge}"
 
-          fail_count = 0
+          new_pct = round(product["energy_left"]/product["total_pack_energy"] * 100, 2)
+          if new_pct <= 0:
+            new_pct = pct + ((pct - old_pct) * (old_pct > 0)) # extrapolate only if old_pct is valid
+            logging.warning(f"Got bad battery % data. Patch as {new_pct}% and continue..")
+            fail_count += 1
+          else:
+            fail_count = 0
+          old_pct = pct
+          pct = new_pct
         except Exception as e:
-          logging.warning(f"Powerwall read failed with {e}. Ignoring...")
+          logging.warning(f"Powerwall read failed with {e}. Discarding...")
           logging.debug(f"Got:{product}")
           fail_count += 1
-          if fail_count > 10:
-            raise AssertionError(f"Continuously failing PW test. Error:{e}")
           time.sleep(POLL_TIME)
           continue
         logging.debug(json.dumps(product))
@@ -71,7 +78,7 @@ def main(args):
           # Rules are in strict precedence. Find the first rule that applies.
           if currtime_val >= point.time_start and currtime_val <= point.time_end:
             hrs_to_end = (int(point.time_end/100) - currtime.tm_hour) + \
-                    (point.time_end%100 - currtime.tm_min - (POLL_TIME/2)) / 60
+                    (point.time_end%100 - currtime.tm_min + (POLL_TIME/60/2)) / 60
             trigger_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
 
             if condition_matches(pct, trigger_pct, point.iff_higher):
@@ -106,8 +113,7 @@ def main(args):
 
   except EnvironmentError as e:
     logging.error(f"Oops. Telsa token expired? Run gui.py direclty from TeslaPy. Error: {e}")
-    if args.send_sms:
-      MyTwilio.sendsms(SMS_RCPT, "Oops. Telsa token expired? Run gui.py direclty from TeslaPy")
+    MyTwilio.sendsms(SMS_RCPT, "Oops. Telsa token expired? Run gui.py direclty from TeslaPy")
   except Exception as e:
     logging.error(e)
     if args.send_sms:
