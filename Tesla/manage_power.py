@@ -76,7 +76,7 @@ def main(args):
         for point in DECISION_POINTS:
           currtime_val = currtime.tm_hour * 100 + currtime.tm_min
           # Rules are in strict precedence. Find the first rule that applies.
-          if currtime_val >= point.time_start and currtime_val <= point.time_end:
+          if currtime_val >= point.time_start and currtime_val < point.time_end:
             hrs_to_end = (int(point.time_end/100) - currtime.tm_hour) + \
                     (point.time_end%100 - currtime.tm_min + (POLL_TIME/60/2)) / 60
             trigger_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
