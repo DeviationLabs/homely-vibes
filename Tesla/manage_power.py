@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import time
+from typing import List
 import Constants
 import Mailer
 import MyTwilio
@@ -24,6 +25,44 @@ def condition_matches(lhs, rhs, direction_up):
   return False
 
 
+def average(my_list):
+  return 0 if not my_list else sum(my_list)/len(my_list)
+
+
+def extrapolate(my_list) -> float:
+  # works only on reverse sorted.
+  avg_diff = average([my_list[i] - my_list[i+1] for i in range(len(my_list) - 1)])
+  return round(my_list[0] + avg_diff, 2)
+
+
+def sanitize_pct(pct, historical_pcts: List[float]) -> float:
+  MAX_HISTORY = 5
+  if pct <= 0:
+    pct = extrapolate(historical_pcts)
+    logging.warning(f"Got bad battery % data. Patch as {pct:.2f}% from {historical_pcts} and continue..")
+  historical_pcts.insert(0, pct)
+  if len(historical_pcts) > MAX_HISTORY:
+    historical_pcts.pop()
+  return pct
+
+
+def update_powerwall(op_mode, backup_pct, point, product, send_sms):
+  status = status2 = None
+  if op_mode != point.op_mode:
+    status = f"{point.op_mode} "
+    status += product.set_operation(point.op_mode)
+  if backup_pct !=  point.pct_min:
+    status2 = f"{point.pct_min} "
+    status2 += product.set_backup_reserve_percent(int(point.pct_min))
+
+  if status or status2:
+    msg = f"At:{pct}% Rule: {point.reason}" + \
+          f"  Mode:{status or 'No change'}  Reserve %:{status2 or 'No change'}"
+    logging.warning(msg)
+    if send_sms:
+      MyTwilio.sendsms(SMS_RCPT, msg)
+
+
 def main(args):
   try:
     with Tesla(args.email, verify=False, proxy=None, sso_base_url=None) as tesla:
@@ -31,8 +70,7 @@ def main(args):
       logging.info(f'{product["site_name"]} discovered')
       loop_count = 0
       fail_count = 0
-      decision = list()
-      pct = old_pct = 00
+      historical_pcts = [0]
 
       while True:
         loop_count += 1
@@ -42,8 +80,7 @@ def main(args):
         currtime = time.localtime()
         reload(Constants)
         SMS_RCPT = Constants.POWERWALL_SMS_RCPT
-        POLL_TIME = Constants.POWERWALL_POLL_TIME
-        DECISION_CONFIDENCE = Constants.POWERWALL_DECISION_CONFIDENCE
+        POLL_TIME_IN_SECS = Constants.POWERWALL_POLL_TIME
         DECISION_POINTS = Constants.POWERWALL_DECISION_POINTS
         logging.info(f'Count {loop_count}')
 
@@ -55,20 +92,14 @@ def main(args):
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
           assert (can_export == "battery_ok" and can_grid_charge), f"Error in PW config. Got export: {can_export}, grid_charge: {can_grid_charge}"
 
-          new_pct = round(product["energy_left"]/product["total_pack_energy"] * 100, 2)
-          if new_pct <= 0:
-            new_pct = pct + ((pct - old_pct) * (old_pct > 0)) # extrapolate only if old_pct is valid
-            logging.warning(f"Got bad battery % data. Patch as {new_pct}% and continue..")
-            fail_count += 1
-          else:
-            fail_count = 0
-          old_pct = pct
-          pct = new_pct
+          pct = round(product["energy_left"]/product["total_pack_energy"] * 100, 2)
+          pct = sanitize_pct(pct, historical_pcts)
+          future_pct = extrapolate(historical_pcts)
         except Exception as e:
           logging.warning(f"Powerwall read failed with {e}. Discarding...")
           logging.debug(f"Got:{product}")
           fail_count += 1
-          time.sleep(POLL_TIME)
+          time.sleep(POLL_TIME_IN_SECS)
           continue
         logging.debug(json.dumps(product))
         logging.info(f"Read %:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
@@ -78,30 +109,23 @@ def main(args):
           # Rules are in strict precedence. Find the first rule that applies.
           if currtime_val >= point.time_start and currtime_val < point.time_end:
             hrs_to_end = (int(point.time_end/100) - currtime.tm_hour) + \
-                    (point.time_end%100 - currtime.tm_min + (POLL_TIME/60/2)) / 60
-            trigger_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
+                    (point.time_end%100 - currtime.tm_min) / 60
+            trigger_now_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
+            trigger_next_pct = trigger_now_pct + point.pct_gradient_per_hr * (POLL_TIME_IN_SECS/3600)
 
-            if condition_matches(pct, trigger_pct, point.iff_higher):
-              # Rule applies. Send command if needed, do not process further
-              logging.info(f"Matched rule at {trigger_pct}%: {point}")
-              decision.append(point.op_mode)
-              if len(set(decision)) > 1:
-                logging.warning(f"New decision {point.op_mode} indicated. Waiting for count: {DECISION_CONFIDENCE}")
-                decision = [point.op_mode]
-              status = status2 = None
-              if op_mode != point.op_mode and len(decision) >= DECISION_CONFIDENCE:
-                status = f"{point.op_mode} "
-                status += product.set_operation(point.op_mode)
-              if backup_pct !=  point.pct_min:
-                status2 = f"{point.pct_min} "
-                status2 += product.set_backup_reserve_percent(int(point.pct_min))
-
-              if status or status2:
-                msg = f"At:{pct}% Rule: {point.reason}" + \
-                      f"  Mode:{status or 'No change'}  Reserve %:{status2 or 'No change'}"
-                logging.warning(msg)
-                if args.send_sms:
-                  MyTwilio.sendsms(SMS_RCPT, msg)
+            if condition_matches(pct, trigger_now_pct, point.iff_higher):
+              # Rule applies. Send command if needed. Do not process further
+              logging.info(f"Matched rule at {trigger_now_pct}%: {point}")
+              update_powerwall(op_mode, backup_pct, point, product, args.send_sms)
+              break  # out of for loop
+            elif False and condition_matches(future_pct, trigger_next_pct, point.iff_higher):
+              # Disabled for now...
+              logging.info(f"Matched future at {trigger_next_pct}%: {point}")
+              extra_sleep = POLL_TIME_IN_SECS * 0.5 ## Needs geometry, just take mid point for now :(
+              logging.warning("Almost at tripping point, let's wait {extra_sleep} secs for it")
+              time.sleep(min(extra_sleep,POLL_TIME_IN_SECS)) # Prevents disaster.
+              # The future is now here
+              update_powerwall(op_mode, backup_pct, point, product, args.send_sms)
               break  # out of for loop
             else:
               logging.info(f"In time window, but skip: Trig:{trigger_pct}% {point}")
@@ -109,7 +133,7 @@ def main(args):
           logging.warning(f"Matched no rule. Is that okay?")
 
         # Sleep, then while True loop...
-        time.sleep(POLL_TIME)
+        time.sleep(POLL_TIME_IN_SECS)
 
   except EnvironmentError as e:
     logging.error(f"Oops. Telsa token expired? Run gui.py direclty from TeslaPy. Error: {e}")
