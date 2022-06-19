@@ -37,13 +37,14 @@ def extrapolate(my_list) -> float:
 
 def sanitize_pct(pct, historical_pcts: List[float]) -> float:
   MAX_HISTORY = 5
-  if pct <= 0:
-    pct = extrapolate(historical_pcts)
-    logging.warning(f"Got bad battery % data. Patch as {pct:.2f}% from {historical_pcts} and continue..")
-  historical_pcts.insert(0, pct)
+  updated_pct = pct
+  if pct <= 0 or pct == historical_pcts[0]:
+    updated_pct = round(extrapolate(historical_pcts),2)
+    logging.warning(f"Got bad batt data:{updated_pct}% Patched:{pct:.2f}% from {historical_pcts} and continue..")
+  historical_pcts.insert(0, updated_pct)
   if len(historical_pcts) > MAX_HISTORY:
     historical_pcts.pop()
-  return pct
+  return updated_pct
 
 
 def update_powerwall(op_mode, backup_pct, point, product, send_sms):
@@ -115,12 +116,12 @@ def main(args):
 
             if condition_matches(pct, trigger_now_pct, point.iff_higher):
               # Rule applies. Send command if needed. Do not process further
-              logging.info(f"Matched rule at {trigger_now_pct}%: {point}")
+              logging.info(f"Matched rule at {pct} for {trigger_now_pct}%: {point}")
               update_powerwall(op_mode, backup_pct, point, product, args.send_sms)
               break  # out of for loop
             elif False and condition_matches(future_pct, trigger_next_pct, point.iff_higher):
               # Disabled for now...
-              logging.info(f"Matched future at {trigger_next_pct}%: {point}")
+              logging.info(f"Matched future at {future_pct} for {trigger_next_pct}%: {point}")
               extra_sleep = POLL_TIME_IN_SECS * 0.5 ## Needs geometry, just take mid point for now :(
               logging.warning("Almost at tripping point, let's wait {extra_sleep} secs for it")
               time.sleep(min(extra_sleep,POLL_TIME_IN_SECS)) # Prevents disaster.
@@ -128,7 +129,7 @@ def main(args):
               update_powerwall(op_mode, backup_pct, point, product, args.send_sms)
               break  # out of for loop
             else:
-              logging.info(f"In time window, but skip: Trig:{trigger_pct}% {point}")
+              logging.info(f"In time window, but skip: Trig:{trigger_now_pct}% {point}")
         else:
           logging.warning(f"Matched no rule. Is that okay?")
 
