@@ -43,7 +43,7 @@ def sanitize_pct(pct:float, historical_pcts: List[float], time_sampling: float) 
   MAX_HISTORY = 5
   pct = round(pct, 2)
   updated_pct = pct
-  if len(historical_pcts) >= MAX_HISTORY and (pct <= 0 or pct == historical_pcts[0]):
+  if len(historical_pcts) >= MAX_HISTORY and (pct <= 0 or pct in historical_pcts):
     updated_pct = round(extrapolate(historical_pcts, time_sampling),2)
   if updated_pct != pct:
     logging.warning(f"Got bad batt data:{pct}% Patched:{updated_pct:.2f}% from {historical_pcts} and continue..")
@@ -87,7 +87,6 @@ def main(args):
           assert (can_export == "battery_ok" and can_grid_charge), f"Error in PW config. Got export: {can_export}, grid_charge: {can_grid_charge}"
 
           pct = product["energy_left"]/product["total_pack_energy"] * 100
-          pct = 0
           pct = sanitize_pct(pct, historical_pcts, sleep_time/POLL_TIME_IN_SECS)
           future_pct = extrapolate(historical_pcts) or pct
           sleep_time = POLL_TIME_IN_SECS
@@ -112,13 +111,14 @@ def main(args):
             if condition_matches(pct, trigger_now_pct, point.iff_higher):
               # Rule applies. Send command if needed. Do not process further
               logging.info(f"Matched with {trigger_now_pct}%: {point.reason}")
-              status = f"{point.op_mode} "
+              status = status2 = ""
               if op_mode != point.op_mode:
-                status += product.set_operation(point.op_mode)
-              status2 = f"{point.pct_min} "
+                status = product.set_operation(point.op_mode)
               if backup_pct !=  point.pct_min:
-                status2 += product.set_backup_reserve_percent(int(point.pct_min))
+                status2 = product.set_backup_reserve_percent(int(point.pct_min))
               if status or status2:
+                status += f"{point.op_mode} "
+                status2 += f"{point.pct_min} "
                 msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve %:{status2}"
                 logging.warning(msg)
                 if args.send_sms:
