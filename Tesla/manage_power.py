@@ -38,18 +38,22 @@ def extrapolate(my_list: List[float], time_sampling: float = 1) -> Optional[floa
 
 
 def sanitize_pct(pct:float, historical_pcts: List[float], time_sampling: float) -> float:
-  # Doesn't handle dynamicism on time_sampling very well. We should just store
+  # Doesn't handle dynamicism on sleep_time very well. We should just store
   # epoch time in historical_pcts
   MAX_HISTORY = 5
   pct = round(pct, 2)
   updated_pct = pct
   if len(historical_pcts) >= MAX_HISTORY and (pct <= 0 or pct in historical_pcts):
-    updated_pct = round(extrapolate(historical_pcts, time_sampling),2)
+    updated_pct = extrapolate(historical_pcts, time_sampling)
+    updated_pct = round(max(min(updated_pct, 100), 0), 2)
   if updated_pct != pct:
     logging.warning(f"Got bad batt data:{pct}% Patched:{updated_pct:.2f}% from {historical_pcts} and continue..")
-  if updated_pct <= 0:
-      raise AssertionError(f"Could not fix bad batt data: {updated_pct}%. Throwing...")
-  historical_pcts.insert(0, updated_pct)
+  if pct != 0:
+    # This to prevent runaway extrapolation
+    historical_pcts.insert(0, pct)
+  else:
+    # no choice
+    historical_pcts.insert(0, updated_pct)
   if len(historical_pcts) > MAX_HISTORY:
     historical_pcts.pop()
   return updated_pct
@@ -104,28 +108,29 @@ def main(args):
           # Rules are in strict precedence. Find the first rule that applies.
           if currtime_val >= point.time_start and currtime_val < point.time_end:
             hrs_to_end = (int(point.time_end/100) - currtime.tm_hour) + \
-                    (point.time_end%100 - currtime.tm_min) / 60
+                    (point.time_end%100 - currtime.tm_min) / 60 - currtime.tm_sec / 3600
             trigger_now_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
-            trigger_next_pct = trigger_now_pct + point.pct_gradient_per_hr * (POLL_TIME_IN_SECS/3600)
+            trigger_next_pct = round(trigger_now_pct + point.pct_gradient_per_hr * (sleep_time/3600), 2)
 
+            logging.info(f"{pct=:.0f} {trigger_now_pct=:.0f} // {future_pct=:.0f} {trigger_next_pct=:.0f} for {point.reason}")
             if condition_matches(pct, trigger_now_pct, point.iff_higher):
               # Rule applies. Send command if needed. Do not process further
-              logging.info(f"Matched with {trigger_now_pct}%: {point.reason}")
+              logging.info(f"Matched {pct} with {trigger_now_pct}%: {point.reason}")
               status = status2 = ""
               if op_mode != point.op_mode:
                 status = product.set_operation(point.op_mode)
               if backup_pct !=  point.pct_min:
                 status2 = product.set_backup_reserve_percent(int(point.pct_min))
               if status or status2:
-                status += f"{point.op_mode} "
-                status2 += f"{point.pct_min} "
+                status += f" {point.op_mode}"
+                status2 += f" {point.pct_min}"
                 msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve %:{status2}"
                 logging.warning(msg)
                 if args.send_sms:
                   MyTwilio.sendsms(SMS_RCPT, msg)
               break  # out of for loop
             elif condition_matches(future_pct, trigger_next_pct, point.iff_higher):
-              logging.warning(f"Matched future with {trigger_next_pct}%: {point.reason} Fast retry.. ")
+              logging.warning(f"Matched future {future_pct} with {trigger_next_pct}%: {point.reason} Fast retry.. ")
               sleep_time = min(POLL_TIME_IN_SECS, 30)
               break  # out of for loop
             else:
