@@ -60,6 +60,8 @@ def sanitize_pct(pct:float, historical_pcts: List[float], time_sampling: float) 
 
 
 def main(args):
+  SMS_RCPT = Constants.POWERWALL_SMS_RCPT
+  POLL_TIME_IN_SECS = Constants.POWERWALL_POLL_TIME
   try:
     with Tesla(args.email, verify=False, proxy=None, sso_base_url=None) as tesla:
       product = tesla.battery_list()[0]
@@ -94,12 +96,13 @@ def main(args):
           pct = sanitize_pct(pct, historical_pcts, sleep_time/POLL_TIME_IN_SECS)
           future_pct = extrapolate(historical_pcts) or pct
           sleep_time = POLL_TIME_IN_SECS
+          fail_count = 0
         except Exception as e:
-          logging.warning(f"Failed {fail_count} times with {e}. Discarding...")
+          logging.warning(f"Failed repeatedly {fail_count} times with {e}. Discarding...")
           sleep_time = min(POLL_TIME_IN_SECS, 30) # Quick retry
           fail_count += 1
           if fail_count > 10:
-            raise AssertionError(f"Continuously failing with {e}. Exiting..")
+            raise AssertionError(f"Continuously failing. Exiting..")
           continue
         logging.info(f"Read %:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
 
@@ -112,18 +115,23 @@ def main(args):
             trigger_now_pct = round(point.pct_thresh - (point.pct_gradient_per_hr * hrs_to_end), 2)
             trigger_next_pct = round(trigger_now_pct + point.pct_gradient_per_hr * (sleep_time/3600), 2)
 
-            logging.info(f"{pct=:.0f} {trigger_now_pct=:.0f} // {future_pct=:.0f} {trigger_next_pct=:.0f} for {point.reason}")
+            logging.info(f"{pct=:.2f} {trigger_now_pct=:.2f} // {future_pct=:.2f} {trigger_next_pct=:.2f} for {point.reason}")
             if condition_matches(pct, trigger_now_pct, point.iff_higher):
               # Rule applies. Send command if needed. Do not process further
               logging.info(f"Matched {pct} with {trigger_now_pct}%: {point.reason}")
               status = status2 = ""
               if op_mode != point.op_mode:
                 status = product.set_operation(point.op_mode)
-              if backup_pct !=  point.pct_min:
-                status2 = product.set_backup_reserve_percent(int(point.pct_min))
+              if point.pct_min_trail_stop:
+                # Avoids unnecessary battery drain during change cycle
+                new_max = point.pct_min
+                while pct > new_max + point.pct_min_trail_stop:
+                  new_max += point.pct_min_trail_stop
+              if backup_pct !=  new_max:
+                status2 = product.set_backup_reserve_percent(int(new_max))
               if status or status2:
                 status += f" {point.op_mode}"
-                status2 += f" {point.pct_min}"
+                status2 += f" {new_max}"
                 msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve %:{status2}"
                 logging.warning(msg)
                 if args.send_sms:
@@ -131,7 +139,7 @@ def main(args):
               break  # out of for loop
             elif condition_matches(future_pct, trigger_next_pct, point.iff_higher):
               logging.warning(f"Matched future {future_pct} with {trigger_next_pct}%: {point.reason} Fast retry.. ")
-              sleep_time = min(POLL_TIME_IN_SECS, 30)
+              sleep_time = min(POLL_TIME_IN_SECS, 60)
               break  # out of for loop
             else:
               logging.info(f"In time window, but skip: Trig:{trigger_now_pct}% {point.reason}")

@@ -33,8 +33,6 @@ MAX_NEW_FILES = 2 # Number of recent raw log files that are reprocessed into sum
 LOGROTATE_PER_DAY = 4
 DAYS_LOOKBACK = 90 # Days of data to store in the pumprates file. Perf penalty if too large
 START_FROM_EPOCH = 1539161991 # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
-START_FROM_EPOCH = 1541055600 # 2018-11-01-00-00-00 # The really good data.
-RACHIO_EVENTS_CMD = '{}/bin/WaterMonitoring/get_rachio_events.js'.format(HOME)
 
 # WaterMonitor: Alerting
 DAYS_EMAIL_REPORT = 14
@@ -111,12 +109,13 @@ class OpModeConfig:
   pct_thresh: int
   iff_higher: bool
   pct_min: int
+  pct_min_trail_stop: int
   op_mode: str
   reason: str
 
 # How this works: Tesla interprets both flags "customer_preferred_export_rule",
 # "allow_charge_from_grid_with_solar_installed" as False in "self_consumption" mode,
-# So we cab permanently set these to True in the tesla app, then simply toggle the
+# So we permanently set these to True in the tesla app, then simply toggle the
 # self_consumption mode at the right time.
 # -- Set the min battery (pct_min) per your convenience. The last 5% cannot be extracted, so at 20%
 # threshold, I have just about 2 hours of power reserves - Scary, so we will charge back up to 30%
@@ -126,11 +125,12 @@ class OpModeConfig:
 # then everything left before end of shoulder.
 # Recall: 1% is 0.135kWh ==> base drain rate of 0.5kWh is 3.5%/hr
 POWERWALL_DECISION_POINTS = [
-  OpModeConfig( 000, 1500,  0,  30,  True, 35, "self_consumption", "Nightly reserves rebuilt. Hold"),
-  OpModeConfig(1200, 1500, 35, 100,  True, 20, "autonomous", "Prep for shoulder. Drawdown.."),
-  OpModeConfig(1500, 1900,  0,   0,  True, 20, "self_consumption", "In Peak. Discharge"),
-  OpModeConfig(1900, 2100, -5,  35,  True, 20, "autonomous", "Dump surplus before end of peak"),
-  OpModeConfig(1900, 2340, -5,  22, False, 20, "self_consumption", "Reserve for rest of evening. No dump"),
-  OpModeConfig(2340, 9900,  0,   0,  True, 20, "autonomous", "Prep for midnight recharge. Dump residuals "),
+  OpModeConfig( 000,  100,   0,  28, False, 30,  0, "autonomous", "Prep for midnight recharge.."),
+  OpModeConfig(1300, 1455,  35, 100, False, 20,  0, "autonomous", "Solar recharge insufficient. Drawdown before shoulder.."),
+  OpModeConfig(1455, 1900,   0,   0,  True, 20,  0, "self_consumption", "In Peak. Discharge.."),
+  OpModeConfig( 000, 1500,   0,   0,  True, 30, 15, "self_consumption", "Nightly reserves rebuilt. Solar charge only.."),
+  OpModeConfig(1900, 2359,  -7,  20, False, 20,  0, "self_consumption", "Reserve for rest of shoulder. No dump."),
+  OpModeConfig(1900, 2100, -35,  38,  True, 20,  0, "autonomous", "Dump surplus before end of peak."),
+  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder"),
 ]
 
