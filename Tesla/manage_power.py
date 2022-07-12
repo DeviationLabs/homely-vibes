@@ -122,17 +122,16 @@ def main(args):
               status = status2 = ""
               if op_mode != point.op_mode:
                 status = product.set_operation(point.op_mode)
-              if point.pct_min_trail_stop:
+              desired_min = point.pct_min
+              while point.pct_min_trail_stop and round(pct, 0) > desired_min + point.pct_min_trail_stop:
                 # Avoids unnecessary battery drain during change cycle
-                new_max = point.pct_min
-                while pct > new_max + point.pct_min_trail_stop:
-                  new_max += point.pct_min_trail_stop
-              if backup_pct !=  new_max:
-                status2 = product.set_backup_reserve_percent(int(new_max))
+                  desired_min += point.pct_min_trail_stop
+              if backup_pct != desired_min:
+                status2 = product.set_backup_reserve_percent(int(desired_min))
               if status or status2:
                 status += f" {point.op_mode}"
-                status2 += f" {new_max}"
-                msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve %:{status2}"
+                status2 += f" {desired_min}%"
+                msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve:{status2}"
                 logging.warning(msg)
                 if args.send_sms:
                   MyTwilio.sendsms(SMS_RCPT, msg)
