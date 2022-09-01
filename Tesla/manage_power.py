@@ -123,7 +123,7 @@ def main(args):
               if op_mode != point.op_mode:
                 status = product.set_operation(point.op_mode)
               desired_min = point.pct_min
-              while point.pct_min_trail_stop and round(pct, 0) > desired_min + point.pct_min_trail_stop:
+              while point.pct_min_trail_stop and pct > desired_min + point.pct_min_trail_stop - 2:
                 # Avoids unnecessary battery drain during change cycle
                   desired_min += point.pct_min_trail_stop
               if backup_pct != desired_min:
