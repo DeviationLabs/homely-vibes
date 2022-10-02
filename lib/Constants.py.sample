@@ -112,6 +112,7 @@ class OpModeConfig:
   pct_min_trail_stop: int
   op_mode: str
   reason: str
+  always_sms: bool
 
 # How this works: Tesla interprets both flags "customer_preferred_export_rule",
 # "allow_charge_from_grid_with_solar_installed" as False in "self_consumption" mode,
@@ -125,12 +126,12 @@ class OpModeConfig:
 # then everything left before end of shoulder.
 # Recall: 1% is 0.135kWh ==> base drain rate of 0.5kWh is 3.5%/hr
 POWERWALL_DECISION_POINTS = [
-  OpModeConfig( 000,  100,   0,  28, False, 30,  0, "autonomous", "Prep for midnight recharge.."),
-  OpModeConfig(1300, 1455,  35, 100, False, 20,  0, "autonomous", "Solar recharge insufficient. Drawdown before shoulder.."),
-  OpModeConfig(1455, 1900,   0,   0,  True, 20,  0, "self_consumption", "In Peak. Discharge.."),
-  OpModeConfig( 000, 1500,   0,   0,  True, 30, 15, "self_consumption", "Nightly reserves rebuilt. Solar charge only.."),
-  OpModeConfig(1900, 2359,  -7,  20, False, 20,  0, "self_consumption", "Reserve for rest of shoulder. No dump."),
-  OpModeConfig(1900, 2100, -35,  38,  True, 20,  0, "autonomous", "Dump surplus before end of peak."),
-  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder"),
+  OpModeConfig( 000,  100,   0,  28, False, 30,  0, "autonomous", "Prep for midnight recharge..", True),
+  OpModeConfig(1300, 1455,  35,  99, False, 20,  0, "autonomous", "Solar recharge insufficient. Drawdown before shoulder..", True),
+  OpModeConfig(1455, 1900,   0,   0,  True, 20,  0, "self_consumption", "In Peak. Discharge..", False),
+  OpModeConfig( 000, 1500,   0,   0,  True, 30, 10, "self_consumption", "Nightly reserves rebuilt. Solar charge only..", False),
+  OpModeConfig(1900, 2359,  -8,  20, False, 20,  0, "self_consumption", "Reserve for rest of shoulder. No dump.", True),
+  OpModeConfig(1900, 2100, -35,  40,  True, 20,  0, "autonomous", "Dump surplus before end of peak.", False),
+#  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder", False),
 ]
 

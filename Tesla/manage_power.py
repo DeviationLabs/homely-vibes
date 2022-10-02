@@ -122,9 +122,11 @@ def main(args):
               status = status2 = ""
               if op_mode != point.op_mode:
                 status = product.set_operation(point.op_mode)
-              desired_min = backup_pct
-              while point.pct_min_trail_stop and pct > desired_min + point.pct_min_trail_stop:
-                  # Avoids unnecessary battery drain during change cycle
+              desired_min = point.pct_min
+              if point.pct_min_trail_stop:
+                # Avoids unnecessary battery drain during change cycle
+                desired_min = backup_pct
+                while pct >= desired_min + point.pct_min_trail_stop:
                   desired_min += point.pct_min_trail_stop
               if backup_pct != desired_min:
                 status2 = product.set_backup_reserve_percent(int(desired_min))
@@ -133,8 +135,10 @@ def main(args):
                 status2 += f" {desired_min}%"
                 msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve:{status2}"
                 logging.warning(msg)
-                if args.send_sms:
+                if args.send_sms or point.always_sms:
                   MyTwilio.sendsms(SMS_RCPT, msg)
+                else:
+                  logging.info("SMS send skipped due to config flags")
               break  # out of for loop
             elif condition_matches(future_pct, trigger_next_pct, point.iff_higher):
               logging.warning(f"Matched future {future_pct} with {trigger_next_pct}%: {point.reason} Fast retry.. ")
@@ -152,8 +156,7 @@ def main(args):
     import traceback
     logging.error(e)
     logging.error(traceback.print_exc())
-    if args.send_sms:
-       MyTwilio.sendsms(SMS_RCPT, e.__repr__())
+    MyTwilio.sendsms(SMS_RCPT, e.__repr__())
   logging.error(f"Will hard exit after delay of 3600 seconds to prevent respawn churn...\n\n\n\n\n")
   time.sleep(3600) # Don't quit early, as we'll just keep respawning
   return
