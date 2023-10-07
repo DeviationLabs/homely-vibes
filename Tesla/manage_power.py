@@ -11,7 +11,7 @@ import time
 from typing import List, Optional
 import Constants
 import Mailer
-import MyTwilio
+import MyTwilio, MyPushover
 from TeslaPy.teslapy import Tesla, Vehicle, Battery, SolarPanel
 
 
@@ -59,6 +59,18 @@ def sanitize_pct(pct:float, historical_pcts: List[float], time_sampling: float) 
   return updated_pct
 
 
+def send_notification(msg):
+  SMS_RCPT = Constants.POWERWALL_SMS_RCPT
+  PUSHOVER_RCPT = Constants.POWERWALL_PUSHOVER_RCPT
+  DO_SMS = false
+  DO_PUSHOVER = true
+
+  if DO_SMS:
+    MyTwilio.sendsms(SMS_RCPT, msg)
+  if DO_PUSHOVER:
+    MyPushover.send_pushover(PUSHOVER_RCPT, msg)
+
+
 def main(args):
   SMS_RCPT = Constants.POWERWALL_SMS_RCPT
   POLL_TIME_IN_SECS = Constants.POWERWALL_POLL_TIME
@@ -77,16 +89,18 @@ def main(args):
 
         reload(Constants)
         currtime = time.localtime()
-        SMS_RCPT = Constants.POWERWALL_SMS_RCPT
         POLL_TIME_IN_SECS = Constants.POWERWALL_POLL_TIME
         DECISION_POINTS = Constants.POWERWALL_DECISION_POINTS
         logging.info(f'Count {loop_count}')
 
+        op_mode = None # APB: 5/25/23 seems we are no longer getting this data from the query
+
         try:
-          product.get_battery_data()
+          product.get_battery_data() # updates self
           logging.debug(json.dumps(product))
 
-          op_mode = product["operation"]
+#          breakpoint()
+          op_mode = product.get("operation") or op_mode
           backup_pct = product["backup"]["backup_reserve_percent"]
           can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
@@ -102,7 +116,7 @@ def main(args):
           sleep_time = min(POLL_TIME_IN_SECS, 30) # Quick retry
           fail_count += 1
           if fail_count > 10:
-            raise AssertionError(f"Continuously failing. Exiting..")
+            raise AssertionError(f"Continuously failing with {e}. Exiting..")
           continue
         logging.info(f"Read %:{pct:.2f}  Mode:{op_mode}  Export:{can_export}  Grid Charge:{can_grid_charge}")
 
@@ -119,9 +133,10 @@ def main(args):
             if condition_matches(pct, trigger_now_pct, point.iff_higher):
               # Rule applies. Send command if needed. Do not process further
               logging.info(f"Matched {pct} with {trigger_now_pct}%: {point.reason}")
-              status = status2 = ""
+              status = status2 = None
               if op_mode != point.op_mode:
                 status = product.set_operation(point.op_mode)
+                op_mode = point.op_mode
               desired_min = point.pct_min
               if point.pct_min_trail_stop:
                 # Avoids unnecessary battery drain during change cycle
@@ -130,13 +145,14 @@ def main(args):
                   desired_min += point.pct_min_trail_stop
               if backup_pct != desired_min:
                 status2 = product.set_backup_reserve_percent(int(desired_min))
-              if status or status2:
+#              if status or status2:
+              if status2: ## can't trigger off status any more
                 status += f" {point.op_mode}"
                 status2 += f" {desired_min}%"
                 msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve:{status2}"
                 logging.warning(msg)
                 if args.send_sms or point.always_sms:
-                  MyTwilio.sendsms(SMS_RCPT, msg)
+                  send_notification(msg)
                 else:
                   logging.info("SMS send skipped due to config flags")
               break  # out of for loop
@@ -151,12 +167,12 @@ def main(args):
 
   except EnvironmentError as e:
     logging.error(f"Oops. Telsa token expired? Run gui.py direclty from TeslaPy. Error: {e}")
-    MyTwilio.sendsms(SMS_RCPT, "Oops. Telsa token expired? Run gui.py direclty from TeslaPy")
+    send_notification("Oops. Telsa token expired? Run gui.py direclty from TeslaPy")
   except Exception as e:
     import traceback
     logging.error(e)
     logging.error(traceback.print_exc())
-    MyTwilio.sendsms(SMS_RCPT, e.__repr__())
+    send_notification(e.__repr__())
   logging.error(f"Will hard exit after delay of 3600 seconds to prevent respawn churn...\n\n\n\n\n")
   time.sleep(3600) # Don't quit early, as we'll just keep respawning
   return
@@ -170,8 +186,8 @@ if __name__ == "__main__":
   parser.add_argument('-k', dest='keyvalue', help='API parameter (key=value)',
             action='append', type=lambda kv: kv.split('=', 1))
   parser.add_argument('-q','--quiet', action='store_true', help="Don't print to stdout")
-  parser.add_argument('--send_sms',
-                      help  = 'Send SMS using Twilio',
+  parser.add_argument('--send_sms', '--send_notification',
+                      help  = 'Send notification using Twilio or Pushover',
                       action  = 'store_true')
 
   args = parser.parse_args()
