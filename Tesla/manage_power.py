@@ -62,8 +62,8 @@ def sanitize_pct(pct:float, historical_pcts: List[float], time_sampling: float) 
 def send_notification(msg):
   SMS_RCPT = Constants.POWERWALL_SMS_RCPT
   PUSHOVER_RCPT = Constants.POWERWALL_PUSHOVER_RCPT
-  DO_SMS = false
-  DO_PUSHOVER = true
+  DO_SMS = False
+  DO_PUSHOVER = True
 
   if DO_SMS:
     MyTwilio.sendsms(SMS_RCPT, msg)
@@ -96,12 +96,12 @@ def main(args):
         op_mode = None # APB: 5/25/23 seems we are no longer getting this data from the query
 
         try:
-          product.get_battery_data() # updates self
+          product.get_site_info() # updates self
           logging.debug(json.dumps(product))
 
 #          breakpoint()
           op_mode = product.get("operation") or op_mode
-          backup_pct = product["backup"]["backup_reserve_percent"]
+          backup_pct = product["backup_reserve_percent"]
           can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
           assert (can_export == "battery_ok" and can_grid_charge), f"Error in PW config. Got export: {can_export}, grid_charge: {can_grid_charge}"
@@ -186,7 +186,7 @@ if __name__ == "__main__":
   parser.add_argument('-k', dest='keyvalue', help='API parameter (key=value)',
             action='append', type=lambda kv: kv.split('=', 1))
   parser.add_argument('-q','--quiet', action='store_true', help="Don't print to stdout")
-  parser.add_argument('--send_sms', '--send_notification',
+  parser.add_argument('--send_notification',
                       help  = 'Send notification using Twilio or Pushover',
                       action  = 'store_true')
 
