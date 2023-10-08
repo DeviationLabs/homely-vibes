@@ -118,7 +118,7 @@ class OpModeConfig:
   pct_min_trail_stop: int
   op_mode: str
   reason: str
-  always_sms: bool
+  always_notify: bool
 
 # How this works: Tesla interprets both flags "customer_preferred_export_rule",
 # "allow_charge_from_grid_with_solar_installed" as False in "self_consumption" mode,

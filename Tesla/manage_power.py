@@ -151,7 +151,7 @@ def main(args):
                 status2 += f" {desired_min}%"
                 msg = f"At:{pct}%, {point.reason}  Mode:{status}  Reserve:{status2}"
                 logging.warning(msg)
-                if args.send_sms or point.always_sms:
+                if args.send_notification or point.always_notify:
                   send_notification(msg)
                 else:
                   logging.info("SMS send skipped due to config flags")
