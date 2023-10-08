@@ -80,6 +80,9 @@ IoT integration between Tuya smart switch and Rach.io irrigation control to trac
 * 05-22-2020: [v2.2.0] New module for remote browser web usage alerting. Also add Twilio SMSing
 * 06-02-2020: [v2.2.1] Dynamically reload-able config
 * 05-29-2022: [v2.3.0] Telsa Powerwall state machine
+* 10-08-2023: [v2.4.0] Telsa Powerwall changed their APIs. Update TeslaPy to latest.
+  Replace Twilio with Pushdown for notification - Only did this in manage_power,
+  but will want to roll ot out to other apps to
 
 ### Pending:
 * Eliminate Constants.sh using https://goo.gl/UgfwCr
