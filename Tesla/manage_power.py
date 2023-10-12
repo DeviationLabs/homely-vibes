@@ -97,6 +97,7 @@ def main(args):
 
         try:
           product.get_site_info() # updates self
+          product.get_site_data() # updates self
           logging.debug(json.dumps(product))
 
 #          breakpoint()
@@ -106,7 +107,8 @@ def main(args):
           can_grid_charge = not product["components"].get("disallow_charge_from_grid_with_solar_installed", False)
           assert (can_export == "battery_ok" and can_grid_charge), f"Error in PW config. Got export: {can_export}, grid_charge: {can_grid_charge}"
 
-          pct = product["energy_left"]/product["total_pack_energy"] * 100
+#          pct = product["energy_left"]/product["total_pack_energy"] * 100
+          pct = product["percentage_charged"]
           pct = sanitize_pct(pct, historical_pcts, sleep_time/POLL_TIME_IN_SECS)
           future_pct = extrapolate(historical_pcts) or pct
           sleep_time = POLL_TIME_IN_SECS
