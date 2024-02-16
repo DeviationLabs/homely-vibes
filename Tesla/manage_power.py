@@ -11,7 +11,7 @@ import time
 from typing import List, Optional
 import Constants
 import Mailer
-import MyTwilio, MyPushover
+import MyPushover
 from TeslaPy.teslapy import Tesla, Vehicle, Battery, SolarPanel
 
 
@@ -78,10 +78,12 @@ def main(args):
     with Tesla(args.email, verify=False, proxy=None, sso_base_url=None) as tesla:
       product = tesla.battery_list()[0]
       logging.info(f'{product["site_name"]} discovered')
+      send_notification(f'Powerwall monitoring starting for site: {product["site_name"]}')
       loop_count = 0
       fail_count = 0
       sleep_time = 0
       historical_pcts = list()
+
 
       while True:
         loop_count += 1
