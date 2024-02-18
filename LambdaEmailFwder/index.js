@@ -51,11 +51,12 @@ const defaultConfig = {
     eden: ["eden.foscam@gmail.com"],
     info: ["abutala+info@gmail.com"],
     mamata: ["mamatadesai@yahoo.com"],
+    rian: ["rianbutala+strict@gmail.com"],
     rianbutala: ["rianbutala@gmail.com"],
 
     // exceptions ...
     "ab.*": ["abutala+wildcard@gmail.com"],
-    "rb.*": ["rianbutala+default@gmail.com"],
+    "rian.*": ["rianbutala+default@gmail.com"],
     "@deviationlabs.com": ["abutala+devlabs@gmail.com"],
     "@www.deviationlabs.com": ["abutala+devwww@gmail.com"],
     "@mail.deviationlabs.com": ["abutal+devmail@gmail.com"],
