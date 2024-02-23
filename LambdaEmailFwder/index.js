@@ -44,23 +44,25 @@ const defaultConfig = {
   allowPlusSign: true,
   forwardMapping: {
 
-    //strict ...
-    abutala: ["abutala@gmail.com"],
-    amitbutala: ["abutala+strict@gmail.com"],
-    devlabs: ["deviationlabsinc@gmail.com"],
+   //strict ...
+    abutala: ["deviationlabsinc@gmail.com"],
+    amitbutala: ["abutala+strict@gmail.com"], // Note: abutala@gmail...
+    devlabs: ["deviationlabsinc+strict@gmail.com"],
     eden: ["eden.foscam@gmail.com"],
-    info: ["abutala+info@gmail.com"],
+    info: ["deviationlabsinc+info@gmail.com"],
     mamata: ["mamatadesai@yahoo.com"],
-    rian: ["rianbutala+strict@gmail.com"],
+    rb: ["rianbutala@gmail.com"],
+    rian: ["rianbutala@gmail.com"],
     rianbutala: ["rianbutala@gmail.com"],
 
     // exceptions ...
-    "ab.*": ["abutala+wildcard@gmail.com"],
+    "ab.*": ["deviationlabsinc+ab@gmail.com"],
+    "rb.*": ["rianbutala+rb@gmail.com"],
     "rian.*": ["rianbutala+default@gmail.com"],
     "@deviationlabs.com": ["abutala+devlabs@gmail.com"],
-    "@www.deviationlabs.com": ["abutala+devwww@gmail.com"],
-    "@mail.deviationlabs.com": ["abutal+devmail@gmail.com"],
-    "@": ["abutala+default@gmail.com"],
+    "@www.deviationlabs.com": ["deviationlabsinc+www@gmail.com"],
+    "@mail.deviationlabs.com": ["deviationlabsinc+mail@gmail.com"],
+    "@": ["deviationlabsinc+default@gmail.com"],
   },
 };
 
@@ -96,7 +98,7 @@ exports.parseEvent = function(data) {
  */
 function findMatchingPattern(inputString, patterns) {
   for (const pattern of patterns) {
-    const regex = new RegExp(pattern);
+    const regex = new RegExp(f("^{pattern}$"); // Note: Not tested with the anchors
       if (regex.test(inputString)) {
         return pattern;
       }
