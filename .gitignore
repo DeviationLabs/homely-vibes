@@ -1,1 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+*.py[cod]
+# C extensions
+*.so
+
+# Large files
+*.pickle
+*.h5
+
+# hardcoded constants
+README.private.txt
+lib/Constants.py
+lib/Constants.sh
+lib/tuya_switch_config_cli.json
+token_file
+cache.json
+*config.json
+
+# Misc
 .DS_Store
+backups/
+nohup.out
+report.html
+ext_lib/
