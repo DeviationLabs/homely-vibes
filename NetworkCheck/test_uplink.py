@@ -10,6 +10,9 @@ import time
 import Constants
 import Mailer
 
+def get_results_dict(outline:str) -> dict:
+    valid_records = filter(lambda record: record and json.loads(record)["type"] == "result", outline.split("\n"))
+    return json.loads(list(valid_records)[0])
 
 #### Main Routine ####
 if __name__ == "__main__":
@@ -41,7 +44,7 @@ if __name__ == "__main__":
     try:
       out = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT, shell=False,
           universal_newlines=True, timeout=600)
-      payload = json.loads(out)
+      payload = get_results_dict(out)
       dlW_mbps = payload.get("download", {}).get("bandwidth", 0)*8/1024/1024
       ulW_mbps = payload.get("upload", {}).get("bandwidth", 0)*8/1024/1024
       ext_ip = payload.get("interface", {}).get("externalIp", "UNK")
