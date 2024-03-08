@@ -1,0 +1,42 @@
+from fastapi import APIRouter
+from fastapi import status
+import logging
+from typing import Any
+from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+import os
+import json
+from . import utils
+
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+class IndexerRequest(BaseModel):
+    text: str
+
+print(f"This is the payload to send to /index : {IndexerRequest(text="Hello").dict()}")
+
+
+
+@router.post("/index", status_code=status.HTTP_200_OK)
+def index(request: IndexerRequest):
+    logger.warning(f"Inside Indexer::{request}")
+    try:
+        print(
+            f"Initiating indexing with data {request}")
+        try:
+            chunks = utils.get_chunks(request.text)
+            for chunk in chunks:
+                embedding=utils.get_embedding(chunk)
+                utils.insert_db(chunk, embedding)
+            return JSONResponse(content={"success": True})
+        except Exception as e:
+            logger.error("Indexing failed")
+            return JSONResponse(content={"error": "Indexing failed"})
+    except Exception as e:
+        logger.error(str(e))
+        return JSONResponse(content={"error": str(e)})
+
+
