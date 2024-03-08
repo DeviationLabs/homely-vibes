@@ -1,5 +1,4 @@
 from openai import OpenAI
-
 import logging
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
@@ -12,6 +11,7 @@ from datetime import datetime
 import tiktoken
 
 TEXT_EMBEDDING_MODEL = "text-embedding-3-small"
+LLM_MODEL = "gpt-3.5-turbo"
 CHUNK_SIZE, CHUNK_OVERLAP = 100, 20
 RANDOM_STR_LEN = 10
 
@@ -23,9 +23,9 @@ embed = OpenAIEmbeddings(
     openai_api_key=os.environ["OPENAI_API_KEY"],
 )
 
-#client = OpenAI(
-#    api_key=os.environ["OPENAI_API_KEY"]
-#)
+client = OpenAI(
+    api_key=os.environ["OPENAI_API_KEY"]
+)
 
 # Defines the cloud and region where the index should be deployed
 # Read more about it here - https://docs.pinecone.io/docs/create-an-index
@@ -40,7 +40,7 @@ def get_embedding(text: str, model: str = TEXT_EMBEDDING_MODEL) -> list[float]:
     # todo: add a text sanity check -- text should be long enough to make sense -- initially can't be empty.
     text = text.replace("\n", " ")
     result = embed.embed_documents([text])
-    logger.warning(f"returning embedding for text: {result}")
+#    logger.warning(f"returning embedding for text: {result}")
     return result[0]
 
 def get_chunks(text):
@@ -94,19 +94,25 @@ def insert_db(text, embedding):
     )
 
 def get_similar_texts(query):
-    documents = vectorstore.similarity_search(
-        query,  # our search query
-        k=10  # return 3 most relevant docs
+    query = query or "the glass is half full"
+    embedding = get_embedding(query)
+    records = index.query(
+        vector=embedding,
+        top_k=100,
+        include_values=False,
+        include_metadata=True,
+        namespace="aiy"
     )
-    breakpoint()
+    documents = [record.metadata["text"] for record in records.matches]
     return documents
 
 
 def get_llm_response(query):
-    build_query_prompt(query)
+    messages = build_query_prompt(query)
     try:
-        response = self.client.chat.completions.create(
-            model="gpt-4",
+        breakpoint()
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
             messages=messages,
             temperature=0.2,
             max_tokens=2048,

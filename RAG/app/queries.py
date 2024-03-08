@@ -4,6 +4,7 @@ import logging
 from typing import Any, Optional
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from . import utils
 
 
 router = APIRouter()
@@ -32,11 +33,10 @@ def summarize(request: SummarizeRequest):
 
     docs = utils.get_similar_texts(request.summary_question)
     answer = utils.get_llm_response(docs)
-    breakpoint()
 
     return JSONResponse(content={
         "success": True,
-        "message": "Summarized"
+        "message": answer
     })
 
 
