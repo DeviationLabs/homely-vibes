@@ -35,16 +35,13 @@ from google.assistant.library.event import EventType
 from aiy.assistant import auth_helpers
 from aiy.assistant.library import Assistant
 from aiy.board import Board, Led
+from aiy.voice import tts
 
 # import requests module
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urljoin
 BASE_URL = "http://aiy.deviationlabs.com:8080/api/v1/"
-
-logging.getLogger().setLevel(logging.DEBUG)
-#logger = logging.getLogger(__name__)
-#logger.setLevel(logging.DEBUG)
 
 class MyAssistant:
     """An assistant that runs in the background.
@@ -56,6 +53,7 @@ class MyAssistant:
     """
 
     def __init__(self):
+        logging.warning("Initializing...")
         self._task = threading.Thread(target=self._run_task)
         self._can_start_conversation = False
         self._assistant = None
@@ -145,6 +143,7 @@ class MyAssistant:
                 json=dict(summary_question=text)
             )
             print(response)
+            tts.say(response.message)
         except Exception as e:
             logging.warning(f"Caught and ignored the following exception {e}")
 
@@ -155,7 +154,7 @@ class MyAuth(requests.auth.AuthBase):
         return "validated_user"
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     MyAssistant().start()
 
 
