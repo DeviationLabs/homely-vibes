@@ -110,7 +110,6 @@ def get_similar_texts(query):
 def get_llm_response(query):
     messages = build_query_prompt(query)
     try:
-        breakpoint()
         response = client.chat.completions.create(
             model=LLM_MODEL,
             messages=messages,

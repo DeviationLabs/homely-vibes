@@ -1,0 +1,13 @@
+datetime
+fastapi
+langchain.text_splitter
+langchain_openai
+langchain_pinecone
+logging
+openai
+os
+pinecone
+pydantic
+tiktoken
+typing
+uvicorn
