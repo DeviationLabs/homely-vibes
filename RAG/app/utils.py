@@ -1,3 +1,4 @@
+from fastapi import HTTPException, Header
 from openai import OpenAI
 import logging
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -17,6 +18,14 @@ RANDOM_STR_LEN = 10
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+def auth_user(auth: str = Header()):
+#    print("Authorization: ", auth)
+    if auth == "validated_user":
+        return True
+    else:
+        raise HTTPException(401, {"message": "unauthorised"})
+
 
 embed = OpenAIEmbeddings(
     model=TEXT_EMBEDDING_MODEL,

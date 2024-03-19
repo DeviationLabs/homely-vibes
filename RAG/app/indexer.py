@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi import status
 import logging
 from typing import Any
@@ -9,7 +9,7 @@ import json
 from . import utils
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(utils.auth_user)])
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

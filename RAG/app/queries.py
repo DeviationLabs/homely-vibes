@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi import status
 import logging
 from typing import Any, Optional
@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from . import utils
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(utils.auth_user)])
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -21,7 +21,8 @@ class SummarizeRequest(BaseModel):
 
 print(f"This is an example payload to send to /priors : {MatchRequest(input='').dict()}")
 print(f"This is an example payload to send to /summarize : {SummarizeRequest(summary_question='What is the meaning of life?').dict()}")
-print("""Eg: curl --header "Authorization:validated_user" -X POST http://localhost:8080/api/v1/summarize -d '{"summary_question":"blank"}' -H 'Content-Type: application/json'""")
+print("""Eg: curl --header "auth:validated_user" -X POST http://localhost:8080/api/v1/summarize -d '{"summary_question":"blank"}' -H 'Content-Type: application/json'""")
+print("Also see swagger docs at http://localhost:8080/docs")
 
 @router.post("/priors", status_code=status.HTTP_200_OK)
 def fetch_matches(request: MatchRequest):

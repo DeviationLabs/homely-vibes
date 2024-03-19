@@ -1,12 +1,11 @@
 datetime
 fastapi
-langchain.text_splitter
+langchain
 langchain_openai
 langchain_pinecone
 logging
 openai
-os
-pinecone
+pinecone-client
 pydantic
 tiktoken
 typing
