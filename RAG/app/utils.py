@@ -10,6 +10,7 @@ import random
 import string
 from datetime import datetime
 import tiktoken
+from typing import List
 
 TEXT_EMBEDDING_MODEL = "text-embedding-3-small"
 LLM_MODEL = "gpt-3.5-turbo"
@@ -45,7 +46,7 @@ text_field = "text"  # the metadata field that contains our text
 vectorstore = l_Pinecone(index, embed.embed_query, text_field)
 
 
-def get_embedding(text: str, model: str = TEXT_EMBEDDING_MODEL) -> list[float]:
+def get_embedding(text: str, model: str = TEXT_EMBEDDING_MODEL) -> List[float]:
     # todo: add a text sanity check -- text should be long enough to make sense -- initially can't be empty.
     text = text.replace("\n", " ")
     result = embed.embed_documents([text])
