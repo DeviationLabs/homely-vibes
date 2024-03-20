@@ -3,10 +3,8 @@ fastapi
 langchain
 langchain_openai
 langchain_pinecone
-logging
 openai
 pinecone-client
 pydantic
 tiktoken
-typing
 uvicorn
