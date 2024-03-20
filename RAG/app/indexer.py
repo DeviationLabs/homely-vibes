@@ -16,7 +16,7 @@ logger.setLevel(logging.DEBUG)
 class IndexerRequest(BaseModel):
     text: str
 
-print(f"This is the payload to send to /index : {IndexerRequest(text="Hello").dict()}")
+print(f"This is the payload to send to /index : {IndexerRequest(text='Hello').dict()}")
 
 
 

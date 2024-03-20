@@ -40,7 +40,7 @@ from aiy.board import Board, Led
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urljoin
-BASE_URL = "http://192.168.1.250:8081/api/v1/"
+BASE_URL = "http://aiy.deviationlabs.com:8080/api/v1/"
 
 logging.getLogger().setLevel(logging.DEBUG)
 #logger = logging.getLogger(__name__)
