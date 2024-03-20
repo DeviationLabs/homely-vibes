@@ -41,7 +41,7 @@ from aiy.voice import tts
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urljoin
-BASE_URL = "http://aiy_backend.deviationlabs.com:8080/api/v1/"
+BASE_URL = "http://aiybackend.deviationlabs.com:8080/api/v1/"
 
 class MyAssistant:
     """An assistant that runs in the background.

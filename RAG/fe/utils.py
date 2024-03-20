@@ -4,8 +4,10 @@ import requests
 from urllib.parse import urljoin
 import json
 
-BASE_URL = "http://aiy_backend.deviationlabs.com:8080/api/v1/"
+#BASE_URL = "http://aiybackend.deviationlabs.com:8080/api/v1/"
 #BASE_URL = "http://localhost:8080/api/v1/"
+
+BASE_URL = "https://srqbimf23j.us-east-1.awsapprunner.com/api/v1"
 DATE_COLUMN = 'date/time'
 DATA_URL = ('https://s3-us-west-2.amazonaws.com/'
             'streamlit-demo-data/uber-raw-data-sep14.csv.gz')
