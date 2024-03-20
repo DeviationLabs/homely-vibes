@@ -45,6 +45,18 @@ from urllib.parse import urljoin
 # BASE_URL = "https://aiybackend.deviationlabs.com:8080/api/v1/"
 BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/" # APB: why is this not 8080? Dunno? AWS App runner sucks!
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
+
+# create formatter
+#logging.basicConfig()
+#logging.getLogger().setLevel(logging.DEBUG)
+#formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
+#                              "%Y-%m-%d %H:%M:%S")
+
 class MyAssistant:
     """An assistant that runs in the background.
 
@@ -156,7 +168,6 @@ class MyAuth(requests.auth.AuthBase):
         return "validated_user"
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
     MyAssistant().start()
 
 
