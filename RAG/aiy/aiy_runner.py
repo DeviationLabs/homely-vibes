@@ -41,7 +41,8 @@ from aiy.voice import tts
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urljoin
-BASE_URL = "https://aiybackend.deviationlabs.com:8080/api/v1/"
+# BASE_URL = "https://aiybackend.deviationlabs.com:8080/api/v1/"
+BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/" # APB: why is this not 8080? Dunno? AWS App runner sucks!
 
 class MyAssistant:
     """An assistant that runs in the background.

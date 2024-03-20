@@ -4,7 +4,7 @@ import requests
 from urllib.parse import urljoin
 import json
 
-BASE_URL = "https://aiybackend.deviationlabs.com:8080/api/v1/"
+BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/" # APB: why is this not 8080? Dunno? AWS App runner sucks!
 #BASE_URL = "http://localhost:8080/api/v1/"
 #BASE_URL = "https://srqbimf23j.us-east-1.awsapprunner.comi:8080/api/v1"
 
