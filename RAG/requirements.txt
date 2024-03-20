@@ -7,4 +7,5 @@ openai
 pinecone-client
 pydantic
 tiktoken
+urllib3==1.26.6
 uvicorn
