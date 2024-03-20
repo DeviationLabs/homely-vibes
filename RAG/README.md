@@ -8,6 +8,6 @@ We initially tested the webapp locally, but now we'll deploy it using AWS App ru
 
 launch for testing as either:
 
-* python -m app.main
+* python3 -m app.main
 * uvicorn app.main:app --reload --port 8080 --host 0.0.0.0 --log-level info
 

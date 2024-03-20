@@ -127,7 +127,7 @@ class MyAssistant:
             logging.info("Attempting to index ...")
             response = requests.post(
                 urljoin(BASE_URL, "index"),
-                headers={"Authorization": "validated_user"},
+                headers={"auth": "validated_user"},
                 json=dict(text=text)
             )
             print(response)
@@ -139,7 +139,7 @@ class MyAssistant:
             logging.info("Attempting to summarize ...")
             response = requests.post(
                 urljoin(BASE_URL, "summarize"),
-                headers={"Authorization": "validated_user"},
+                headers={"auth": "validated_user"},
                 json=dict(summary_question=text)
             )
             print(response)
