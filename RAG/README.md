@@ -1,7 +1,7 @@
 sample app for building an always on sentiment analysis app
 
 There are 3 directories:
-* aiy/aiy_runner.py
+* aiy_hat/aiy_runner.py
 -- This runs on a raspbery Pi0 with a google AIY hat, which is just what I had lying around.
 -- This also needs the google rasberry image and some handholding on tokens.
 -- In dev mode tokens will expire every 7 days, and then need to be purged from ~/.cache/voice_recognition/assistant-config.json

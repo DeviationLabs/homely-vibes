@@ -32,7 +32,8 @@ import sys
 import threading
 
 from google.assistant.library.event import EventType
-from aiy.assistant import auth_helpers
+#from aiy.assistant import auth_helpers
+from . import auth_helpers
 from aiy.assistant.library import Assistant
 from aiy.board import Board, Led
 from aiy.voice import tts
