@@ -56,7 +56,7 @@ if __name__ == "__main__":
       else:
         msg += "Link bad (<80%): "
       msg += "[%s] DL: %.1f Mbps UL: %.1f Mbps\n" % (ext_ip, dlW_mbps, ulW_mbps)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.decoder.JSONDecodeError) as e:
+    except Exception as e:
       msg += "%s\n\n" % (e)
       msg += "Got: %s\n\n" % (out)
 
