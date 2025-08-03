@@ -174,8 +174,8 @@ def main(args):
     send_notification("Oops. Telsa token expired? Run gui.py direclty from TeslaPy")
   except Exception as e:
     import traceback
-    logging.error(e)
-    logging.error(traceback.print_exc())
+    tb_str = traceback.format_exc()
+    logging.error(f"Exception: {e}\nTraceback:\n{tb_str}")
     send_notification(e.__repr__())
   logging.error(f"Will hard exit after delay of 3600 seconds to prevent respawn churn...\n\n\n\n\n")
   time.sleep(3600) # Don't quit early, as we'll just keep respawning
