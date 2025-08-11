@@ -85,20 +85,33 @@ class OpenAIProjectManager:
             return True  # Consider it successful so project creation continues
     
     def get_user_id_from_email(self, email: str) -> Optional[str]:
-        """Get user ID from email address."""
+        """Get user ID from email address with pagination."""
         url = f"{self.base_url}/organization/users"
         
         try:
-            params = {"limit": 1000}  # High limit to get all users in one request
-            response = requests.get(url, headers=self.headers, params=params)
-            response.raise_for_status()
-            
-            users_data = response.json()
-            users = users_data.get('data', [])
-            
-            for user in users:
-                if user.get('email', '').lower() == email.lower():
-                    return user.get('id')
+            after = None
+            while True:
+                params = {"limit": 100}
+                if after:
+                    params["after"] = after
+                
+                response = requests.get(url, headers=self.headers, params=params)
+                response.raise_for_status()
+                
+                users_data = response.json()
+                users = users_data.get('data', [])
+                
+                # Search for user in current page
+                for user in users:
+                    if user.get('email', '').lower() == email.lower():
+                        return user.get('id')
+                
+                # Check if there are more pages
+                if not users_data.get('has_more', False) or not users:
+                    break
+                
+                # Get cursor for next page
+                after = users[-1].get('id')
             
             logger.warning(f"User with email {email} not found in organization - they may need to be invited first")
             return None
@@ -170,20 +183,38 @@ class OpenAIProjectManager:
             return False
     
     def list_projects(self) -> List[Dict]:
-        """List all existing projects."""
+        """List all existing projects with pagination."""
         url = f"{self.base_url}/organization/projects"
+        all_projects = []
         
         try:
-            params = {"limit": 1500}  # High limit to get all projects in one request
-            response = requests.get(url, headers=self.headers, params=params)
-            response.raise_for_status()
+            after = None
+            while True:
+                params = {"limit": 100}
+                if after:
+                    params["after"] = after
+                
+                response = requests.get(url, headers=self.headers, params=params)
+                response.raise_for_status()
+                
+                projects_data = response.json()
+                projects = projects_data.get('data', [])
+                all_projects.extend(projects)
+                
+                # Check if there are more pages
+                if not projects_data.get('has_more', False) or not projects:
+                    break
+                
+                # Get cursor for next page
+                after = projects[-1].get('id')
             
-            projects = response.json().get('data', [])
-            logger.info(f"Found {len(projects)} existing projects")
-            return projects
+            logger.info(f"Found {len(all_projects)} existing projects")
+            return all_projects
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to list projects: {e}")
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
             return []
 
 
