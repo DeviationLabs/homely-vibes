@@ -31,11 +31,6 @@ python create_openai_projects.py sample_teams.csv --api-key "your-api-key"
 python create_openai_projects.py sample_teams.csv --dry-run
 ```
 
-### Custom project description
-```bash
-python create_openai_projects.py sample_teams.csv --description "Custom project description"
-```
-
 ### Custom budget settings
 ```bash
 # Set $150 budget limit with alert at 60% ($90)
@@ -79,7 +74,8 @@ Marketing Team Beta,beta@company.com
 ## Features
 
 - ✅ Reads CSV and Excel files
-- ✅ Validates email addresses
+- ✅ Validates email addresses  
+- ✅ Extracts project descriptions from CSV data
 - ✅ Checks for duplicate project names
 - ✅ Comprehensive error handling and logging
 - ✅ Dry-run mode for testing

@@ -157,6 +157,7 @@ def validate_team_data(teams: List[Dict]) -> List[Dict]:
         # Map HackWeek format columns to our expected fields
         project_name = None
         email = None
+        description = None
         
         # Look for project name in slug format column
         for key in team_lower.keys():
@@ -171,6 +172,15 @@ def validate_team_data(teams: List[Dict]) -> List[Dict]:
                 break
             elif 'email' in key:
                 email = str(team_lower[key]).strip()
+                break
+        
+        # Look for project description
+        for key in team_lower.keys():
+            if 'brief description' in key and 'hack week' in key:
+                description = str(team_lower[key]).strip()
+                break
+            elif 'description' in key:
+                description = str(team_lower[key]).strip()
                 break
         
         # Fallback: try common column name variations for backwards compatibility
@@ -199,9 +209,14 @@ def validate_team_data(teams: List[Dict]) -> List[Dict]:
             logger.warning(f"Row {i+1}: Invalid email format '{email}'. Skipping.")
             continue
         
+        # Use description from CSV or fallback to default
+        if not description or description == 'nan':
+            description = "Project created via automation script"
+        
         valid_teams.append({
             'team_name': project_name,
-            'email': email
+            'email': email,
+            'description': description
         })
     
     logger.info(f"Validated {len(valid_teams)} out of {len(teams)} teams")
@@ -216,8 +231,6 @@ def main():
     parser.add_argument('spreadsheet', help='Path to spreadsheet file (CSV or Excel)')
     parser.add_argument('--api-key', help='OpenAI API key (or set OPENAI_API_KEY env var)')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be created without actually creating')
-    parser.add_argument('--description', default='Project created via automation script', 
-                       help='Default description for created projects')
     parser.add_argument('--budget-limit', type=float, default=200.0,
                        help='Budget limit in USD for each project (default: $200)')
     parser.add_argument('--alert-threshold', type=float, default=0.5,
@@ -248,6 +261,7 @@ def main():
             logger.info(f"Budget settings: ${args.budget_limit:.2f} limit, ${args.budget_limit * args.alert_threshold:.2f} alert (at {args.alert_threshold*100:.0f}%)")
             for team in valid_teams:
                 logger.info(f"  - Project: {team['team_name']} (User: {team['email']})")
+                logger.info(f"    Description: {team['description']}")
             sys.exit(0)
         
         # Initialize OpenAI API manager
@@ -262,14 +276,15 @@ def main():
         for team in valid_teams:
             team_name = team['team_name']
             email = team['email']
+            description = team['description']
             
             # Check if project already exists
             if team_name in existing_names:
                 logger.warning(f"Project '{team_name}' already exists. Skipping creation.")
                 continue
             
-            # Create project
-            project = openai_manager.create_project(team_name, args.description)
+            # Create project with description from CSV
+            project = openai_manager.create_project(team_name, description)
             if project:
                 project_id = project['id']
                 
