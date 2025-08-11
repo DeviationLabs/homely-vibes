@@ -89,7 +89,7 @@ class OpenAIProjectManager:
         url = f"{self.base_url}/organization/users"
         
         try:
-            params = {"limit": 1500}  # High limit to get all users in one request
+            params = {"limit": 1000}  # High limit to get all users in one request
             response = requests.get(url, headers=self.headers, params=params)
             response.raise_for_status()
             
