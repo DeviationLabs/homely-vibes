@@ -149,31 +149,49 @@ def read_spreadsheet(file_path: str) -> List[Dict[str, str]]:
 def validate_team_data(teams: List[Dict]) -> List[Dict]:
     """Validate and clean team data."""
     valid_teams = []
-    required_fields = ['team_name', 'email']
     
     for i, team in enumerate(teams):
         # Check if required fields exist (case-insensitive)
-        team_lower = {k.lower(): v for k, v in team.items()}
+        team_lower = {k.lower().strip(): v for k, v in team.items()}
         
-        # Try common column name variations
-        name_field = None
-        email_field = None
+        # Map HackWeek format columns to our expected fields
+        project_name = None
+        email = None
         
+        # Look for project name in slug format column
         for key in team_lower.keys():
-            if 'name' in key or 'team' in key:
-                name_field = key
-            if 'email' in key or 'mail' in key:
-                email_field = key
+            if 'project name' in key and 'slug' in key:
+                project_name = str(team_lower[key]).strip()
+                break
         
-        if not name_field or not email_field:
-            logger.warning(f"Row {i+1}: Missing required fields. Skipping.")
+        # Look for email address
+        for key in team_lower.keys():
+            if 'email address' in key:
+                email = str(team_lower[key]).strip()
+                break
+            elif 'email' in key:
+                email = str(team_lower[key]).strip()
+                break
+        
+        # Fallback: try common column name variations for backwards compatibility
+        if not project_name:
+            for key in team_lower.keys():
+                if any(term in key for term in ['name', 'team', 'project']):
+                    project_name = str(team_lower[key]).strip()
+                    break
+        
+        if not email:
+            for key in team_lower.keys():
+                if 'mail' in key:
+                    email = str(team_lower[key]).strip()
+                    break
+        
+        if not project_name or not email:
+            logger.warning(f"Row {i+1}: Missing required fields (project name or email). Skipping.")
             continue
         
-        team_name = str(team_lower[name_field]).strip()
-        email = str(team_lower[email_field]).strip()
-        
-        if not team_name or not email:
-            logger.warning(f"Row {i+1}: Empty team name or email. Skipping.")
+        if not project_name or not email or project_name == 'nan' or email == 'nan':
+            logger.warning(f"Row {i+1}: Empty project name or email. Skipping.")
             continue
         
         # Basic email validation
@@ -182,7 +200,7 @@ def validate_team_data(teams: List[Dict]) -> List[Dict]:
             continue
         
         valid_teams.append({
-            'team_name': team_name,
+            'team_name': project_name,
             'email': email
         })
     

@@ -47,8 +47,15 @@ python create_openai_projects.py sample_teams.csv --budget-limit 300
 
 ## Spreadsheet Format
 
-Your spreadsheet should contain columns for team names and email addresses. The script supports these column name variations:
+The script supports multiple spreadsheet formats and automatically detects the column structure:
 
+### HackWeek Format (Preferred)
+The script automatically detects HackWeek CSV format with these key columns:
+- **Project Name**: `"Give us a project name in slug format (e.g: lms-support-bot, hris-data-inspector)"`  
+- **Email**: `"Email Address"`
+
+### Legacy Format (Backwards Compatible)
+For simple CSV files, the script supports these column name variations:
 - **Team Name**: `team_name`, `team`, `name`, `project_name`
 - **Email**: `email`, `mail`, `user_email`
 
@@ -56,12 +63,17 @@ Your spreadsheet should contain columns for team names and email addresses. The 
 - CSV files (`.csv`)
 - Excel files (`.xlsx`, `.xls`)
 
-### Example CSV:
+### Example HackWeek CSV:
+```csv
+Timestamp,Email Address,Your Full Name,Your Team/Department,Which AI tools are you requesting access to?,"Give us a project name in slug format (e.g: lms-support-bot, hris-data-inspector)",Please provide a brief description of how you plan to use these tools during Hack Week.,What is your prior experience level with AI tools?,Do you require any specific training or resources to effectively use these tools?,"If yes, please elaborate on your training/resource needs."
+8/11/2025 10:15:22,jsmith@company.com,John Smith,Frontend Engineering,OpenAI,ui-component-generator,Build an AI-powered component library,Intermediate,Yes,Need guidance on prompt engineering
+```
+
+### Example Legacy CSV:
 ```csv
 team_name,email
 Engineering Team Alpha,alpha@company.com
 Marketing Team Beta,beta@company.com
-Data Science Gamma,gamma@company.com
 ```
 
 ## Features
