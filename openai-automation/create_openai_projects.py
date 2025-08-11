@@ -344,20 +344,31 @@ def main():
         
         # Get existing projects to avoid duplicates
         existing_projects = openai_manager.list_projects()
-        existing_names = {proj['name'] for proj in existing_projects}
+        existing_names = {proj['name'].lower() for proj in existing_projects}  # Case-insensitive comparison
+        existing_projects_by_name = {proj['name'].lower(): proj for proj in existing_projects}
+        
+        if existing_names:
+            logger.info(f"Found existing projects: {[proj['name'] for proj in existing_projects]}")
         
         # Create projects
         created_count = 0
+        processed_names = set()  # Track names we've processed in this batch
+        
         for team in valid_teams:
             team_name = team['team_name']
             email = team['email']
             description = team['description']
             
-            # Check if project already exists
-            if team_name in existing_names:
+            # Check if we've already processed this project name in this batch
+            if team_name.lower() in processed_names:
+                logger.warning(f"Skipping duplicate project '{team_name}' found in CSV batch")
+                continue
+            
+            # Check if project already exists (case-insensitive)
+            if team_name.lower() in existing_names:
                 logger.warning(f"Project '{team_name}' already exists. Updating budget and checking if user needs to be added.")
                 # Find the existing project ID
-                existing_project = next((proj for proj in existing_projects if proj['name'] == team_name), None)
+                existing_project = existing_projects_by_name.get(team_name.lower())
                 if existing_project:
                     project_id = existing_project['id']
                     
@@ -380,11 +391,14 @@ def main():
                         created_count += 1
                     elif budget_set:
                         logger.info(f"Updated budget for existing project '{team_name}' but user addition failed")
+                
+                processed_names.add(team_name.lower())
                 continue
             
             # Create project with description from CSV
             project = openai_manager.create_project(team_name, description)
             if project:
+                processed_names.add(team_name.lower())  # Mark as processed
                 project_id = project['id']
                 
                 # Set budget for the project
@@ -405,8 +419,10 @@ def main():
                     created_count += 1
                 else:
                     logger.warning(f"Project created but failed to add user {email}")
+            else:
+                logger.error(f"Failed to create project '{team_name}', skipping user addition")
         
-        logger.info(f"Successfully created {created_count} projects")
+        logger.info(f"Successfully processed {created_count} projects")
         
     except Exception as e:
         logger.error(f"Script execution failed: {e}")
