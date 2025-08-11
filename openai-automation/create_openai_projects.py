@@ -55,15 +55,16 @@ class OpenAIProjectManager:
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to create project {name}: {e}")
-            if hasattr(e.response, 'text'):
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return None
     
-    def set_project_budget(self, project_id: str, budget_limit: float = 200.0, alert_threshold: float = 0.5) -> bool:
+    def set_project_budget(self, project_id: str, project_name: str, budget_limit: float = 200.0, alert_threshold: float = 0.5) -> bool:
         """Set budget limit and alert threshold for a project."""
         url = f"{self.base_url}/organization/projects/{project_id}/budget"
         
         payload = {
+            "name": project_name,
             "hard_limit_usd": budget_limit,
             "soft_limit_usd": budget_limit * alert_threshold
         }
@@ -77,7 +78,7 @@ class OpenAIProjectManager:
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to set budget for project {project_id}: {e}")
-            if hasattr(e.response, 'text'):
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return False
     
@@ -99,7 +100,7 @@ class OpenAIProjectManager:
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to add user {email} to project {project_id}: {e}")
-            if hasattr(e.response, 'text'):
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return False
     
@@ -304,6 +305,7 @@ def main():
                 # Set budget for the project
                 budget_set = openai_manager.set_project_budget(
                     project_id, 
+                    team_name,
                     args.budget_limit, 
                     args.alert_threshold
                 )
