@@ -63,8 +63,8 @@ class OpenAIProjectManager:
         """Set budget limit and alert threshold for a project."""
         url = f"{self.base_url}/organization/projects/{project_id}/budget"
         
+        # Try different payload formats based on OpenAI API docs
         payload = {
-            "name": project_name,
             "hard_limit_usd": budget_limit,
             "soft_limit_usd": budget_limit * alert_threshold
         }
@@ -351,16 +351,31 @@ def main():
             
             # Check if project already exists
             if team_name in existing_names:
-                logger.warning(f"Project '{team_name}' already exists. Checking if user needs to be added.")
+                logger.warning(f"Project '{team_name}' already exists. Updating budget and checking if user needs to be added.")
                 # Find the existing project ID
                 existing_project = next((proj for proj in existing_projects if proj['name'] == team_name), None)
                 if existing_project:
                     project_id = existing_project['id']
+                    
+                    # Set budget for existing project
+                    budget_set = openai_manager.set_project_budget(
+                        project_id, 
+                        team_name,
+                        args.budget_limit, 
+                        args.alert_threshold
+                    )
+                    
                     # Try to add user to existing project
                     user_added = openai_manager.add_user_to_project(project_id, email, "member", args.auto_invite)
-                    if user_added:
-                        logger.info(f"Successfully added user {email} to existing project '{team_name}'")
+                    
+                    if user_added and budget_set:
+                        logger.info(f"Successfully updated project '{team_name}' with budget and added user {email}")
                         created_count += 1
+                    elif user_added:
+                        logger.warning(f"Added user to existing project '{team_name}' but budget update failed")
+                        created_count += 1
+                    elif budget_set:
+                        logger.info(f"Updated budget for existing project '{team_name}' but user addition failed")
                 continue
             
             # Create project with description from CSV
