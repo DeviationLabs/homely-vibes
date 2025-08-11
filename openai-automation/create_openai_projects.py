@@ -59,6 +59,28 @@ class OpenAIProjectManager:
                 logger.error(f"Response: {e.response.text}")
             return None
     
+    def set_project_budget(self, project_id: str, budget_limit: float = 200.0, alert_threshold: float = 0.5) -> bool:
+        """Set budget limit and alert threshold for a project."""
+        url = f"{self.base_url}/organization/projects/{project_id}/budget"
+        
+        payload = {
+            "hard_limit_usd": budget_limit,
+            "soft_limit_usd": budget_limit * alert_threshold
+        }
+        
+        try:
+            response = requests.post(url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            
+            logger.info(f"Successfully set budget for project {project_id}: ${budget_limit} limit, ${budget_limit * alert_threshold:.2f} alert")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to set budget for project {project_id}: {e}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return False
+    
     def add_user_to_project(self, project_id: str, email: str, role: str = "member") -> bool:
         """Add a user to a project."""
         url = f"{self.base_url}/organization/projects/{project_id}/users"
@@ -178,6 +200,10 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Show what would be created without actually creating')
     parser.add_argument('--description', default='Project created via automation script', 
                        help='Default description for created projects')
+    parser.add_argument('--budget-limit', type=float, default=200.0,
+                       help='Budget limit in USD for each project (default: $200)')
+    parser.add_argument('--alert-threshold', type=float, default=0.5,
+                       help='Budget alert threshold as fraction of limit (default: 0.5 = 50%%)')
     
     args = parser.parse_args()
     
@@ -201,6 +227,7 @@ def main():
         
         if args.dry_run:
             logger.info("DRY RUN - Projects that would be created:")
+            logger.info(f"Budget settings: ${args.budget_limit:.2f} limit, ${args.budget_limit * args.alert_threshold:.2f} alert (at {args.alert_threshold*100:.0f}%)")
             for team in valid_teams:
                 logger.info(f"  - Project: {team['team_name']} (User: {team['email']})")
             sys.exit(0)
@@ -228,8 +255,20 @@ def main():
             if project:
                 project_id = project['id']
                 
+                # Set budget for the project
+                budget_set = openai_manager.set_project_budget(
+                    project_id, 
+                    args.budget_limit, 
+                    args.alert_threshold
+                )
+                
                 # Add user to project
-                if openai_manager.add_user_to_project(project_id, email):
+                user_added = openai_manager.add_user_to_project(project_id, email)
+                
+                if user_added and budget_set:
+                    created_count += 1
+                elif user_added:
+                    logger.warning(f"Project created and user added, but budget setup failed for {team_name}")
                     created_count += 1
                 else:
                     logger.warning(f"Project created but failed to add user {email}")

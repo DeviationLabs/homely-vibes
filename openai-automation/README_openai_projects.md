@@ -36,6 +36,15 @@ python create_openai_projects.py sample_teams.csv --dry-run
 python create_openai_projects.py sample_teams.csv --description "Custom project description"
 ```
 
+### Custom budget settings
+```bash
+# Set $150 budget limit with alert at 60% ($90)
+python create_openai_projects.py sample_teams.csv --budget-limit 150 --alert-threshold 0.6
+
+# Set $300 budget with default 50% alert threshold
+python create_openai_projects.py sample_teams.csv --budget-limit 300
+```
+
 ## Spreadsheet Format
 
 Your spreadsheet should contain columns for team names and email addresses. The script supports these column name variations:
@@ -63,12 +72,14 @@ Data Science Gamma,gamma@company.com
 - ✅ Comprehensive error handling and logging
 - ✅ Dry-run mode for testing
 - ✅ Adds users to created projects
+- ✅ Sets budget limits and alerts ($200 limit, 50% alert by default)
 - ✅ Progress logging to file and console
 
 ## Logging
 
 The script creates a log file `openai_project_creation.log` with detailed information about:
 - Projects created successfully
+- Budget limits and alerts configured
 - Users added to projects
 - Errors and warnings
 - Validation issues
