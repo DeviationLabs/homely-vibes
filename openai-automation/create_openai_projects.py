@@ -97,7 +97,7 @@ class OpenAIProjectManager:
                 if user.get('email', '').lower() == email.lower():
                     return user.get('id')
             
-            logger.warning(f"User with email {email} not found in organization")
+            logger.warning(f"User with email {email} not found in organization - they may need to be invited first")
             return None
             
         except requests.exceptions.RequestException as e:
@@ -106,13 +106,45 @@ class OpenAIProjectManager:
                 logger.error(f"Response: {e.response.text}")
             return None
 
-    def add_user_to_project(self, project_id: str, email: str, role: str = "member") -> bool:
+    def invite_user_to_organization(self, email: str, role: str = "reader") -> bool:
+        """Invite a user to the organization."""
+        url = f"{self.base_url}/organization/invites"
+        
+        payload = {
+            "email": email,
+            "role": role
+        }
+        
+        try:
+            response = requests.post(url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            
+            logger.info(f"Successfully invited {email} to organization with role {role}")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to invite user {email} to organization: {e}")
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return False
+
+    def add_user_to_project(self, project_id: str, email: str, role: str = "member", auto_invite: bool = True) -> bool:
         """Add a user to a project."""
         # First get the user ID from email
         user_id = self.get_user_id_from_email(email)
         if not user_id:
-            logger.error(f"Cannot add user {email} - user ID not found")
-            return False
+            if auto_invite:
+                logger.info(f"User {email} not found in organization, attempting to invite them first...")
+                invite_success = self.invite_user_to_organization(email, "reader")
+                if invite_success:
+                    logger.info(f"User {email} invited successfully. They will need to accept the invitation before being added to projects.")
+                    return True  # Consider this a success even though they need to accept the invitation
+                else:
+                    logger.error(f"Cannot add user {email} - user ID not found and invitation failed")
+                    return False
+            else:
+                logger.error(f"Cannot add user {email} - user ID not found (auto-invite disabled)")
+                return False
         
         url = f"{self.base_url}/organization/projects/{project_id}/users"
         
@@ -270,6 +302,10 @@ def main():
                        help='Budget limit in USD for each project (default: $200)')
     parser.add_argument('--alert-threshold', type=float, default=0.5,
                        help='Budget alert threshold as fraction of limit (default: 0.5 = 50%%)')
+    parser.add_argument('--auto-invite', action='store_true', default=True,
+                       help='Automatically invite users not found in organization (default: enabled)')
+    parser.add_argument('--no-auto-invite', dest='auto_invite', action='store_false',
+                       help='Disable automatic user invitations')
     
     args = parser.parse_args()
     
@@ -321,7 +357,7 @@ def main():
                 if existing_project:
                     project_id = existing_project['id']
                     # Try to add user to existing project
-                    user_added = openai_manager.add_user_to_project(project_id, email)
+                    user_added = openai_manager.add_user_to_project(project_id, email, "member", args.auto_invite)
                     if user_added:
                         logger.info(f"Successfully added user {email} to existing project '{team_name}'")
                         created_count += 1
@@ -341,7 +377,7 @@ def main():
                 )
                 
                 # Add user to project
-                user_added = openai_manager.add_user_to_project(project_id, email)
+                user_added = openai_manager.add_user_to_project(project_id, email, "member", args.auto_invite)
                 
                 if user_added and budget_set:
                     created_count += 1
