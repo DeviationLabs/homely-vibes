@@ -24,3 +24,7 @@ backups/
 nohup.out
 report.html
 ext_lib/
+
+# OpenAI automation logs
+openai-automation/openai_project_creation.log
+openai-automation/HackWeek2025.csv
