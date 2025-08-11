@@ -177,9 +177,18 @@ class OpenAIProjectManager:
             return True
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to add user {email} to project {project_id}: {e}")
-            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+            # Check if user already exists in project (common scenario, not an error)
+            if hasattr(e, 'response') and e.response is not None:
+                if e.response.status_code == 400 and hasattr(e.response, 'text'):
+                    error_text = e.response.text.lower()
+                    if 'already' in error_text or 'exists' in error_text or 'member' in error_text:
+                        logger.warning(f"User {email} already exists in project {project_id}, continuing...")
+                        return True  # Treat as success since user is already in project
+                
+                logger.error(f"Failed to add user {email} to project {project_id}: {e}")
                 logger.error(f"Response: {e.response.text}")
+            else:
+                logger.error(f"Failed to add user {email} to project {project_id}: {e}")
             return False
     
     def list_projects(self) -> List[Dict]:
