@@ -16,7 +16,7 @@ from pathlib import Path
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('openai_project_creation.log'),
         logging.StreamHandler(sys.stdout)
@@ -82,12 +82,42 @@ class OpenAIProjectManager:
                 logger.error(f"Response: {e.response.text}")
             return False
     
+    def get_user_id_from_email(self, email: str) -> Optional[str]:
+        """Get user ID from email address."""
+        url = f"{self.base_url}/organization/users"
+        
+        try:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            
+            users_data = response.json()
+            users = users_data.get('data', [])
+            
+            for user in users:
+                if user.get('email', '').lower() == email.lower():
+                    return user.get('id')
+            
+            logger.warning(f"User with email {email} not found in organization")
+            return None
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to lookup user {email}: {e}")
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return None
+
     def add_user_to_project(self, project_id: str, email: str, role: str = "member") -> bool:
         """Add a user to a project."""
+        # First get the user ID from email
+        user_id = self.get_user_id_from_email(email)
+        if not user_id:
+            logger.error(f"Cannot add user {email} - user ID not found")
+            return False
+        
         url = f"{self.base_url}/organization/projects/{project_id}/users"
         
         payload = {
-            "email": email,
+            "user_id": user_id,
             "role": role
         }
         
