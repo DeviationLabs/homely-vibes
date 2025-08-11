@@ -85,19 +85,38 @@ class OpenAIProjectManager:
             return True  # Consider it successful so project creation continues
     
     def get_user_id_from_email(self, email: str) -> Optional[str]:
-        """Get user ID from email address."""
+        """Get user ID from email address with pagination support."""
         url = f"{self.base_url}/organization/users"
+        limit = 100  # Maximum users per request
         
         try:
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
-            
-            users_data = response.json()
-            users = users_data.get('data', [])
-            
-            for user in users:
-                if user.get('email', '').lower() == email.lower():
-                    return user.get('id')
+            after = None
+            while True:
+                # Add pagination parameters
+                params = {"limit": limit}
+                if after:
+                    params["after"] = after
+                
+                response = requests.get(url, headers=self.headers, params=params)
+                response.raise_for_status()
+                
+                users_data = response.json()
+                users = users_data.get('data', [])
+                
+                # Search for the user in this page
+                for user in users:
+                    if user.get('email', '').lower() == email.lower():
+                        return user.get('id')
+                
+                # Check if there are more pages
+                if not users_data.get('has_more', False):
+                    break
+                    
+                # Get the cursor for the next page
+                if users and 'id' in users[-1]:
+                    after = users[-1]['id']
+                else:
+                    break
             
             logger.warning(f"User with email {email} not found in organization - they may need to be invited first")
             return None
@@ -169,16 +188,38 @@ class OpenAIProjectManager:
             return False
     
     def list_projects(self) -> List[Dict]:
-        """List all existing projects."""
+        """List all existing projects with pagination support."""
         url = f"{self.base_url}/organization/projects"
+        limit = 100  # Maximum projects per request
+        all_projects = []
         
         try:
-            response = requests.get(url, headers=self.headers)
-            response.raise_for_status()
+            after = None
+            while True:
+                # Add pagination parameters
+                params = {"limit": limit}
+                if after:
+                    params["after"] = after
+                
+                response = requests.get(url, headers=self.headers, params=params)
+                response.raise_for_status()
+                
+                projects_data = response.json()
+                projects = projects_data.get('data', [])
+                all_projects.extend(projects)
+                
+                # Check if there are more pages
+                if not projects_data.get('has_more', False):
+                    break
+                    
+                # Get the cursor for the next page
+                if projects and 'id' in projects[-1]:
+                    after = projects[-1]['id']
+                else:
+                    break
             
-            projects = response.json().get('data', [])
-            logger.info(f"Found {len(projects)} existing projects")
-            return projects
+            logger.info(f"Found {len(all_projects)} existing projects")
+            return all_projects
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to list projects: {e}")
