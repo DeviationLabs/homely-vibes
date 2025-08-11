@@ -18,9 +18,15 @@ token_file
 cache.json
 *config.json
 
+# OpenAI automation logs
+openai-automation/openai_project_creation.log
+
 # Misc
 .DS_Store
 backups/
 nohup.out
 report.html
 ext_lib/
+
+# OpenAI automation logs
+openai-automation/openai_project_creation.log
