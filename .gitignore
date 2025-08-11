@@ -18,9 +18,6 @@ token_file
 cache.json
 *config.json
 
-# OpenAI automation logs
-openai-automation/openai_project_creation.log
-
 # Misc
 .DS_Store
 backups/
@@ -30,3 +27,4 @@ ext_lib/
 
 # OpenAI automation logs
 openai-automation/openai_project_creation.log
+openai-automation/HackWeek2025.csv
