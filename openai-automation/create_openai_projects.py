@@ -213,6 +213,10 @@ def validate_team_data(teams: List[Dict]) -> List[Dict]:
         if not description or description == 'nan':
             description = "Project created via automation script"
         
+        # Limit description to 100 characters
+        if len(description) > 100:
+            description = description[:97] + "..."
+        
         valid_teams.append({
             'team_name': project_name,
             'email': email,
@@ -280,7 +284,16 @@ def main():
             
             # Check if project already exists
             if team_name in existing_names:
-                logger.warning(f"Project '{team_name}' already exists. Skipping creation.")
+                logger.warning(f"Project '{team_name}' already exists. Checking if user needs to be added.")
+                # Find the existing project ID
+                existing_project = next((proj for proj in existing_projects if proj['name'] == team_name), None)
+                if existing_project:
+                    project_id = existing_project['id']
+                    # Try to add user to existing project
+                    user_added = openai_manager.add_user_to_project(project_id, email)
+                    if user_added:
+                        logger.info(f"Successfully added user {email} to existing project '{team_name}'")
+                        created_count += 1
                 continue
             
             # Create project with description from CSV
