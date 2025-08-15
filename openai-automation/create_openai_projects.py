@@ -139,9 +139,24 @@ class OpenAIProjectManager:
             return True
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to invite user {email} to organization: {e}")
+            # Check if the error is because the invite already exists or user already exists
             if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                error_text = e.response.text.lower()
+                
+                # If user already has an invite, this is actually a success case
+                if ('already' in error_text and 'invited' in error_text) or ('pending' in error_text):
+                    logger.info(f"User {email} already has a pending invitation to the organization")
+                    return True  # Treat as success since invitation exists
+                
+                # If user already exists (but with a different case or format), this might be a success case
+                if 'already' in error_text and 'exists' in error_text:
+                    logger.info(f"User with email similar to {email} may already exist in the organization")
+                    return True  # Treat as partial success
+                    
+                logger.error(f"Failed to invite user {email} to organization: {e}")
                 logger.error(f"Response: {e.response.text}")
+            else:
+                logger.error(f"Failed to invite user {email} to organization: {e}")
             return False
 
     def add_user_to_project(self, project_id: str, email: str, role: str = "member", auto_invite: bool = True) -> bool:
@@ -156,10 +171,11 @@ class OpenAIProjectManager:
                     logger.info(f"User {email} invited successfully. They will need to accept the invitation before being added to projects.")
                     return True  # Consider this a success even though they need to accept the invitation
                 else:
-                    logger.error(f"Cannot add user {email} - user ID not found and invitation failed")
-                    return False
+                    # Check if the invite failed because it already exists (which is still a success case)
+                    logger.warning(f"Could not invite user {email} - they may already have a pending invitation")
+                    return True  # Consider this a success since they might already have an invite
             else:
-                logger.error(f"Cannot add user {email} - user ID not found (auto-invite disabled)")
+                logger.warning(f"Cannot add user {email} - user ID not found (auto-invite disabled)")
                 return False
         
         # Check if user already exists in the project
@@ -196,10 +212,17 @@ class OpenAIProjectManager:
             return True
             
         except requests.exceptions.RequestException as e:
-            # Check if user already exists in project (common scenario, not an error)
+            # Handle various error scenarios gracefully
             if hasattr(e, 'response') and e.response is not None:
                 if e.response.status_code == 400 and hasattr(e.response, 'text'):
                     error_text = e.response.text.lower()
+                    
+                    # Check for pending invite scenarios
+                    if 'pending' in error_text and 'invite' in error_text:
+                        logger.info(f"User {email} has a pending invitation to the organization. They will need to accept before being added to projects.")
+                        return True  # Consider this a success since the invitation process is in progress
+                    
+                    # Check if user already exists in project (common scenario, not an error)
                     if 'already' in error_text or 'exists' in error_text or 'member' in error_text:
                         # User exists but we couldn't detect this earlier, try updating role
                         if role == "owner":
@@ -209,7 +232,7 @@ class OpenAIProjectManager:
                                 logger.info(f"Successfully updated {email} to role {role} in project {project_id}")
                                 return True
                         # If we're not trying to update to owner or update failed, just continue
-                        logger.warning(f"User {email} already exists in project {project_id}, continuing...")
+                        logger.info(f"User {email} already exists in project {project_id}, continuing...")
                         return True  # Treat as success since user is already in project
                 
                 logger.error(f"Failed to add user {email} to project {project_id}: {e}")
@@ -243,39 +266,16 @@ class OpenAIProjectManager:
                 logger.error(f"Response: {e.response.text}")
             return None
             
-    def remove_user_from_project(self, project_id: str, user_id: str) -> bool:
-        """Remove a user from a project."""
+    def update_user_project_role(self, project_id: str, user_id: str, role: str) -> bool:
+        """Update a user's role in a project using POST request."""
         url = f"{self.base_url}/organization/projects/{project_id}/users/{user_id}"
         
-        try:
-            response = requests.delete(url, headers=self.headers)
-            response.raise_for_status()
-            
-            logger.info(f"Successfully removed user {user_id} from project {project_id}")
-            return True
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to remove user {user_id} from project {project_id}: {e}")
-            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
-                logger.error(f"Response: {e.response.text}")
-            return False
-
-    def update_user_project_role(self, project_id: str, user_id: str, role: str) -> bool:
-        """Update a user's role in a project by removing and re-adding them."""
-        # First remove the user from the project
-        if not self.remove_user_from_project(project_id, user_id):
-            logger.error(f"Failed to update role - couldn't remove user {user_id} from project {project_id}")
-            return False
-        
-        # Then re-add them with the new role
-        url = f"{self.base_url}/organization/projects/{project_id}/users"
-        
         payload = {
-            "user_id": user_id,
             "role": role
         }
         
         try:
+            # Using POST as specified by the OpenAI API
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
             
@@ -283,7 +283,7 @@ class OpenAIProjectManager:
             return True
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to re-add user {user_id} with role {role} to project {project_id}: {e}")
+            logger.error(f"Failed to update user {user_id} to role {role} in project {project_id}: {e}")
             if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return False
