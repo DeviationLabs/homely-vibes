@@ -420,8 +420,8 @@ def main():
                         args.alert_threshold
                     )
                     
-                    # Try to add user to existing project
-                    user_added = openai_manager.add_user_to_project(project_id, email, "member", args.auto_invite)
+                    # Try to add user to existing project as owner
+                    user_added = openai_manager.add_user_to_project(project_id, email, "owner", args.auto_invite)
                     
                     if user_added and budget_set:
                         logger.info(f"Successfully updated project '{team_name}' with budget and added user {email}")
@@ -449,8 +449,8 @@ def main():
                     args.alert_threshold
                 )
                 
-                # Add user to project
-                user_added = openai_manager.add_user_to_project(project_id, email, "member", args.auto_invite)
+                # Add user to project as owner
+                user_added = openai_manager.add_user_to_project(project_id, email, "owner", args.auto_invite)
                 
                 if user_added and budget_set:
                     created_count += 1
