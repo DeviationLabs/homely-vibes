@@ -243,23 +243,47 @@ class OpenAIProjectManager:
                 logger.error(f"Response: {e.response.text}")
             return None
             
-    def update_user_project_role(self, project_id: str, user_id: str, role: str) -> bool:
-        """Update a user's role in a project."""
+    def remove_user_from_project(self, project_id: str, user_id: str) -> bool:
+        """Remove a user from a project."""
         url = f"{self.base_url}/organization/projects/{project_id}/users/{user_id}"
         
+        try:
+            response = requests.delete(url, headers=self.headers)
+            response.raise_for_status()
+            
+            logger.info(f"Successfully removed user {user_id} from project {project_id}")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to remove user {user_id} from project {project_id}: {e}")
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return False
+
+    def update_user_project_role(self, project_id: str, user_id: str, role: str) -> bool:
+        """Update a user's role in a project by removing and re-adding them."""
+        # First remove the user from the project
+        if not self.remove_user_from_project(project_id, user_id):
+            logger.error(f"Failed to update role - couldn't remove user {user_id} from project {project_id}")
+            return False
+        
+        # Then re-add them with the new role
+        url = f"{self.base_url}/organization/projects/{project_id}/users"
+        
         payload = {
+            "user_id": user_id,
             "role": role
         }
         
         try:
-            response = requests.put(url, headers=self.headers, json=payload)
+            response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
             
             logger.info(f"Successfully updated user {user_id} to role {role} in project {project_id}")
             return True
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to update user {user_id} role to {role} in project {project_id}: {e}")
+            logger.error(f"Failed to re-add user {user_id} with role {role} to project {project_id}: {e}")
             if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
                 logger.error(f"Response: {e.response.text}")
             return False
