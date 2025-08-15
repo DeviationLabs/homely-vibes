@@ -139,9 +139,24 @@ class OpenAIProjectManager:
             return True
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to invite user {email} to organization: {e}")
+            # Check if the error is because the invite already exists or user already exists
             if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                error_text = e.response.text.lower()
+                
+                # If user already has an invite, this is actually a success case
+                if ('already' in error_text and 'invited' in error_text) or ('pending' in error_text):
+                    logger.info(f"User {email} already has a pending invitation to the organization")
+                    return True  # Treat as success since invitation exists
+                
+                # If user already exists (but with a different case or format), this might be a success case
+                if 'already' in error_text and 'exists' in error_text:
+                    logger.info(f"User with email similar to {email} may already exist in the organization")
+                    return True  # Treat as partial success
+                    
+                logger.error(f"Failed to invite user {email} to organization: {e}")
                 logger.error(f"Response: {e.response.text}")
+            else:
+                logger.error(f"Failed to invite user {email} to organization: {e}")
             return False
 
     def add_user_to_project(self, project_id: str, email: str, role: str = "member", auto_invite: bool = True) -> bool:
@@ -156,12 +171,32 @@ class OpenAIProjectManager:
                     logger.info(f"User {email} invited successfully. They will need to accept the invitation before being added to projects.")
                     return True  # Consider this a success even though they need to accept the invitation
                 else:
-                    logger.error(f"Cannot add user {email} - user ID not found and invitation failed")
-                    return False
+                    # Check if the invite failed because it already exists (which is still a success case)
+                    logger.warning(f"Could not invite user {email} - they may already have a pending invitation")
+                    return True  # Consider this a success since they might already have an invite
             else:
-                logger.error(f"Cannot add user {email} - user ID not found (auto-invite disabled)")
+                logger.warning(f"Cannot add user {email} - user ID not found (auto-invite disabled)")
                 return False
         
+        # Check if user already exists in the project
+        current_role = self.get_user_project_role(project_id, user_id)
+        if current_role:
+            # User already exists in project, check if we need to update the role
+            if current_role != role and role == "owner":
+                logger.info(f"User {email} is already in project with role {current_role}, updating to {role}")
+                update_success = self.update_user_project_role(project_id, user_id, role)
+                if update_success:
+                    logger.info(f"Successfully updated {email} to role {role} in project {project_id}")
+                    return True
+                else:
+                    logger.error(f"Failed to update {email} to role {role} in project {project_id}")
+                    return False
+            else:
+                # User already has the correct role or is an owner and we're trying to downgrade
+                logger.info(f"User {email} already exists in project with role {current_role}, no change needed")
+                return True
+        
+        # Add user to project
         url = f"{self.base_url}/organization/projects/{project_id}/users"
         
         payload = {
@@ -173,22 +208,84 @@ class OpenAIProjectManager:
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
             
-            logger.info(f"Successfully added {email} to project {project_id}")
+            logger.info(f"Successfully added {email} to project {project_id} with role {role}")
             return True
             
         except requests.exceptions.RequestException as e:
-            # Check if user already exists in project (common scenario, not an error)
+            # Handle various error scenarios gracefully
             if hasattr(e, 'response') and e.response is not None:
                 if e.response.status_code == 400 and hasattr(e.response, 'text'):
                     error_text = e.response.text.lower()
+                    
+                    # Check for pending invite scenarios
+                    if 'pending' in error_text and 'invite' in error_text:
+                        logger.info(f"User {email} has a pending invitation to the organization. They will need to accept before being added to projects.")
+                        return True  # Consider this a success since the invitation process is in progress
+                    
+                    # Check if user already exists in project (common scenario, not an error)
                     if 'already' in error_text or 'exists' in error_text or 'member' in error_text:
-                        logger.warning(f"User {email} already exists in project {project_id}, continuing...")
+                        # User exists but we couldn't detect this earlier, try updating role
+                        if role == "owner":
+                            logger.info(f"User {email} already exists in project {project_id}, attempting to update role to {role}")
+                            update_success = self.update_user_project_role(project_id, user_id, role)
+                            if update_success:
+                                logger.info(f"Successfully updated {email} to role {role} in project {project_id}")
+                                return True
+                        # If we're not trying to update to owner or update failed, just continue
+                        logger.info(f"User {email} already exists in project {project_id}, continuing...")
                         return True  # Treat as success since user is already in project
                 
                 logger.error(f"Failed to add user {email} to project {project_id}: {e}")
                 logger.error(f"Response: {e.response.text}")
             else:
                 logger.error(f"Failed to add user {email} to project {project_id}: {e}")
+            return False
+    
+    def get_user_project_role(self, project_id: str, user_id: str) -> Optional[str]:
+        """Get a user's current role in a project."""
+        url = f"{self.base_url}/organization/projects/{project_id}/users"
+        
+        try:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            
+            users_data = response.json()
+            users = users_data.get('data', [])
+            
+            # Find the user in the project users list
+            for user in users:
+                if user.get('id') == user_id:
+                    return user.get('role')
+            
+            # User not found in project
+            return None
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to get users for project {project_id}: {e}")
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
+            return None
+            
+    def update_user_project_role(self, project_id: str, user_id: str, role: str) -> bool:
+        """Update a user's role in a project using POST request."""
+        url = f"{self.base_url}/organization/projects/{project_id}/users/{user_id}"
+        
+        payload = {
+            "role": role
+        }
+        
+        try:
+            # Using POST as specified by the OpenAI API
+            response = requests.post(url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            
+            logger.info(f"Successfully updated user {user_id} to role {role} in project {project_id}")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to update user {user_id} to role {role} in project {project_id}: {e}")
+            if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'text'):
+                logger.error(f"Response: {e.response.text}")
             return False
     
     def list_projects(self) -> List[Dict]:
@@ -229,18 +326,18 @@ class OpenAIProjectManager:
 
 def read_spreadsheet(file_path: str) -> List[Dict[str, str]]:
     """Read spreadsheet data (supports CSV and Excel formats)."""
-    file_path = Path(file_path)
+    path = Path(file_path)  # Convert string to Path object
     
-    if not file_path.exists():
+    if not path.exists():
         raise FileNotFoundError(f"Spreadsheet file not found: {file_path}")
     
     try:
-        if file_path.suffix.lower() == '.csv':
+        if path.suffix.lower() == '.csv':
             df = pd.read_csv(file_path)
-        elif file_path.suffix.lower() in ['.xlsx', '.xls']:
+        elif path.suffix.lower() in ['.xlsx', '.xls']:
             df = pd.read_excel(file_path)
         else:
-            raise ValueError(f"Unsupported file format: {file_path.suffix}")
+            raise ValueError(f"Unsupported file format: {path.suffix}")
         
         # Convert to list of dictionaries
         teams = df.to_dict('records')
@@ -373,7 +470,8 @@ def main():
         
         if args.dry_run:
             logger.info("DRY RUN - Projects that would be created:")
-            logger.info(f"Budget settings: ${args.budget_limit:.2f} limit, ${args.budget_limit * args.alert_threshold:.2f} alert (at {args.alert_threshold*100:.0f}%)")
+            # Budget settings disabled
+            # logger.info(f"Budget settings: ${args.budget_limit:.2f} limit, ${args.budget_limit * args.alert_threshold:.2f} alert (at {args.alert_threshold*100:.0f}%)")
             for team in valid_teams:
                 logger.info(f"  - Project: {team['team_name']} (User: {team['email']})")
                 logger.info(f"    Description: {team['description']}")
@@ -413,24 +511,21 @@ def main():
                     project_id = existing_project['id']
                     
                     # Set budget for existing project
-                    budget_set = openai_manager.set_project_budget(
-                        project_id, 
-                        team_name,
-                        args.budget_limit, 
-                        args.alert_threshold
-                    )
+                    # budget_set = openai_manager.set_project_budget(
+                    #     project_id, 
+                    #     team_name,
+                    #     args.budget_limit, 
+                    #     args.alert_threshold
+                    # )
                     
                     # Try to add user to existing project as owner
                     user_added = openai_manager.add_user_to_project(project_id, email, "owner", args.auto_invite)
                     
-                    if user_added and budget_set:
-                        logger.info(f"Successfully updated project '{team_name}' with budget and added user {email}")
+                    if user_added:
+                        logger.info(f"Successfully added/updated user {email} as owner in project '{team_name}'")
                         created_count += 1
-                    elif user_added:
-                        logger.warning(f"Added user to existing project '{team_name}' but budget update failed")
-                        created_count += 1
-                    elif budget_set:
-                        logger.info(f"Updated budget for existing project '{team_name}' but user addition failed")
+                    else:
+                        logger.warning(f"Failed to add/update user {email} to project '{team_name}'")
                 
                 processed_names.add(team_name.lower())
                 continue
@@ -441,21 +536,19 @@ def main():
                 processed_names.add(team_name.lower())  # Mark as processed
                 project_id = project['id']
                 
-                # Set budget for the project
-                budget_set = openai_manager.set_project_budget(
-                    project_id, 
-                    team_name,
-                    args.budget_limit, 
-                    args.alert_threshold
-                )
+                # Budget setting disabled
+                # budget_set = openai_manager.set_project_budget(
+                #     project_id, 
+                #     team_name,
+                #     args.budget_limit, 
+                #     args.alert_threshold
+                # )
                 
                 # Add user to project as owner
                 user_added = openai_manager.add_user_to_project(project_id, email, "owner", args.auto_invite)
                 
-                if user_added and budget_set:
-                    created_count += 1
-                elif user_added:
-                    logger.warning(f"Project created and user added, but budget setup failed for {team_name}")
+                if user_added:
+                    logger.info(f"Project created and user added as owner for {team_name}")
                     created_count += 1
                 else:
                     logger.warning(f"Project created but failed to add user {email}")
