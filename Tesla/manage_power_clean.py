@@ -8,9 +8,9 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import List, Optional
-
+import importlib
 import Constants
-from lib import MyPushover
+import MyPushover
 from TeslaPy.teslapy import Tesla
 
 
@@ -276,9 +276,6 @@ class PowerwallManager:
             while True:
                 self.loop_count += 1
                 time.sleep(sleep_time)
-
-                # Reload constants for dynamic configuration
-                import importlib
 
                 importlib.reload(Constants)
 
