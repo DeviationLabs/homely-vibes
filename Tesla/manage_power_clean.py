@@ -56,7 +56,10 @@ class BatteryHistory:
         return sum(diffs) / len(diffs) if diffs else 0.0
 
     def extrapolate(self, time_sampling: float = 1.0) -> Optional[float]:
-        """Extrapolate next percentage based on history."""
+        """
+        Extrapolate next percentage based on history.
+        time_sampling is in minutes.
+        """
         if not self.percentages:
             return None
 
@@ -73,8 +76,9 @@ class PowerwallManager:
         self.battery_history = BatteryHistory()
         self.loop_count = 0
         self.fail_count = 0
+        self.cached_op_mode = None # APB: 5/25/23 seems we are no longer getting this data from the query
 
-    def send_notification(self, message: str) -> None:
+    def send_pushover(self, message: str) -> None:
         """Send notification via configured channels."""
         if self.send_notifications:
             try:
@@ -100,16 +104,17 @@ class PowerwallManager:
                 pct = max(min(extrapolated, 100), 0)
                 pct = round(pct, 2)
 
-        if pct != original_pct:
+        # Add to history (use original if non-zero, otherwise sanitized)
+        self.battery_history.add_percentage(original_pct if original_pct != 0 else pct)
+
+        if abs(pct - original_pct) > 0.5:
             logging.warning(
                 f"Bad battery data: {original_pct}% -> {pct}% "
                 f"from history {self.battery_history.percentages}"
             )
+            return pct
 
-        # Add to history (use original if non-zero, otherwise sanitized)
-        self.battery_history.add_percentage(original_pct if original_pct != 0 else pct)
-
-        return pct
+        return original_pct
 
     def evaluate_condition(
         self, current: float, threshold: float, direction_up: bool
@@ -176,8 +181,10 @@ class PowerwallManager:
         changes_made = False
 
         # Update operation mode if needed
-        if data["operation_mode"] != decision_point.op_mode:
+        current_op_mode = data.get("operation_mode", self.cached_op_mode)
+        if current_op_mode != decision_point.op_mode:
             status = product.set_operation(decision_point.op_mode)
+            self.cached_op_mode = decision_point.op_mode
             status_messages.append(f"Mode: {status} {decision_point.op_mode}")
             changes_made = True
 
@@ -199,10 +206,7 @@ class PowerwallManager:
             changes_made = True
 
         # Send notification for reserve changes
-        if (
-            status_messages
-            and len([msg for msg in status_messages if "Reserve:" in msg]) > 0
-        ):
+        if changes_made:
             message = (
                 f"At: {data['battery_percent']}%, {decision_point.reason} - "
                 f"{' | '.join(status_messages)}"
@@ -210,7 +214,7 @@ class PowerwallManager:
             logging.warning(message)
 
             if self.send_notifications or decision_point.always_notify:
-                self.send_notification(message)
+                self.send_pushover(message)
 
         return changes_made
 
@@ -269,7 +273,7 @@ class PowerwallManager:
             product = tesla.battery_list()[0]
             site_name = product["site_name"]
             logging.info(f"Connected to site: {site_name}")
-            self.send_notification(f"Powerwall monitoring started for: {site_name}")
+            self.send_pushover(f"Powerwall monitoring started for: {site_name}")
 
             sleep_time = 0
 
@@ -344,7 +348,7 @@ def main() -> None:
         "-q", "--quiet", action="store_true", help="Suppress stdout logging"
     )
     parser.add_argument(
-        "--send-notification",
+        "--send-notifications",
         action="store_true",
         help="Enable notifications via Pushover",
     )
@@ -354,13 +358,13 @@ def main() -> None:
     setup_logging(args.debug, args.quiet)
 
     try:
-        manager = PowerwallManager(args.email, args.send_notification)
+        manager = PowerwallManager(args.email, args.send_notifications)
         manager.run_monitoring_loop()
 
     except EnvironmentError as e:
         error_msg = f"Tesla token expired? Run TeslaPy gui.py. Error: {e}"
         logging.error(error_msg)
-        manager.send_notification("Tesla token expired - run TeslaPy gui.py")
+        manager.send_pushover("Tesla token expired - run TeslaPy gui.py")
 
     except Exception as e:
         import traceback
@@ -368,7 +372,7 @@ def main() -> None:
         tb_str = traceback.format_exc()
         logging.error(f"Unexpected error: {e}\nTraceback:\n{tb_str}")
         if "manager" in locals():
-            manager.send_notification(f"Powerwall monitoring error: {e}")
+            manager.send_pushover(f"Powerwall monitoring error: {e}")
 
     finally:
         logging.error("Exiting after 1-hour delay to prevent respawn churn")
