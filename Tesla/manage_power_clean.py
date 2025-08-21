@@ -181,7 +181,7 @@ class PowerwallManager:
         changes_made = False
 
         # Update operation mode if needed
-        current_op_mode = data.get("operation_mode", self.cached_op_mode)
+        current_op_mode = data.get("operation_mode") or self.cached_op_mode
         if current_op_mode != decision_point.op_mode:
             status = product.set_operation(decision_point.op_mode)
             self.cached_op_mode = decision_point.op_mode
@@ -281,7 +281,7 @@ class PowerwallManager:
                 self.loop_count += 1
                 time.sleep(sleep_time)
 
-                importlib.reload(Constants)
+                importlib.reload(Constants) # hot refresh on config.
 
                 current_time = time.localtime()
                 poll_time = Constants.POWERWALL_POLL_TIME
