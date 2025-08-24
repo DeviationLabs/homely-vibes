@@ -8,11 +8,11 @@ version = "0.1.0"
 description = "Home automation and monitoring system"
 authors = ["Amit Butala <amit@example.com>"]
 readme = "README.md"
-packages = [{include = "lib"}, {include = "Tesla"}, {include = "WaterParser"}, {include = "RAG"}]
+packages = [{include = "lib"}, {include = "Tesla"}, {include = "WaterParser"}, {include = "Bimpop.ai"}]
 
 [tool.poetry.dependencies]
 python = ">=3.13,<4.0"
-requests = "^2.25.0"
+requests = "^2.31.0"
 teslapy = "^2.6.0"
 openai = "^1.0.0"
 pandas = "^2.2.0"
@@ -20,6 +20,15 @@ numpy = "^2.0.0"
 Pillow = "^10.0.0"
 python-dotenv = "^0.19.0"
 pydantic = "^2.0.0"
+openpyxl = "^3.1.0"
+fastapi = "^0.100.0"
+langchain = "^0.1.0"
+langchain-openai = "^0.1.0"
+langchain-pinecone = "^0.1.0"
+pinecone-client = "^3.0.0"
+tiktoken = "^0.5.0"
+urllib3 = "2.5.0"
+uvicorn = "^0.23.0"
 
 [tool.poetry.group.streamlit.dependencies]
 streamlit = "^1.20.0"
@@ -38,7 +47,7 @@ mypy = "^1.0.0"
 isort = "^5.10.0"
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "WaterParser", "RAG"]
+testpaths = ["Tesla", "WaterParser", "Bimpop.ai"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
