@@ -33,18 +33,37 @@ class FlumeClient:
         self,
         access_token: Optional[str] = None,
         device_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ):
         """Initialize Flume client.
 
         Args:
             access_token: Flume access token (defaults to FLUME_ACCESS_TOKEN env var)
             device_id: Optional specific device ID (defaults to first active device)
+            client_id: OAuth client ID (defaults to FLUME_CLIENT_ID env var)
+            client_secret: OAuth client secret (defaults to FLUME_CLIENT_SECRET env var)
+            username: Flume username (defaults to FLUME_USERNAME env var)
+            password: Flume password (defaults to FLUME_PASSWORD env var)
         """
         self.access_token = access_token or os.getenv("FLUME_ACCESS_TOKEN")
         self._device_id = device_id or os.getenv("FLUME_DEVICE_ID")
+        
+        # OAuth credentials
+        self.client_id = client_id or os.getenv("FLUME_CLIENT_ID")
+        self.client_secret = client_secret or os.getenv("FLUME_CLIENT_SECRET")
+        self.username = username or os.getenv("FLUME_USERNAME")
+        self.password = password or os.getenv("FLUME_PASSWORD")
 
+        # If no access token provided, try to authenticate with credentials
         if not self.access_token:
-            raise ValueError("Flume access_token required")
+            if not all([self.client_id, self.client_secret, self.username, self.password]):
+                raise ValueError(
+                    "Either access_token or all OAuth credentials (client_id, client_secret, username, password) are required"
+                )
+            self.access_token = self._get_access_token()
 
         self.headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -54,6 +73,26 @@ class FlumeClient:
         # Cache for device info
         self._devices: Optional[List[Device]] = None
         self._primary_device_id: Optional[str] = None
+
+    def _get_access_token(self) -> str:
+        """Get access token using OAuth2 Resource Owner Credentials Grant."""
+        url = "https://api.flumewater.com/oauth/token"
+        
+        payload = {
+            "grant_type": "password",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "username": self.username,
+            "password": self.password,
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        
+        token_data = response.json()
+        return token_data["access_token"]
 
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""
