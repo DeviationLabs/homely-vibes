@@ -1,8 +1,9 @@
 # Homely Vibes - IoT Home Automation
 
+
 ## Folder Descriptions
 
-- **Bimpop.ai/** - RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend
+- **Bimpop.ai/** - RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. This was a startup idea - Business intelligence for `Mom-n-Pop` stores. 
 - **BrowserAlert/** - Web usage monitoring and alerting system for tracking browsing activity
 - **GarageCheck/** - Machine learning-based garage door status detection using image classification
 - **LambdaEmailFwder/** - AWS Lambda function for email forwarding and processing
