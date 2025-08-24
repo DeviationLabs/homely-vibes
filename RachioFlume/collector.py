@@ -25,7 +25,9 @@ class WaterTrackingCollector:
         """
         self.db = WaterTrackingDB(db_path)
         self.rachio_client = RachioClient()
+        self.logger.info("Rachio client initialized")
         self.flume_client = FlumeClient()
+        self.logger.info("Flume client initialized")
         self.poll_interval = poll_interval_seconds
 
         # Setup logging
