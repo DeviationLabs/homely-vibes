@@ -1,12 +1,33 @@
 title: "Homely Vibes"
-description: "IoT Home Automation and Monitoring System"
+description: "IoT Home Automation and Monitoring System with ML-powered Analytics"
 url: "https://homely-vibes.deviationlabs.com"
+baseurl: ""
+
+# GitHub integration
+github:
+  repository_url: "https://github.com/abutala/homely-vibes"
+  is_project_page: true
+
+# SEO and social
+author: "Amit Butala"
+twitter:
+  username: abutala
+social:
+  name: "Amit Butala"
+  links:
+    - "https://github.com/abutala"
 
 remote_theme: pages-themes/cayman@v0.2.0
 plugins:
 - jekyll-remote-theme
 - jekyll-seo-tag
 - jekyll-readme-index
+
+# Enable HTML in markdown for better styling
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
 
 # Exclude directories that contain application code, not website content
 exclude:
