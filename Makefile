@@ -10,7 +10,7 @@ WHITE  := $(shell tput -Txterm setaf 7)
 CYAN   := $(shell tput -Txterm setaf 6)
 RESET  := $(shell tput -Txterm sgr0)
 
-PYTHON_VERSION ?= 3.12.3
+PYTHON_VERSION ?= 3.13.7
 
 all: help
 
@@ -22,10 +22,9 @@ setup-noshell:
 	    echo "Found python version: $$(python3 -V)"; \
 		echo "${RED}Recommended python version not in path${RESET}\n${YELLOW}Please review the README.md for setup instructions${RESET}" && exit 1; \
 	fi
-	@brew install libomp pre-commit yamllint docker colima -q
-	@make colima
+	@brew install libomp pre-commit yamllint -q
 	@echo "📥 Installing project dependencies for $(PYTHON_VERSION)..."
-	@./.buildkite/scripts/install_deps.sh $(PYTHON_VERSION)
+	@poetry install
 	@echo "🔧 Setting up git hooks..."
 	@make hooks
 	@poetry self add "poetry-plugin-shell[poetry-plugin]" # for backwards compatibility
