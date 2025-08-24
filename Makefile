@@ -24,16 +24,16 @@ setup:
 	fi
 	@brew install libomp pre-commit yamllint -q
 	@echo "📥 Installing project dependencies for $(PYTHON_VERSION)..."
-	@poetry install
+	@uv sync
 	@echo "🔧 Setting up git hooks..."
 	@make hooks
 
 ## Environment setup:
 setup-with-shell: ## Setup the development environment
 	@make setup
-	@poetry self add "poetry-plugin-shell[poetry-plugin]" # for backwards compatibility
-	@echo "${GREEN}✨ Done! Activating the virtual environment with: poetry shell${RESET}"
-#	@poetry shell
+	# uv doesn't need shell plugins
+	@echo "${GREEN}✨ Done! Activating the virtual environment with: source .venv/bin/activate${RESET}"
+#	@source .venv/bin/activate
 
 colima: ## Start colima if not already running
 	@echo "🐳 Checking colima status..."
@@ -62,7 +62,7 @@ colima: ## Start colima if not already running
 
 test: ## Run the tests
 	@echo "🧪 Running the tests"
-	@poetry run pytest
+	@uv run pytest
 	@echo "${GREEN}Tests completed successfully.${RESET}"
 
 coverage: ## Run the tests with coverage
@@ -104,54 +104,54 @@ lint-fix: ## Run all the linters and fix the issues
 
 codespell: ## Run codespell against the project and fix any errors found
 	@echo "📝 Running codespell"
-	@poetry run codespell -w --skip="dist,docs"
+	@uv run codespell -w --skip="dist,docs"
 	@echo "${GREEN}Codespell completed successfully.${RESET}"
 
 codespell-check: ## Check codespell against the project
 	@echo "📝 Running codespell"
-	@poetry run codespell --skip="dist,docs"
+	@uv run codespell --skip="dist,docs"
 	@echo "${GREEN}Codespell check completed successfully.${RESET}"
 
 deptry: ## Run deptry on the project
 	@echo "🔎 Running deptry"
-	@poetry run deptry . || echo "${YELLOW}⚠️  deptry found issues${RESET}"
+	@uv run deptry . || echo "${YELLOW}⚠️  deptry found issues${RESET}"
 	@echo "${GREEN}deptry completed successfully.${RESET}"
 
 ruff: ## Use ruff on the project
 	@echo "🔎 Performing static code analysis"
-	@poetry run ruff check --fix
+	@uv run ruff check --fix
 	@echo "${GREEN}Static code analysis completed successfully.${RESET}"
 
 ruff-check: ## Check the project with ruff
 	@echo "🔎 Checking the project with ruff"
-	@poetry run ruff check
+	@uv run ruff check
 	@echo "${GREEN}Project checked with ruff successfully.${RESET}"
 
 
 mypy: ## Run mypy on the project
 	@echo "🔎 Running mypy"
-	@poetry run mypy . || echo "${YELLOW}⚠️  mypy found issues${RESET}"
+	@uv run mypy . || echo "${YELLOW}⚠️  mypy found issues${RESET}"
 	@echo "${GREEN}mypy completed successfully.${RESET}"
 
 
 vulture: ## Run vulture on the project to detect dead code
 	@echo "🔎 Running vulture"
-	@poetry run vulture . --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
+	@uv run vulture . --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
 	@echo "${GREEN}vulture completed successfully.${RESET}"
 
 semgrep: ## Run semgrep security analysis
 	@echo "🔒 Running semgrep"
-	@poetry run semgrep --config=auto . || echo "${YELLOW}⚠️  semgrep found issues${RESET}"
+	@uv run semgrep --config=auto . || echo "${YELLOW}⚠️  semgrep found issues${RESET}"
 	@echo "${GREEN}semgrep completed successfully.${RESET}"
 
 ruff-format: ## Format the code of the project
 	@echo "✨ Applying code formatting with ruff"
-	@poetry run ruff format
+	@uv run ruff format
 	@echo "${GREEN}Code formatted successfully.${RESET}"
 
 ruff-format-check: ## Check the code formatting of the project
 	@echo "🔍 Checking code formatting with ruff"
-	@poetry run ruff format --check
+	@uv run ruff format --check
 	@echo "${GREEN}Code formatting check completed successfully.${RESET}"
 
 ## Hooks:
@@ -163,8 +163,7 @@ hooks: ## Set up all the hooks
 
 clean: ## clean
 	@echo "🧹 ${YELLOW} Cleaning up...${RESET}"
-	@venv_dir="$(shell poetry env info -p)" && \
-		if [ -d "$$venv_dir" ]; then echo "Purging venv_dir: $$venv_dir"; rm -rf "$${venv_dir}"; \
+	@if [ -d ".venv" ]; then echo "Purging .venv directory"; rm -rf ".venv"; \
 		else echo "No virtual env found"; fi || true
 	@git clean -dfx __pycache__/ *.pyc *.pyo *.pyd .pytest_cache/ .mypy_cache/ .ruff_cache/ .dmypy.json
 	@echo "${GREEN}✅ Cleaned successfully.${RESET}"
@@ -193,7 +192,7 @@ yamllint:
     
 validate-jobs-yaml:
 	@echo "🔎 Running jobs yaml validation"
-	@poetry run python ml_etl/scripts/validate_jobs_yaml.py \
+	@uv run python ml_etl/scripts/validate_jobs_yaml.py \
 	  && echo "${GREEN}✅  Jobs yaml validation passed.${RESET}" \
 	  || (echo "${RED}❌ Please fix errors in jobs yaml${RESET}" && exit 1)
 

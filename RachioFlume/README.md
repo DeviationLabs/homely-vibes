@@ -38,8 +38,8 @@ FLUME_PASSWORD=your_flume_password
 # Install dependencies
 pip install -r requirements.txt
 
-# Or using poetry (if available in parent project)
-poetry install
+# Or using uv (from parent project root)
+uv sync
 ```
 
 ## Usage
