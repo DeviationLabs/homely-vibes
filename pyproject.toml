@@ -53,6 +53,72 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["lib", "Tesla", "WaterParser", "Bimpop.ai"]
 
+[tool.deptry]
+known_first_party = [
+    "Constants",
+    "Mailer", 
+    "MyPushover",
+    "MyTwilio",
+    "NetHelpers",
+    "FoscamImager",
+    "TFOneShot",
+    "EmailMyIP",
+    # Project-specific modules
+    "rachio_client",
+    "flume_client",
+    "data_storage",
+    "collector",
+    "reporter",
+    "logger",
+    "PumpReport",
+    "PumpStatsWriter", 
+    "TuyaLogParser",
+    "utils",  # for Bimpop.ai/fe/utils.py
+]
+# Ignore missing dependencies that are optional or environment-specific
+[tool.deptry.per_rule_ignores]
+DEP001 = [
+    "aiy",
+    "google_auth_oauthlib", 
+    "pinecone",
+    "langchain_pinecone",
+    "streamlit",
+    "tld",
+    "tensorflow", 
+    "keras",
+    "tesla_api",
+    "tesla_powerwall",
+    "foscam",
+    "matplotlib",
+    "twilio",
+    "paramiko",
+    "cv2"
+]
+DEP002 = [
+    # Dev tools that aren't imported directly
+    "pytest-cov",
+    "pytest-asyncio", 
+    "pytest-mock",
+    "black",
+    "flake8",
+    "mypy",
+    "isort",
+    "vulture",
+    "semgrep",
+    "codespell",
+    "deptry",
+    # Optional dependencies not used in all modules
+    "teslapy",
+    "Pillow",
+    "python-dotenv",
+    "openpyxl", 
+    "urllib3",
+    "cffi",
+    "asyncio-mqtt"
+]
+DEP003 = ["google", "TeslaPy"]
+exclude = ["tests", ".venv", "backups"]
+
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "WaterParser", "Bimpop.ai"]
 python_files = ["test_*.py", "*_test.py"]
