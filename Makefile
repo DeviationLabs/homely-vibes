@@ -27,13 +27,7 @@ setup:
 	@uv sync
 	@echo "🔧 Setting up git hooks..."
 	@make hooks
-
-## Environment setup:
-setup-with-shell: ## Setup the development environment
-	@make setup
-	# uv doesn't need shell plugins
 	@echo "${GREEN}✨ Done! Activating the virtual environment with: source .venv/bin/activate${RESET}"
-#	@source .venv/bin/activate
 
 colima: ## Start colima if not already running
 	@echo "🐳 Checking colima status..."
@@ -99,7 +93,6 @@ lint-fix: ## Run all the linters and fix the issues
 	@make semgrep
 	@make codespell
 	@make deptry
-	@make check-project-readmes
 	@echo "${GREEN}All linters fixed successfully.${RESET}"
 
 codespell: ## Run codespell against the project and fix any errors found
@@ -144,16 +137,6 @@ semgrep: ## Run semgrep security analysis
 	@uv run semgrep --config=auto . || echo "${YELLOW}⚠️  semgrep found issues${RESET}"
 	@echo "${GREEN}semgrep completed successfully.${RESET}"
 
-ruff-format: ## Format the code of the project
-	@echo "✨ Applying code formatting with ruff"
-	@uv run ruff format
-	@echo "${GREEN}Code formatted successfully.${RESET}"
-
-ruff-format-check: ## Check the code formatting of the project
-	@echo "🔍 Checking code formatting with ruff"
-	@uv run ruff format --check
-	@echo "${GREEN}Code formatting check completed successfully.${RESET}"
-
 ## Hooks:
 hooks: ## Set up all the hooks
 	@echo "🔧 Setting up pre-commit hooks"
@@ -179,9 +162,6 @@ help:
 		else if (/^## .*$$/) {printf "  ${CYAN}%s${RESET}\n", substr($$1,4)} \
 		}' $(MAKEFILE_LIST)
 
-## Databricks:
-start-sync-databricks:
-	@echo "${RED} This command has been renamed to 'captain start-sync-databricks'.${RESET}"
 
 yamllint:
 	@echo "🔎 Running yamllint"
@@ -199,13 +179,9 @@ validate-jobs-yaml:
 .PHONY: all \
 	setup \
 	test coverage coverage-lcov coverage-html \
-    lint lint-fix codespell codespell-check deptry \
-	ruff ruff-check mypy vulture \
-    format ruff-format format-check ruff-format-check \
-	hooks pre-commit clean \
-	seed new-seed \
-	schema-migration \
+	lint lint-fix codespell codespell-check deptry \
+	ruff ruff-check ruff-format ruff-format-check mypy vulture semgrep \
+	hooks clean \
 	colima \
-	start-sync-databricks \
-	yamllint jobs-yaml-validation \
+	yamllint validate-jobs-yaml \
 	help

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "homely-vibes"
-version = "0.1.0"
+version = "3.0.0"
 description = "Home automation and monitoring system"
 authors = [{name = "Amit Butala", email = "abutala@deviationlabs.com"}]
 readme = "README.md"
