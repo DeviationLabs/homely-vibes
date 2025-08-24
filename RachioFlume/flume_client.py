@@ -6,6 +6,8 @@ from typing import Optional, List, Dict, Any
 import requests
 from pydantic import BaseModel
 
+from logger import get_logger
+
 
 class WaterReading(BaseModel):
     """Water consumption reading."""
@@ -64,9 +66,13 @@ class FlumeClient:
 
         # Cache for device info
         self._devices: Optional[List[Device]] = None
+        
+        # Setup logging
+        self.logger = get_logger(__name__)
 
     def _get_access_token(self) -> str:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
+        self.logger.info("Authenticating with Flume API using OAuth2")
         url = "https://api.flumewater.com/oauth/token"
         
         payload = {
@@ -83,11 +89,13 @@ class FlumeClient:
         response.raise_for_status()
         
         token_data = response.json()
+        self.logger.info("Successfully obtained access token from Flume API")
         return token_data["access_token"]
 
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""
         if self._devices is not None:
+            self.logger.debug("Returning cached device list")
             return self._devices
 
         url = f"{self.BASE_URL}/users/me/devices"
@@ -115,6 +123,7 @@ class FlumeClient:
             )
 
         self._devices = devices
+        self.logger.info(f"Found {len(devices)} Flume devices: {[d.name for d in devices]}")
         return devices
 
 
@@ -140,6 +149,8 @@ class FlumeClient:
         # Format datetimes for Flume API
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        self.logger.info(f"Querying usage data from {len(devices)} devices for period {start_str} to {end_str}")
 
         for device in devices:
             url = f"{self.BASE_URL}/users/me/devices/{device.id}/query"
@@ -173,11 +184,12 @@ class FlumeClient:
 
             except requests.RequestException as e:
                 # Log error but continue with other devices
-                print(f"Failed to get usage for device {device.name} ({device.id}): {e}")
+                self.logger.error(f"Failed to get usage for device {device.name} ({device.id}): {e}")
                 continue
 
         # Sort readings by timestamp
         all_readings.sort(key=lambda x: x.timestamp)
+        self.logger.info(f"Retrieved {len(all_readings)} total water readings across all devices")
         return all_readings
 
     def get_current_usage_rate(self) -> Optional[float]:

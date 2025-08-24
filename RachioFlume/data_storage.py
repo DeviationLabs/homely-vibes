@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 from rachio_client import WateringEvent, Zone
 from flume_client import WaterReading
+from logger import get_logger
 
 
 class WaterTrackingDB:
@@ -20,10 +21,13 @@ class WaterTrackingDB:
             db_path: Path to SQLite database file
         """
         self.db_path = Path(db_path)
+        self.logger = get_logger(__name__)
+        self.logger.info(f"Initializing water tracking database at {self.db_path}")
         self.init_database()
 
     def init_database(self) -> None:
         """Create database tables if they don't exist."""
+        self.logger.debug("Initializing database tables")
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -115,6 +119,7 @@ class WaterTrackingDB:
 
     def save_zones(self, zones: List[Zone]) -> None:
         """Save or update zones in database."""
+        self.logger.info(f"Saving {len(zones)} zones to database")
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -134,9 +139,15 @@ class WaterTrackingDB:
                 )
 
             conn.commit()
+            self.logger.debug(f"Successfully saved {len(zones)} zones")
 
     def save_watering_events(self, events: List[WateringEvent]) -> None:
         """Save watering events to database."""
+        if not events:
+            self.logger.debug("No watering events to save")
+            return
+        
+        self.logger.info(f"Saving {len(events)} watering events to database")
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
@@ -160,6 +171,11 @@ class WaterTrackingDB:
 
     def save_water_readings(self, readings: List[WaterReading]) -> None:
         """Save water readings to database."""
+        if not readings:
+            self.logger.debug("No water readings to save")
+            return
+        
+        self.logger.info(f"Saving {len(readings)} water readings to database")
         with self.get_connection() as conn:
             cursor = conn.cursor()
 

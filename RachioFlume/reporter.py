@@ -6,6 +6,7 @@ from typing import Dict, List, Any
 from pathlib import Path
 
 from data_storage import WaterTrackingDB
+from logger import get_logger
 
 
 class WeeklyReporter:
@@ -18,6 +19,8 @@ class WeeklyReporter:
             db_path: Path to SQLite database
         """
         self.db = WaterTrackingDB(db_path)
+        self.logger = get_logger(__name__)
+        self.logger.info("Weekly reporter initialized")
 
     def generate_weekly_report(self, week_start: datetime) -> Dict[str, Any]:
         """Generate a comprehensive weekly report.
@@ -29,6 +32,7 @@ class WeeklyReporter:
             Dict containing weekly statistics
         """
         week_end = week_start + timedelta(days=7)
+        self.logger.info(f"Generating weekly report for {week_start.date()} to {week_end.date()}")
 
         # Get zone statistics
         zone_stats = self.db.get_weekly_zone_stats(week_start)
