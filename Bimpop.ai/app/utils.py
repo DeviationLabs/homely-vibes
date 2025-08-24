@@ -72,7 +72,6 @@ def get_chunks(text):
     logger.warning(f"got the following count of chunks: {len(texts)}")
     return texts
 
-import tiktoken
 
 tokenizer = tiktoken.get_encoding('cl100k_base')
 
@@ -139,7 +138,7 @@ def build_query_prompt(input_texts):
     messages = [
             {
                 "role": "system",
-                "content": f"You are a helpful assistant: Summirizerthat analyzes the given context from a set of documents. Then, you create a summary of all the information provided. Please keep your summary under 200 words"
+                "content": "You are a helpful assistant: Summirizerthat analyzes the given context from a set of documents. Then, you create a summary of all the information provided. Please keep your summary under 200 words"
             },
             {
                 "role": "user",
@@ -151,7 +150,7 @@ def build_query_prompt(input_texts):
             },
             {
                 "role": "user",
-                "content": f"Please summarize in a structured manner."
+                "content": "Please summarize in a structured manner."
             },
         ]
     return messages

@@ -1,11 +1,8 @@
 from fastapi import APIRouter, Depends
 from fastapi import status
 import logging
-from typing import Any
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
-import os
-import json
 from . import utils
 
 
@@ -32,7 +29,7 @@ def index(request: IndexerRequest):
                 embedding=utils.get_embedding(chunk)
                 utils.insert_db(chunk, embedding)
             return JSONResponse(content={"success": True})
-        except Exception as e:
+        except Exception:
             logger.error("Indexing failed")
             return JSONResponse(content={"error": "Indexing failed"})
     except Exception as e:

@@ -38,7 +38,7 @@ if __name__ == "__main__":
     PumpStatsWriter.writeFromSummary()
 
     PumpReport.genSendMessage(args.always_email)
-  except Exception as e:
+  except Exception:
     msg="Something failed in script execution:\n%s" % traceback.format_exc()
     logging.error(msg)
     Mailer.sendmail(topic="[PumpStats]", alert=True, message=msg, always_email=True)

@@ -38,7 +38,7 @@ def run_monitor_one_shot(client, origin_file, ignore_patterns):
   remote_cmd += f' && rm {temp_dest}'
   msg = NetHelpers.ssh_cmd_v2(client, remote_cmd)
 
-  response = msg.split("\n");
+  response = msg.split("\n")
   msg = f"{response[0]}\n"
   for record in reversed(response[1:]):
     data = record.split("|")
@@ -51,10 +51,10 @@ def run_monitor_one_shot(client, origin_file, ignore_patterns):
       # We've already digested this record
       continue
     elif re.search(ignore_patterns, data[2]):
-      msg += f"Ignoring: "
+      msg += "Ignoring: "
     elif any([re.search(pattern, data[2]) for pattern in Constants.BLACKLIST]):
       alert = True
-      msg += f"ALERT!! "
+      msg += "ALERT!! "
       res = get_tld(data[2], as_object=True) #Get the root as an object
       matched = res.fld
     msg += f"[{data[1]}] {data[2]})\n"
@@ -113,10 +113,10 @@ if __name__ == "__main__":
     msg = refresh_dns_cache(client)
     print(f"Refreshed DNS at {msg}")
     print(f"Start monitoring after {args.start_after_seconds} seconds ...")
-  except Exception as e:
+  except Exception:
     client = None
-    print(f"Machine offline, but still continuing...")
-    logging.info(f"Machine offline, but still continuing...")
+    print("Machine offline, but still continuing...")
+    logging.info("Machine offline, but still continuing...")
 
   cool_down_attempts = Constants.MIN_REPORTING_GAP
 
@@ -134,7 +134,8 @@ if __name__ == "__main__":
       host = Constants.NODES[args.machine]
       (alert, msg, matched) = run_monitor_one_shot(client, host["histfile"], host.get("whitelist", ""))
       if only_ssh_fails_count > SSH_ALERT_DELAY_COUNT:
-        MyTwilio.sendsms(rcpt, f"[Success][{args.machine}] Ssh failure has self healed")
+        for rcpt in host["sms_inform"]:
+          MyTwilio.sendsms(rcpt, f"[Success][{args.machine}] Ssh failure has self healed")
       only_ssh_fails_count = 0
     except Exception as e:
       msg = f'{e}'

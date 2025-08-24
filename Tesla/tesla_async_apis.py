@@ -44,9 +44,6 @@ def initialize():
         password = Constants.TESLA_PASSWORD
     return email, password, token
 
-async def save_token(token):
-    open("token_file", "w").write(token)
-
 if __name__ == "__main__":
     email, password, token = initialize()
     asyncio.run(main_vehicle(email, password, token))

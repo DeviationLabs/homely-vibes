@@ -2,7 +2,7 @@
 
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Any
+from typing import Dict, Any
 from pathlib import Path
 
 from data_storage import WaterTrackingDB
@@ -114,19 +114,19 @@ class WeeklyReporter:
     def print_report(self, report: Dict[str, Any]) -> None:
         """Print report in a readable format."""
         print("\\n" + "=" * 60)
-        print(f"WEEKLY WATER USAGE REPORT")
+        print("WEEKLY WATER USAGE REPORT")
         print(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
         print("=" * 60)
 
         summary = report["summary"]
-        print(f"\\nSUMMARY:")
+        print("\\nSUMMARY:")
         print(f"  Total watering sessions: {summary['total_watering_sessions']}")
         print(f"  Total duration: {summary['total_duration_hours']} hours")
         print(f"  Total water used: {summary['total_water_used_gallons']} gallons")
         print(f"  Zones watered: {summary['zones_watered']}")
 
         if report["zones"]:
-            print(f"\\nZONE DETAILS:")
+            print("\\nZONE DETAILS:")
             print(
                 f"{'Zone':<4} {'Name':<20} {'Sessions':<8} {'Duration(h)':<12} {'Water(gal)':<12} {'Avg Rate(gpm)':<14}"
             )

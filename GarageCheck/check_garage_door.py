@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import logging
-import json
 import os
 import sys
 import traceback
@@ -9,7 +8,6 @@ import time
 import Constants
 import FoscamImager
 import Mailer
-import NetHelpers
 # import TFOneShot ## Imported on demand
 
 if __name__ == "__main__":
@@ -54,7 +52,7 @@ if __name__ == "__main__":
       ts = time.strftime("%Y-%m-%d_%H-%M-%S", currtime)
 
       filename = None
-      if args.save_image == True:
+      if args.save_image:
         filename = "%s/Garage_%s.jpg" % (args.out_dir, ts)
         print("Saving image to %s" % filename)
       img = mycam.getImage(filename)
@@ -72,7 +70,7 @@ if __name__ == "__main__":
         send_email = args.always_email
         mycam.reset_errcount()
 
-    except Exception as e:
+    except Exception:
       msg += traceback.format_exc()
       logging.error(traceback.format_exc())
       send_email = True

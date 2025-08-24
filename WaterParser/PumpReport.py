@@ -56,7 +56,7 @@ def genSendMessage(always_email):
       aggregatedPumpTime += record.get('totalPumpTime', 0)
     for zoneNumStr, zoneStats in zonesStats.items():
       latestZoneStats = latest[zoneNumStr]
-      pumpRate = zoneStats.get('pumpRate', 0)
+      zoneStats.get('pumpRate', 0)
       pumpTime = zoneStats.get('pumpTime', 0)
       runTime = zoneStats.get('runTime', 0)
       if latestZoneStats['zoneName'] is None:

@@ -5,7 +5,6 @@ from tesla_powerwall import Powerwall
 #from tesla_powerwall import User
 #from tesla_powerwall import API
 #from tesla_powerwall.helpers import assert_attribute ## PW status
-from tesla_powerwall.helpers import convert_to_kw
 
 import Constants
 
@@ -115,7 +114,7 @@ meters.battery.is_active(precision=5)
 13667
 '''
 
-import pdb; pdb.set_trace()
+# import pdb; pdb.set_trace()  # Debug statement commented out
 try:
     powerwall.logout()
 except Exception as e:

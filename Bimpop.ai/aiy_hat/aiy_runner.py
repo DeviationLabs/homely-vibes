@@ -27,7 +27,6 @@ code doesn't need to record audio.
 """
 
 import logging
-import platform
 import sys
 import threading
 
@@ -40,7 +39,6 @@ from aiy.voice import tts
 
 # import requests module
 import requests
-from requests.auth import HTTPBasicAuth
 from urllib.parse import urljoin
 # BASE_URL = "https://aiybackend.deviationlabs.com:8080/api/v1/"
 BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/" # APB: why is this not 8080? Dunno? AWS App runner sucks!
@@ -116,7 +114,7 @@ class MyAssistant:
             text = event._args.get("text")
             logging.info(f"After {event.type}, got: {text}")
             if text and text in ['summarize']:
-                self._summarize(summarize)
+                self._summarize(text)
             elif text:
                 self._index_text(text)
             else:
