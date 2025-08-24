@@ -5,16 +5,19 @@ from tesla_api import TeslaApiClient
 
 import Constants
 
+
 async def save_token(token):
     open("token_file", "w").write(token)
+
 
 async def main():
     async with TeslaApiClient(email, password, on_new_token=save_token) as client:
         await client.authenticate()
 
+
 async def main_vehicle(email, password, token):
     async with TeslaApiClient(
-            email, password, token, on_new_token=save_token
+        email, password, token, on_new_token=save_token
     ) as client:
         vehicles = await client.list_vehicles()
         for v in vehicles:
@@ -23,17 +26,16 @@ async def main_vehicle(email, password, token):
 
 
 async def main_energy(email, password, token):
-    client = TeslaApiClient(
-            email, password, token, on_new_token=save_token
-    )
+    client = TeslaApiClient(email, password, token, on_new_token=save_token)
     energy_sites = await client.list_energy_sites()
     print("Number of energy sites = %d" % (len(energy_sites)))
-    assert(len(energy_sites)==1)
+    assert len(energy_sites) == 1
     reserve = await energy_sites[0].get_backup_reserve_percent()
     print("Backup reserve percent = %d" % (reserve))
     print("Increment backup reserve percent")
-    await energy_sites[0].set_backup_reserve_percent(reserve+1)
+    await energy_sites[0].set_backup_reserve_percent(reserve + 1)
     client.close()
+
 
 def initialize():
     email = password = token = None
@@ -43,6 +45,7 @@ def initialize():
         email = Constants.TESLA_EMAIL
         password = Constants.TESLA_PASSWORD
     return email, password, token
+
 
 if __name__ == "__main__":
     email, password, token = initialize()

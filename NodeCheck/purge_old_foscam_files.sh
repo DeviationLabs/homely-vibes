@@ -35,7 +35,7 @@ else
   echo "$OUT2"
 fi
 
-STEP3="Confirm all devices have atleast $KEEP days of data..."
+STEP3="Confirm all devices have at least $KEEP days of data..."
 echo "$STEP3"
 OUT3=$(find . -mindepth 2 -type f -mtime +$KEEP | cut -d "/" -f 2 | sort | uniq -c | grep "-")
 CUMULATIVE="$CUMULATIVE$STEP3\n$OUT3\n"

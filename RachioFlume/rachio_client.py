@@ -52,7 +52,7 @@ class RachioClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        
+
         # Setup logging
         self.logger = get_logger(__name__)
         self.logger.info(f"Rachio client initialized for device {self.device_id}")
@@ -64,7 +64,9 @@ class RachioClient:
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         device_info = response.json()
-        self.logger.info(f"Retrieved device info for {device_info.get('name', 'Unknown Device')}")
+        self.logger.info(
+            f"Retrieved device info for {device_info.get('name', 'Unknown Device')}"
+        )
         return device_info
 
     def get_zones(self) -> List[Zone]:

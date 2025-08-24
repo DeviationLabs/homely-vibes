@@ -146,7 +146,7 @@ class WaterTrackingDB:
         if not events:
             self.logger.debug("No watering events to save")
             return
-        
+
         self.logger.info(f"Saving {len(events)} watering events to database")
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -174,7 +174,7 @@ class WaterTrackingDB:
         if not readings:
             self.logger.debug("No water readings to save")
             return
-        
+
         self.logger.info(f"Saving {len(readings)} water readings to database")
         with self.get_connection() as conn:
             cursor = conn.cursor()

@@ -32,7 +32,9 @@ class WeeklyReporter:
             Dict containing weekly statistics
         """
         week_end = week_start + timedelta(days=7)
-        self.logger.info(f"Generating weekly report for {week_start.date()} to {week_end.date()}")
+        self.logger.info(
+            f"Generating weekly report for {week_start.date()} to {week_end.date()}"
+        )
 
         # Get zone statistics
         zone_stats = self.db.get_weekly_zone_stats(week_start)

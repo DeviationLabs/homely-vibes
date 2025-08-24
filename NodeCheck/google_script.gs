@@ -26,7 +26,7 @@ var PURGE_AFTER = "30d";
 */
 
 
-function Intialize() {
+function Initialize() {
   return;
 }
 

@@ -66,7 +66,7 @@ class FlumeClient:
 
         # Cache for device info
         self._devices: Optional[List[Device]] = None
-        
+
         # Setup logging
         self.logger = get_logger(__name__)
 
@@ -74,7 +74,7 @@ class FlumeClient:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
         self.logger.info("Authenticating with Flume API using OAuth2")
         url = "https://api.flumewater.com/oauth/token"
-        
+
         payload = {
             "grant_type": "password",
             "client_id": self.client_id,
@@ -82,12 +82,12 @@ class FlumeClient:
             "username": self.username,
             "password": self.password,
         }
-        
+
         headers = {"Content-Type": "application/json"}
-        
+
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        
+
         token_data = response.json()
         self.logger.info("Successfully obtained access token from Flume API")
         return token_data["access_token"]
@@ -123,9 +123,10 @@ class FlumeClient:
             )
 
         self._devices = devices
-        self.logger.info(f"Found {len(devices)} Flume devices: {[d.name for d in devices]}")
+        self.logger.info(
+            f"Found {len(devices)} Flume devices: {[d.name for d in devices]}"
+        )
         return devices
-
 
     def get_usage(
         self, start_time: datetime, end_time: datetime, bucket: str = "MIN"
@@ -145,12 +146,14 @@ class FlumeClient:
             raise ValueError("No Flume devices found for this account")
 
         all_readings = []
-        
+
         # Format datetimes for Flume API
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
         end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
-        
-        self.logger.info(f"Querying usage data from {len(devices)} devices for period {start_str} to {end_str}")
+
+        self.logger.info(
+            f"Querying usage data from {len(devices)} devices for period {start_str} to {end_str}"
+        )
 
         for device in devices:
             url = f"{self.BASE_URL}/users/me/devices/{device.id}/query"
@@ -180,16 +183,22 @@ class FlumeClient:
                         )
                         value = float(reading["value"])
 
-                        all_readings.append(WaterReading(timestamp=timestamp, value=value))
+                        all_readings.append(
+                            WaterReading(timestamp=timestamp, value=value)
+                        )
 
             except requests.RequestException as e:
                 # Log error but continue with other devices
-                self.logger.error(f"Failed to get usage for device {device.name} ({device.id}): {e}")
+                self.logger.error(
+                    f"Failed to get usage for device {device.name} ({device.id}): {e}"
+                )
                 continue
 
         # Sort readings by timestamp
         all_readings.sort(key=lambda x: x.timestamp)
-        self.logger.info(f"Retrieved {len(all_readings)} total water readings across all devices")
+        self.logger.info(
+            f"Retrieved {len(all_readings)} total water readings across all devices"
+        )
         return all_readings
 
     def get_current_usage_rate(self) -> Optional[float]:

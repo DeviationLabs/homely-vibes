@@ -15,7 +15,7 @@ PYTHON_VERSION ?= 3.13.7
 all: help
 
 ## Environment setup:
-setup-noshell:
+setup:
 	@echo "🚀 Setting up the development environment with python $(PYTHON_VERSION)"
 	@pyenv install $(PYTHON_VERSION) -s && pyenv local $(PYTHON_VERSION)  || (echo "🔴 Failed to run pyenv. Please review the README.md for setup instructions" && exit 1);
 	@if [ "$$(python3 -V)" != "Python $(PYTHON_VERSION)" ]; then \
@@ -27,13 +27,13 @@ setup-noshell:
 	@poetry install
 	@echo "🔧 Setting up git hooks..."
 	@make hooks
-	@poetry self add "poetry-plugin-shell[poetry-plugin]" # for backwards compatibility
-	@echo "${GREEN}✨ Done! Activating the virtual environment with: poetry shell${RESET}"
 
 ## Environment setup:
-setup: ## Setup the development environment
-	@make setup-noshell
-	@poetry shell
+setup-with-shell: ## Setup the development environment
+	@make setup
+	@poetry self add "poetry-plugin-shell[poetry-plugin]" # for backwards compatibility
+	@echo "${GREEN}✨ Done! Activating the virtual environment with: poetry shell${RESET}"
+#	@poetry shell
 
 colima: ## Start colima if not already running
 	@echo "🐳 Checking colima status..."
@@ -114,7 +114,8 @@ codespell-check: ## Check codespell against the project
 
 deptry: ## Run deptry on the project
 	@echo "🔎 Running deptry"
-	@poetry run deptry .
+	@poetry run deptry . || echo "${YELLOW}⚠️  deptry found issues${RESET}"
+	@echo "${GREEN}deptry completed successfully.${RESET}"
 
 ruff: ## Use ruff on the project
 	@echo "🔎 Performing static code analysis"

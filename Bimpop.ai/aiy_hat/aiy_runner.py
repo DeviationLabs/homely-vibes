@@ -31,7 +31,8 @@ import sys
 import threading
 
 from google.assistant.library.event import EventType
-#from aiy.assistant import auth_helpers
+
+# from aiy.assistant import auth_helpers
 from . import auth_helpers
 from aiy.assistant.library import Assistant
 from aiy.board import Board, Led
@@ -40,20 +41,22 @@ from aiy.voice import tts
 # import requests module
 import requests
 from urllib.parse import urljoin
+
 # BASE_URL = "https://aiybackend.deviationlabs.com:8080/api/v1/"
-BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/" # APB: why is this not 8080? Dunno? AWS App runner sucks!
+BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/"  # APB: why is this not 8080? Dunno? AWS App runner sucks!
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
+    format="%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 # create formatter
-#logging.basicConfig()
-#logging.getLogger().setLevel(logging.DEBUG)
-#formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
+# logging.basicConfig()
+# logging.getLogger().setLevel(logging.DEBUG)
+# formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
 #                              "%Y-%m-%d %H:%M:%S")
+
 
 class MyAssistant:
     """An assistant that runs in the background.
@@ -91,36 +94,48 @@ class MyAssistant:
             self._board.led.status = Led.BEACON_DARK  # Ready.
             self._can_start_conversation = True
             # Start the voicehat button trigger.
-            logging.info('Say "OK, Google" or press the button, then speak. '
-                         'Press Ctrl+C to quit...')
+            logging.info(
+                'Say "OK, Google" or press the button, then speak. '
+                "Press Ctrl+C to quit..."
+            )
 
         elif event.type == EventType.ON_CONVERSATION_TURN_STARTED:
             self._can_start_conversation = False
             self._board.led.state = Led.ON  # Listening.
 
         elif event.type == EventType.ON_END_OF_UTTERANCE:
-#            self._board.led.state = Led.PULSE_QUICK  # Thinking.
+            #            self._board.led.state = Led.PULSE_QUICK  # Thinking.
             self._board.led.state = Led.BEACON_DARK
 
-        elif (event.type == EventType.ON_CONVERSATION_TURN_FINISHED
-              or event.type == EventType.ON_CONVERSATION_TURN_TIMEOUT
-              or event.type == EventType.ON_NO_RESPONSE):
+        elif (
+            event.type == EventType.ON_CONVERSATION_TURN_FINISHED
+            or event.type == EventType.ON_CONVERSATION_TURN_TIMEOUT
+            or event.type == EventType.ON_NO_RESPONSE
+        ):
             self._board.led.state = Led.BEACON_DARK  # Ready.
             self._can_start_conversation = True
-#            self._summarize()
+        #            self._summarize()
 
-        elif event.type in [EventType.ON_RECOGNIZING_SPEECH_FINISHED, EventType.ON_RENDER_RESPONSE, EventType.ON_CONVERSATION_TURN_FINISHED]:
+        elif event.type in [
+            EventType.ON_RECOGNIZING_SPEECH_FINISHED,
+            EventType.ON_RENDER_RESPONSE,
+            EventType.ON_CONVERSATION_TURN_FINISHED,
+        ]:
             self._board.led.state = Led.BEACON_DARK  # Ready.
             text = event._args.get("text")
             logging.info(f"After {event.type}, got: {text}")
-            if text and text in ['summarize']:
+            if text and text in ["summarize"]:
                 self._summarize(text)
             elif text:
                 self._index_text(text)
             else:
                 self._summarize(text)
 
-        elif event.type == EventType.ON_ASSISTANT_ERROR and event.args and event.args['is_fatal']:
+        elif (
+            event.type == EventType.ON_ASSISTANT_ERROR
+            and event.args
+            and event.args["is_fatal"]
+        ):
             sys.exit(1)
 
     def _on_button_pressed(self):
@@ -140,7 +155,7 @@ class MyAssistant:
             response = requests.post(
                 urljoin(BASE_URL, "index"),
                 headers={"auth": "validated_user"},
-                json=dict(text=text)
+                json=dict(text=text),
             )
             print(response)
         except Exception as e:
@@ -152,12 +167,13 @@ class MyAssistant:
             response = requests.post(
                 urljoin(BASE_URL, "summarize"),
                 headers={"auth": "validated_user"},
-                json=dict(summary_question=text)
+                json=dict(summary_question=text),
             )
             print(response)
             tts.say(response.message)
         except Exception as e:
             logging.warning(f"Caught and ignored the following exception {e}")
+
 
 class MyAuth(requests.auth.AuthBase):
     # unused: APB 03/07/24
@@ -165,9 +181,10 @@ class MyAuth(requests.auth.AuthBase):
         # Implement my authentication
         return "validated_user"
 
+
 def main():
     MyAssistant().start()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

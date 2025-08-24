@@ -3,7 +3,7 @@
 const { S3Client, CopyObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { SESClient, SendRawEmailCommand } = require("@aws-sdk/client-ses");
 
-console.log("AWS Lambda SES Forwarder // @arithmetric // Version 5.0.0");
+console.log("AWS Lambda SES Forwarder // @arithmetic // Version 5.0.0");
 
 // Configure the S3 bucket and key prefix for stored raw emails, and the
 // mapping of email addresses to forward from and to.
@@ -67,7 +67,7 @@ const defaultConfig = {
 };
 
 /**
- * Parses the SES event record provided for the `mail` and `receipients` data.
+ * Parses the SES event record provided for the `mail` and `recipients` data.
  *
  * @param {object} data - Data bundle with context, email, etc.
  *
@@ -168,7 +168,7 @@ exports.transformRecipients = function(data) {
         data.originalRecipient = origEmail;
       }
 
-      console.log("New recepients:" + newRecipients);
+      console.log("New recipients:" + newRecipients);
     }
   });
 

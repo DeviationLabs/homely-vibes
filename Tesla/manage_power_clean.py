@@ -76,7 +76,9 @@ class PowerwallManager:
         self.battery_history = BatteryHistory()
         self.loop_count = 0
         self.fail_count = 0
-        self.cached_op_mode = None # APB: 5/25/23 seems we are no longer getting this data from the query
+        self.cached_op_mode = (
+            None  # APB: 5/25/23 seems we are no longer getting this data from the query
+        )
 
     def send_pushover(self, message: str) -> None:
         """Send notification via configured channels."""
@@ -98,7 +100,6 @@ class PowerwallManager:
         if len(self.battery_history.percentages) >= BatteryHistory.MAX_HISTORY and (
             pct <= 0 or pct in self.battery_history.percentages
         ):
-
             extrapolated = self.battery_history.extrapolate(time_sampling)
             if extrapolated is not None:
                 pct = max(min(extrapolated, 100), 0)
@@ -281,7 +282,7 @@ class PowerwallManager:
                 self.loop_count += 1
                 time.sleep(sleep_time)
 
-                importlib.reload(Constants) # hot refresh on config.
+                importlib.reload(Constants)  # hot refresh on config.
 
                 current_time = time.localtime()
                 poll_time = Constants.POWERWALL_POLL_TIME
