@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import http.client, urllib
+import http.client
+import urllib
 import Constants
 import logging
 

@@ -5,7 +5,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
 import smtplib
-import collections
 import Constants
 
 def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):

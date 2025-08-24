@@ -3,14 +3,9 @@
 # from https://towardsdatascience.com/keras-transfer-learning-for-beginners-6c9b8b7143e
 
 import argparse
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import pickle
 import os
 import re
-import Constants
-import TFOneShot
 
 parser = argparse.ArgumentParser(description = "Transfer learning on imagenet model")
 parser.add_argument('--train_dir',
@@ -34,15 +29,11 @@ if num_preds == 0:
 
 # In[1]:
 import tensorflow as tf
-import keras
 from keras.layers import Dense,GlobalAveragePooling2D
 from keras.applications import MobileNet
-from keras.preprocessing import image
 from keras.applications.mobilenet import preprocess_input
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Model
-from keras.models import load_model
-from keras.optimizers import Adam
 tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 

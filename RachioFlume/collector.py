@@ -3,7 +3,6 @@
 import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
-import time
 
 from rachio_client import RachioClient
 from flume_client import FlumeClient

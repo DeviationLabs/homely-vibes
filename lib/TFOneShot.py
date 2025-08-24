@@ -66,7 +66,7 @@ if __name__ == "__main__":
   #tf.compat.v1.disable_eager_execution()
   try:
     tf.reduce_sum(tf.random_normal([1000, 1000]))
-  except Exception as e:
+  except Exception:
     raise
   print("Success with tensorflow dryrun. All packages validated !!")
 
@@ -107,6 +107,6 @@ if __name__ == "__main__":
       plt.show()
       plt.pause(0.1)
       print("Press <Enter> to terminate..")
-      read()
+      input()
 
   print("Done!")

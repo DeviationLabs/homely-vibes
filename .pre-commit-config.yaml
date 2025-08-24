@@ -1,0 +1,34 @@
+repos:
+  - repo: local
+    hooks:
+      - id: format
+        name: Format
+        entry: poetry run make format
+        language: system
+        require_serial: true
+        stages: [pre-commit]
+      - id: lint
+        name: Lint
+        entry: poetry run make lint
+        language: system
+        require_serial: true
+        stages: [pre-commit]
+      - id: secrets-scan
+        name: Secrets Scan
+        entry: scripts/secret-scan.sh
+        language: script
+        require_serial: true
+        stages: [pre-commit]
+      - id: setup
+        name: Setup
+        entry: make setup
+        language: system
+        always_run: true
+        stages: [post-merge]
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        name: Conventional Commit Check
+        stages: [commit-msg]
+        args: []

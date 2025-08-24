@@ -1,7 +1,6 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI
 from . import indexer
 from . import queries
-from . import utils
 import logging
 
 app = FastAPI()

@@ -2,12 +2,12 @@
 
 import pytest
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import Mock, patch
 import os
 
 from rachio_client import RachioClient, Zone, WateringEvent
-from flume_client import FlumeClient, WaterReading, Device
+from flume_client import FlumeClient, WaterReading
 from data_storage import WaterTrackingDB
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter

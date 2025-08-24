@@ -5,7 +5,6 @@ from paramiko import SSHClient
 import requests
 import subprocess
 import sys
-from typing import Optional
 
 
 # ping output, 1 line per row. Suppress bash retval
@@ -49,7 +48,7 @@ def ssh_connect(node_ip, user, passwd):
   ssh_cmd_v2(client, "sudo pkill sshd")
   try:
     ssh_cmd_v2(client, "ls")
-  except:
+  except Exception:
     print("Did I just shoot myself in the foot?")
     client.connect(node_ip, username=user, password=passwd, timeout=10)
   return client

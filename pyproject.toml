@@ -16,7 +16,7 @@ requests = "^2.31.0"
 teslapy = "^2.6.0"
 openai = "^1.0.0"
 pandas = "^2.2.0"
-numpy = "^2.0.0"
+numpy = "^1.24.0"
 Pillow = "^10.0.0"
 python-dotenv = "^0.19.0"
 pydantic = "^2.0.0"
@@ -24,9 +24,7 @@ openpyxl = "^3.1.0"
 fastapi = "^0.100.0"
 langchain = "^0.1.0"
 langchain-openai = "^0.1.0"
-langchain-pinecone = "^0.1.0"
-pinecone-client = "^3.0.0"
-tiktoken = "^0.5.0"
+tiktoken = "^0.8.0"
 urllib3 = "2.5.0"
 uvicorn = "^0.23.0"
 
@@ -45,6 +43,9 @@ black = "^24.3.0"
 flake8 = "^5.0.0"
 mypy = "^1.0.0"
 isort = "^5.10.0"
+vulture = "^2.0.0"
+semgrep = "^1.0.0"
+codespell = "^2.0.0"
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "WaterParser", "Bimpop.ai"]
@@ -75,6 +76,11 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
+
+[tool.ruff.lint.per-file-ignores]
+"*/test_*.py" = ["E402"]  # Allow imports after mocks in test files
+"GarageCheck/transferlearn_on_imagenet.py" = ["E402"]  # Jupyter notebook style
+"Tesla/test_manage_power_clean.py" = ["E402"]  # Test file with mocking
 
 [tool.mypy]
 python_version = "3.13"

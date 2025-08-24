@@ -60,7 +60,7 @@ def check_if_can_image(nodeName, display_image):
           print ("Displaying %s ..." % nodeName)
           time.sleep(5)
         return True
-    except Exception as e:
+    except Exception:
       temp = "\n%s" % traceback.format_exc()
       logging.error(temp)
       time.sleep(30)

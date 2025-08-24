@@ -51,7 +51,7 @@ class FoscamImager:
       with open(filename, "wb") as fh:
         fh.write(imgBytes) ## Ubuntu: Use "eog <filename>" to view
       logging.debug("Saved image to %s" % filename)
-    if self.display_images == True:
+    if self.display_images:
       plt.imshow(img)
       plt.show()
       plt.pause(0.001)

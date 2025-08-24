@@ -4,9 +4,6 @@ import csv
 from enum import Enum
 import json
 import logging
-import os
-import time
-import Constants
 import Mailer
 
 class TuyaLogParser:
@@ -48,7 +45,7 @@ class TuyaLogParser:
     self.logStartEpoch = fetch(dataPoints[0], 'EPOCH', 'int')
     self.logEndTime = fetch(dataPoints[-1], 'TIME')
     self.logEndEpoch = fetch(dataPoints[-1], 'EPOCH', 'int')
-    lastStartTime = fetch(dataPoints[0], 'EPOCH', 'int')
+    fetch(dataPoints[0], 'EPOCH', 'int')
     prevEpoch = None
     prevZoneNum = None
     prevZoneStats = None
@@ -99,7 +96,7 @@ class TuyaLogParser:
         prevZoneStats = currZoneStats
         prevZoneNum = currZoneNum
         prevEpoch = currEpoch
-      except IndexError as e:
+      except IndexError:
         logging.info("Failed to parse record: %s in file %s" % (record, self.csvLogfile))
 
     # Done looping through the file. Now compute average pumpRate in this window
@@ -118,7 +115,7 @@ class TuyaLogParser:
     summary = collections.defaultdict()
     try:
       summary = readSummaryFile(jsonSummaryFile)
-    except:
+    except (OSError, ValueError):
       logging.warning('Warn: Failed to read old JSON file. Discarding ..')
 
     summary[self.logStartTime] = self.__dict__
@@ -132,7 +129,6 @@ class TuyaLogParser:
       return   # No Data
 
     logStartDate = csvLog.logStartTime[0:10]
-    logStartDay = "" ## TODO: get day from startDate
     title = "{}   {} :: {} to {} [File Errors: {}]".format(
                csvLogfile, logStartDate[5:], csvLog.logStartTime[11:16],
                csvLog.logEndTime[11:16], csvLog.logErrors)
@@ -164,7 +160,7 @@ def fetch(record, enumVal, type = ''):
   if (type == 'int'):
     try:
       val = int(val)
-    except:
+    except ValueError:
       val = -4
   return val
 
@@ -180,7 +176,7 @@ def loadCsv(csvLogfile):
           dataPoints.append(record)
         else:
           logErrors += 1
-  except IOError as e:
+  except IOError:
     logging.warning("Warn: Failed to load file: %s. Ignoring..." % csvLogfile)
   return [dataPoints, logErrors]
 

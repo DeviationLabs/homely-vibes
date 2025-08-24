@@ -44,7 +44,7 @@ def patchWithRachioEvents():
           if eventZoneSubstr not in zoneStats['zoneName']:
             # Not this zone. Try the next
             continue
-          if not thisZoneModified['touched'] and eventZoneActive == False:
+          if not thisZoneModified['touched'] and not eventZoneActive:
             logging.warning("Warning: Ahh...Found off before on (%s: zone %s). Ignore" \
                     % (zoneStats['zoneName'], record['logStartTime']))
             continue
@@ -70,11 +70,11 @@ def patchWithRachioEvents():
             if (len(thisZoneModified['fallbackEndEpoch']) > 1):
               # Never pop out the last one.
              thisZoneModified['fallbackEndEpoch'].pop(0)
-        eventNum += 1;
+        eventNum += 1
       else:
         if eventEpoch < record['logStartEpoch']:
           # Didn't find log for this event. Discard event
-          eventNum += 1;
+          eventNum += 1
         if not any(zonesModified.items()):
           break  # Optimization - expedite my exit
 
@@ -176,7 +176,7 @@ def fetch(record, enumVal, type = ''):
   if (type == 'int'):
     try:
       val = int(val)
-    except:
+    except ValueError:
       val = 0
   elif (type == 'bool'):
      val = val in ['true', '1', 't', 'y', 'yes', 'True']
