@@ -7,10 +7,19 @@ import sys
 
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
+from logger import WaterTrackingLogger, get_logger
 
 
 def main():
     """Main entry point with command line interface."""
+    # Setup logging first
+    WaterTrackingLogger.setup(
+        console_output=True,
+        log_file="logs/water_tracking.log"
+    )
+    logger = get_logger(__name__)
+    logger.info("Starting Rachio-Flume Water Tracking Integration")
+    
     parser = argparse.ArgumentParser(
         description="Rachio-Flume Water Tracking Integration"
     )

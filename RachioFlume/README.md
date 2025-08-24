@@ -5,7 +5,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 ## Features
 
 - **Rachio Integration**: Monitor active zones and watering events
-- **Flume Integration**: Track real-time water consumption 
+- **Flume Integration**: Track real-time water consumption across all devices 
 - **Data Correlation**: Match watering events with water usage patterns
 - **Weekly Reports**: Generate detailed reports with:
   - Average watering rate by zone
@@ -25,10 +25,11 @@ Create a `.env` file or set these environment variables:
 RACHIO_API_KEY=your_rachio_api_key
 RACHIO_ID=your_rachio_device_id
 
-# Flume API credentials  
-FLUME_USER_ID=your_flume_user_id
-FLUME_DEVICE_ID=your_flume_device_id
-FLUME_ACCESS_TOKEN=your_flume_access_token
+# Flume API credentials (get from https://portal.flumetech.com/#token)
+FLUME_CLIENT_ID=your_flume_client_id
+FLUME_CLIENT_SECRET=your_flume_client_secret
+FLUME_USERNAME=your_flume_username
+FLUME_PASSWORD=your_flume_password
 ```
 
 ### Installation
@@ -89,8 +90,9 @@ python main.py report --efficiency
    - Monitors active watering sessions
 
 2. **FlumeClient** (`flume_client.py`)
-   - Interfaces with Flume API
-   - Collects water usage readings
+   - Interfaces with Flume API using OAuth2 JWT authentication
+   - Automatically discovers and queries all user devices
+   - Aggregates water usage readings across multiple devices
    - Provides current flow rate data
 
 3. **WaterTrackingDB** (`data_storage.py`)

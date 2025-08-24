@@ -1,7 +1,6 @@
 """Data collection service that polls Rachio and Flume APIs."""
 
 import asyncio
-import logging
 from datetime import datetime, timedelta
 from typing import Optional
 import time
@@ -9,6 +8,7 @@ import time
 from rachio_client import RachioClient
 from flume_client import FlumeClient
 from data_storage import WaterTrackingDB
+from logger import get_logger
 
 
 class WaterTrackingCollector:
@@ -23,17 +23,15 @@ class WaterTrackingCollector:
             db_path: Path to SQLite database
             poll_interval_seconds: How often to poll APIs
         """
+        # Setup logging
+        self.logger = get_logger(__name__)
+
         self.db = WaterTrackingDB(db_path)
         self.rachio_client = RachioClient()
+        self.logger.info("Rachio client initialized")
         self.flume_client = FlumeClient()
+        self.logger.info("Flume client initialized")
         self.poll_interval = poll_interval_seconds
-
-        # Setup logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
-        self.logger = logging.getLogger(__name__)
 
         # Track last collection times to avoid duplicates
         self.last_rachio_collection: Optional[datetime] = None

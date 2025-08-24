@@ -6,6 +6,8 @@ from typing import Optional, List, Dict, Any
 import requests
 from pydantic import BaseModel
 
+from logger import get_logger
+
 
 class Zone(BaseModel):
     """Rachio zone model."""
@@ -50,16 +52,24 @@ class RachioClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        
+        # Setup logging
+        self.logger = get_logger(__name__)
+        self.logger.info(f"Rachio client initialized for device {self.device_id}")
 
     def get_device_info(self) -> Dict[str, Any]:
         """Get device information including zones."""
+        self.logger.debug(f"Fetching device info for {self.device_id}")
         url = f"{self.BASE_URL}/device/{self.device_id}"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
-        return response.json()
+        device_info = response.json()
+        self.logger.info(f"Retrieved device info for {device_info.get('name', 'Unknown Device')}")
+        return device_info
 
     def get_zones(self) -> List[Zone]:
         """Get all zones for the device."""
+        self.logger.debug("Fetching zones from device info")
         device_info = self.get_device_info()
         zones = []
         for zone_data in device_info.get("zones", []):
@@ -71,6 +81,7 @@ class RachioClient:
                     enabled=zone_data["enabled"],
                 )
             )
+        self.logger.info(f"Found {len(zones)} zones: {[z.name for z in zones]}")
         return zones
 
     def get_active_zone(self) -> Optional[Zone]:
@@ -100,6 +111,7 @@ class RachioClient:
         Returns:
             List of watering events
         """
+        self.logger.info(f"Fetching watering events from {start_time} to {end_time}")
         url = f"{self.BASE_URL}/device/{self.device_id}/event"
 
         # Convert to milliseconds since epoch
@@ -134,10 +146,12 @@ class RachioClient:
             )
             events.append(event)
 
+        self.logger.info(f"Retrieved {len(events)} watering events")
         return events
 
     def get_recent_events(self, days: int = 7) -> List[WateringEvent]:
         """Get watering events from the last N days."""
+        self.logger.debug(f"Fetching events from last {days} days")
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days)
         return self.get_events(start_time, end_time)
