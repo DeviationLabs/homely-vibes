@@ -10,7 +10,7 @@ WHITE  := $(shell tput -Txterm setaf 7)
 CYAN   := $(shell tput -Txterm setaf 6)
 RESET  := $(shell tput -Txterm sgr0)
 
-PYTHON_VERSION ?= 3.12.3
+PYTHON_VERSION ?= 3.13.7
 
 all: help
 
