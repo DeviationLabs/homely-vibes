@@ -30,11 +30,10 @@ pre-commit install
 ```bash
 # Run all tests
 make test
+make lint           # Check code quality
 
 # Code formatting and linting
 make lint-fix        # Fix all linting issues
-make ruff-format     # Format code
-make lint           # Check code quality
 
 # Run specific services (see individual folder READMEs for details)
 uv run python Tesla/manage_power_clean.py
