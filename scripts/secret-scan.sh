@@ -18,7 +18,7 @@ patterns=(
 found_secrets=0
 
 for pattern in "${patterns[@]}"; do
-    if git grep -iE "$pattern" -- '*.py' '*.js' '*.json' '*.yaml' '*.yml' '*.sh' 2>/dev/null | grep -v ".sample" | grep -v "# nosecret"; then
+    if git grep -iE "$pattern" -- '*.py' '*.js' '*.json' '*.yaml' '*.yml' '*.sh' '*.txt' '*.md' '*.log' '*.conf' '*.config' '*.env' '*.ini' '*.properties' '*.xml' '*.csv' 2>/dev/null | grep -v ".sample" | grep -v "# nosecret"; then
         echo "⚠️  Found potential secret: $pattern"
         found_secrets=1
     fi
