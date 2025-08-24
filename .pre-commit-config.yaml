@@ -3,13 +3,13 @@ repos:
     hooks:
       - id: format
         name: Format
-        entry: poetry run make format
+        entry: make ruff-format
         language: system
         require_serial: true
         stages: [pre-commit]
       - id: lint
         name: Lint
-        entry: poetry run make lint
+        entry: make lint
         language: system
         require_serial: true
         stages: [pre-commit]

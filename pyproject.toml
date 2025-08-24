@@ -1,53 +1,57 @@
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry]
-name = "water-tracking"
-version = "0.1.0"
+[project]
+name = "homely-vibes"
+version = "2.0.0"
 description = "Home automation and monitoring system"
-authors = ["Amit Butala <amit@example.com>"]
+authors = [{name = "Amit Butala", email = "abutala@deviationlabs.com"}]
 readme = "README.md"
-packages = [{include = "lib"}, {include = "Tesla"}, {include = "WaterParser"}, {include = "Bimpop.ai"}]
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "requests>=2.31.0",
+    "teslapy>=2.6.0",
+    "openai>=1.0.0",
+    "pandas>=2.2.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "python-dotenv>=0.19.0",
+    "pydantic>=2.0.0",
+    "openpyxl>=3.1.0",
+    "fastapi>=0.100.0",
+    "langchain>=0.2.5",
+    "langchain-openai>=0.1.0",
+    "tiktoken>=0.8.0",
+    "urllib3==2.5.0",
+    "uvicorn>=0.23.0",
+    "cffi>=1.17.1",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.13,<4.0"
-requests = "^2.31.0"
-teslapy = "^2.6.0"
-openai = "^1.0.0"
-pandas = "^2.2.0"
-numpy = "^1.24.0"
-Pillow = "^10.0.0"
-python-dotenv = "^0.19.0"
-pydantic = "^2.0.0"
-openpyxl = "^3.1.0"
-fastapi = "^0.100.0"
-langchain = "^0.2.5"
-langchain-openai = "^0.1.0"
-tiktoken = "^0.8.0"
-urllib3 = "2.5.0"
-uvicorn = "^0.23.0"
-cffi = "^1.17.1"
+[project.optional-dependencies]
+streamlit = [
+    "streamlit>=1.20.0",
+]
+iot = [
+    "asyncio-mqtt>=0.11.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "black>=24.3.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+    "isort>=5.10.0",
+    "vulture>=2.0.0",
+    "semgrep>=1.0.0",
+    "codespell>=2.0.0",
+    "deptry>=0.23.1",
+]
 
-[tool.poetry.group.streamlit.dependencies]
-streamlit = "^1.20.0"
-
-[tool.poetry.group.iot.dependencies]
-asyncio-mqtt = "^0.11.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.0.0"
-pytest-cov = "^4.0.0"
-pytest-asyncio = "^0.21.0"
-pytest-mock = "^3.10.0"
-black = "^24.3.0"
-flake8 = "^5.0.0"
-mypy = "^1.0.0"
-isort = "^5.10.0"
-vulture = "^2.0.0"
-semgrep = "^1.0.0"
-codespell = "^2.0.0"
-deptry = "^0.23.1"
+[tool.hatch.build.targets.wheel]
+packages = ["lib", "Tesla", "WaterParser", "Bimpop.ai"]
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "WaterParser", "Bimpop.ai"]
