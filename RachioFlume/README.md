@@ -25,10 +25,10 @@ Create a `.env` file or set these environment variables:
 RACHIO_API_KEY=your_rachio_api_key
 RACHIO_ID=your_rachio_device_id
 
-# Flume API credentials  
-FLUME_USER_ID=your_flume_user_id
-FLUME_DEVICE_ID=your_flume_device_id
+# Flume API credentials (get from https://portal.flumetech.com/#token)
 FLUME_ACCESS_TOKEN=your_flume_access_token
+# Optional: specify a specific device ID, otherwise uses first active device
+FLUME_DEVICE_ID=your_flume_device_id
 ```
 
 ### Installation

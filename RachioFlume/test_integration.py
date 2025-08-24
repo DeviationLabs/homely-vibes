@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import os
 
 from rachio_client import RachioClient, Zone, WateringEvent
-from flume_client import FlumeClient, WaterReading
+from flume_client import FlumeClient, WaterReading, Device
 from data_storage import WaterTrackingDB
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
@@ -66,29 +66,35 @@ class TestFlumeClient:
         with patch.dict(
             os.environ,
             {
-                "FLUME_USER_ID": "user123",
                 "FLUME_DEVICE_ID": "device456",
                 "FLUME_ACCESS_TOKEN": "token789",
             },
         ):
             client = FlumeClient()
-            assert client.user_id == "user123"
-            assert client.device_id == "device456"
+            assert client._device_id == "device456"
             assert client.access_token == "token789"
 
     def test_init_missing_credentials(self):
         """Test initialization fails without credentials."""
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(
-                ValueError, match="user_id, device_id, and access_token required"
-            ):
+            with pytest.raises(ValueError, match="access_token required"):
                 FlumeClient()
 
+    @patch("flume_client.requests.get")
     @patch("flume_client.requests.post")
-    def test_get_usage(self, mock_post):
+    def test_get_usage(self, mock_post, mock_get):
         """Test getting water usage data."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
+        # Mock device list response
+        mock_devices_response = Mock()
+        mock_devices_response.json.return_value = [
+            {"id": "device456", "name": "Water Meter", "active": True}
+        ]
+        mock_devices_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_devices_response
+
+        # Mock usage data response
+        mock_usage_response = Mock()
+        mock_usage_response.json.return_value = {
             "data": [
                 {
                     "data": [
@@ -98,14 +104,12 @@ class TestFlumeClient:
                 }
             ]
         }
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
+        mock_usage_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_usage_response
 
         with patch.dict(
             os.environ,
             {
-                "FLUME_USER_ID": "user123",
-                "FLUME_DEVICE_ID": "device456",
                 "FLUME_ACCESS_TOKEN": "token789",
             },
         ):
@@ -118,6 +122,52 @@ class TestFlumeClient:
             assert len(readings) == 2
             assert readings[0].value == 1.5
             assert readings[1].value == 2.0
+
+    @patch("flume_client.requests.get")
+    def test_get_devices(self, mock_get):
+        """Test getting user devices."""
+        mock_response = Mock()
+        mock_response.json.return_value = [
+            {"id": "device1", "name": "Main Meter", "active": True},
+            {
+                "id": "device2",
+                "name": "Pool Meter",
+                "active": False,
+                "location": "Pool",
+            },
+        ]
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        with patch.dict(os.environ, {"FLUME_ACCESS_TOKEN": "token789"}):
+            client = FlumeClient()
+            devices = client.get_devices()
+
+            assert len(devices) == 2
+            assert devices[0].id == "device1"
+            assert devices[0].name == "Main Meter"
+            assert devices[0].active is True
+            assert devices[1].id == "device2"
+            assert devices[1].name == "Pool Meter"
+            assert devices[1].active is False
+            assert devices[1].location == "Pool"
+
+    @patch("flume_client.requests.get")
+    def test_get_device_id_auto_selection(self, mock_get):
+        """Test automatic device ID selection."""
+        mock_response = Mock()
+        mock_response.json.return_value = [
+            {"id": "inactive_device", "name": "Old Meter", "active": False},
+            {"id": "active_device", "name": "Current Meter", "active": True},
+        ]
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        with patch.dict(os.environ, {"FLUME_ACCESS_TOKEN": "token789"}):
+            client = FlumeClient()
+            device_id = client.get_device_id()
+
+            assert device_id == "active_device"
 
 
 class TestWaterTrackingDB:

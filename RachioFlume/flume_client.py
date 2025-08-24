@@ -15,6 +15,15 @@ class WaterReading(BaseModel):
     unit: str = "GAL"
 
 
+class Device(BaseModel):
+    """Flume device model."""
+
+    id: str
+    name: str
+    location: Optional[str] = None
+    active: bool = True
+
+
 class FlumeClient:
     """Client for Flume water monitoring API."""
 
@@ -22,28 +31,87 @@ class FlumeClient:
 
     def __init__(
         self,
-        user_id: Optional[str] = None,
-        device_id: Optional[str] = None,
         access_token: Optional[str] = None,
+        device_id: Optional[str] = None,
     ):
         """Initialize Flume client.
 
         Args:
-            user_id: Flume user ID (defaults to FLUME_USER_ID env var)
-            device_id: Flume device ID (defaults to FLUME_DEVICE_ID env var)
             access_token: Flume access token (defaults to FLUME_ACCESS_TOKEN env var)
+            device_id: Optional specific device ID (defaults to first active device)
         """
-        self.user_id = user_id or os.getenv("FLUME_USER_ID")
-        self.device_id = device_id or os.getenv("FLUME_DEVICE_ID")
         self.access_token = access_token or os.getenv("FLUME_ACCESS_TOKEN")
+        self._device_id = device_id or os.getenv("FLUME_DEVICE_ID")
 
-        if not all([self.user_id, self.device_id, self.access_token]):
-            raise ValueError("Flume user_id, device_id, and access_token required")
+        if not self.access_token:
+            raise ValueError("Flume access_token required")
 
         self.headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
+
+        # Cache for device info
+        self._devices: Optional[List[Device]] = None
+        self._primary_device_id: Optional[str] = None
+
+    def get_devices(self) -> List[Device]:
+        """Get all devices for the authenticated user."""
+        if self._devices is not None:
+            return self._devices
+
+        url = f"{self.BASE_URL}/users/me/devices"
+        response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+
+        devices_data = response.json()
+        devices = []
+
+        # Handle different possible response structures
+        device_list = (
+            devices_data
+            if isinstance(devices_data, list)
+            else devices_data.get("data", [])
+        )
+
+        for device_data in device_list:
+            devices.append(
+                Device(
+                    id=device_data["id"],
+                    name=device_data.get("name", "Unknown Device"),
+                    location=device_data.get("location"),
+                    active=device_data.get("active", True),
+                )
+            )
+
+        self._devices = devices
+        return devices
+
+    def get_device_id(self) -> str:
+        """Get the device ID to use for API calls.
+
+        Returns the explicitly set device ID, or the first active device.
+        """
+        if self._device_id:
+            return self._device_id
+
+        if self._primary_device_id:
+            return self._primary_device_id
+
+        devices = self.get_devices()
+
+        if not devices:
+            raise ValueError("No Flume devices found for this account")
+
+        # Find first active device
+        for device in devices:
+            if device.active:
+                self._primary_device_id = device.id
+                return device.id
+
+        # Fallback to first device if none are marked active
+        self._primary_device_id = devices[0].id
+        return devices[0].id
 
     def get_usage(
         self, start_time: datetime, end_time: datetime, bucket: str = "MIN"
@@ -58,7 +126,8 @@ class FlumeClient:
         Returns:
             List of water readings
         """
-        url = f"{self.BASE_URL}/users/{self.user_id}/devices/{self.device_id}/query"
+        device_id = self.get_device_id()
+        url = f"{self.BASE_URL}/users/me/devices/{device_id}/query"
 
         # Format datetimes for Flume API
         start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
