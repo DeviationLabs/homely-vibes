@@ -24,7 +24,7 @@ setup:
 	fi
 	@brew install libomp pre-commit yamllint -q
 	@echo "📥 Installing project dependencies for $(PYTHON_VERSION)..."
-	@uv sync
+	@uv sync --extra dev
 	@echo "🔧 Setting up git hooks..."
 	@make hooks
 	@echo "${GREEN}✨ Done! Activating the virtual environment with: source .venv/bin/activate${RESET}"
