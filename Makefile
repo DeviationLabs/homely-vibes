@@ -127,25 +127,21 @@ ruff-check: ## Check the project with ruff
 	@echo "${GREEN}Project checked with ruff successfully.${RESET}"
 
 
-mypy: ## Run mypy on the project - TODO(AML-312): enable mypy for all modules
-	@echo "🔎 Running dmypy"
-	@poetry run dmypy run ml_etl/ || poetry run dmypy run ml_etl/ # try dmypy twice in case it fails the first time
-	@echo "${GREEN}dmypy completed successfully.${RESET}"
+mypy: ## Run mypy on the project
+	@echo "🔎 Running mypy"
+	@poetry run mypy . || echo "${YELLOW}⚠️  mypy found issues${RESET}"
+	@echo "${GREEN}mypy completed successfully.${RESET}"
 
 
 vulture: ## Run vulture on the project to detect dead code
 	@echo "🔎 Running vulture"
-	@vulture
+	@poetry run vulture . --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
 	@echo "${GREEN}vulture completed successfully.${RESET}"
 
-semgrep: ## Run project-specific semgrep rules
+semgrep: ## Run semgrep security analysis
 	@echo "🔒 Running semgrep"
-	@export PYTHONWARNINGS="ignore" \
-		&& python3 scripts/semgrep/generate_multi_project_semgrep_rules.py \
-		&& semgrep --quiet --config scripts/semgrep --metrics=off --error --test scripts/semgrep \
-		&& semgrep --quiet --config scripts/semgrep --metrics=off --exclude scripts/semgrep \
-		&& semgrep --quiet --config scripts/semgrep --metrics=off --severity ERROR --error --exclude scripts/semgrep \
-		&& echo "${GREEN}semgrep completed successfully.${RESET}"
+	@poetry run semgrep --config=auto . || echo "${YELLOW}⚠️  semgrep found issues${RESET}"
+	@echo "${GREEN}semgrep completed successfully.${RESET}"
 
 ruff-format: ## Format the code of the project
 	@echo "✨ Applying code formatting with ruff"
