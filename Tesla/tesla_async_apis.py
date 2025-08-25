@@ -3,7 +3,7 @@
 import asyncio
 from tesla_api import TeslaApiClient
 
-import Constants
+from lib import Constants
 
 
 async def save_token(token):

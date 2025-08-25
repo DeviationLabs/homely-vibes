@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import http.client
 import urllib
-import Constants
+from . import Constants
 import logging
 
 

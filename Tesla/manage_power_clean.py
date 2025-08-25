@@ -9,9 +9,9 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional
 import importlib
-import Constants
-import MyPushover
-from TeslaPy.teslapy import Tesla
+from lib import Constants
+from lib import MyPushover
+from lib.TeslaPy.teslapy import Tesla as TeslaClient
 
 
 @dataclass
@@ -270,8 +270,8 @@ class PowerwallManager:
 
     def run_monitoring_loop(self) -> None:
         """Main monitoring loop."""
-        with Tesla(self.email, verify=False, proxy=None, sso_base_url=None) as tesla:
-            product = tesla.battery_list()[0]
+        with TeslaClient(self.email, verify=False) as client:
+            product = client.battery_list()[0]
             site_name = product["site_name"]
             logging.info(f"Connected to site: {site_name}")
             self.send_pushover(f"Powerwall monitoring started for: {site_name}")

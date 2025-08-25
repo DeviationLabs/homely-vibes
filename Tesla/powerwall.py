@@ -6,7 +6,7 @@ from tesla_powerwall import Powerwall
 # from tesla_powerwall import API
 # from tesla_powerwall.helpers import assert_attribute ## PW status
 
-import Constants
+from lib import Constants
 
 # Create a simple powerwall object by providing the IP
 powerwall = Powerwall(Constants.POWERWALL_IP)

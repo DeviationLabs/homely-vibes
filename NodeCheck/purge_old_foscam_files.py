@@ -4,7 +4,7 @@ import logging
 import os
 import subprocess
 import sys
-import Constants
+from lib import Constants
 import Mailer
 
 #### Main Routine ####

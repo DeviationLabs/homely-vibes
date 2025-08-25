@@ -5,8 +5,8 @@ import os
 import subprocess
 import sys
 import urllib.request
-import Constants
-import Mailer
+from . import Constants
+from . import Mailer
 
 
 #### Main Routine ####

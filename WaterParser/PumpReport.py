@@ -3,7 +3,7 @@ import collections
 import logging
 import os
 import time
-import Constants
+from lib import Constants
 import Mailer
 from TuyaLogParser import readSummaryFile
 

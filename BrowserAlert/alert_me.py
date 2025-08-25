@@ -7,10 +7,10 @@ import re
 import sys
 import time
 from tld import get_tld
-import Constants
-import Mailer
-import MyTwilio
-import NetHelpers
+from lib import Constants
+from lib import Mailer
+from lib import MyTwilio
+from lib import NetHelpers
 
 
 records = {}

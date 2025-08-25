@@ -5,7 +5,7 @@ import json
 import logging
 import time
 import subprocess
-import Constants
+from lib import Constants
 import TuyaLogParser
 
 

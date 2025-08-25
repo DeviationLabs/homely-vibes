@@ -7,8 +7,8 @@ import os
 import subprocess
 import sys
 import time
-import Constants
-import Mailer
+from lib import Constants
+from lib import Mailer
 
 
 def get_results_dict(outline: str) -> dict:

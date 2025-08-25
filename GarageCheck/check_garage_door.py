@@ -5,7 +5,7 @@ import os
 import sys
 import traceback
 import time
-import Constants
+from lib import Constants
 import FoscamImager
 import Mailer
 # import TFOneShot ## Imported on demand
