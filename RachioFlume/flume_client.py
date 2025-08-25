@@ -43,13 +43,16 @@ class FlumeClient:
         Args:
             client_id: OAuth client ID (defaults to FLUME_CLIENT_ID env var)
             client_secret: OAuth client secret (defaults to FLUME_CLIENT_SECRET env var)
-            username: Flume username (defaults to FLUME_USERNAME env var)
+            username: Flume email address (defaults to FLUME_USER_EMAIL env var)
             password: Flume password (defaults to FLUME_PASSWORD env var)
         """
+        # Setup logging first
+        self.logger = get_logger(__name__)
+        
         # OAuth credentials
         self.client_id = client_id or os.getenv("FLUME_CLIENT_ID")
         self.client_secret = client_secret or os.getenv("FLUME_CLIENT_SECRET")
-        self.username = username or os.getenv("FLUME_USERNAME")
+        self.username = username or os.getenv("FLUME_USER_EMAIL")
         self.password = password or os.getenv("FLUME_PASSWORD")
 
         if not all([self.client_id, self.client_secret, self.username, self.password]):
@@ -67,9 +70,6 @@ class FlumeClient:
         # Cache for device info
         self._devices: Optional[List[Device]] = None
 
-        # Setup logging
-        self.logger = get_logger(__name__)
-
     def _get_access_token(self) -> str:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
         self.logger.info("Authenticating with Flume API using OAuth2")
@@ -79,18 +79,25 @@ class FlumeClient:
             "grant_type": "password",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "username": self.username,
+            "email": self.username,  # Flume API expects email field, not username
             "password": self.password,
         }
 
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
+        try:
+            response = requests.post(url, data=payload, headers=headers)
+            response.raise_for_status()
 
-        token_data = response.json()
-        self.logger.info("Successfully obtained access token from Flume API")
-        return token_data["access_token"]
+            token_data = response.json()
+            self.logger.info("Successfully obtained access token from Flume API")
+            return token_data["access_token"]
+        except requests.RequestException as e:
+            self.logger.error(f"Failed to authenticate with Flume API: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                self.logger.error(f"Response status: {e.response.status_code}")
+                self.logger.error(f"Response body: {e.response.text}")
+            raise
 
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""

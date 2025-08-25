@@ -26,6 +26,11 @@ dependencies = [
     "urllib3==2.5.0",
     "uvicorn>=0.23.0",
     "cffi>=1.17.1",
+    "geopy>=2.4.1",
+    "requests-oauthlib>=2.0.0",
+    "websocket-client>=1.8.0",
+    "selenium>=4.35.0",
+    "pywebview>=6.0",
 ]
 
 [project.optional-dependencies]

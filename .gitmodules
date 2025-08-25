@@ -1,0 +1,3 @@
+[submodule "ext_lib/TeslaPy"]
+	path = ext_lib/TeslaPy
+	url = https://github.com/tdorssers/TeslaPy.git

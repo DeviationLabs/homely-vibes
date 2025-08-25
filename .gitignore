@@ -23,7 +23,9 @@ cache.json
 backups/
 nohup.out
 report.html
-ext_lib/
+# ext_lib/ contents ignored except for submodules
+ext_lib/*
+!ext_lib/TeslaPy/
 .env
 *.db
 

@@ -5,7 +5,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 ## Features
 
 - **Rachio Integration**: Monitor active zones and watering events
-- **Flume Integration**: Track real-time water consumption across all devices 
+- **Flume Integration**: Track real-time water consumption across all devices
 - **Data Correlation**: Match watering events with water usage patterns
 - **Weekly Reports**: Generate detailed reports with:
   - Average watering rate by zone
@@ -18,7 +18,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 
 ### Environment Variables
 
-Create a `.env` file or set these environment variables:
+Create a `.env` file in the project root with these variables:
 
 ```bash
 # Rachio API credentials
@@ -28,56 +28,56 @@ RACHIO_ID=your_rachio_device_id
 # Flume API credentials (get from https://portal.flumetech.com/#token)
 FLUME_CLIENT_ID=your_flume_client_id
 FLUME_CLIENT_SECRET=your_flume_client_secret
-FLUME_USERNAME=your_flume_username
+FLUME_USER_EMAIL=your_flume_email_address
 FLUME_PASSWORD=your_flume_password
 ```
 
 ### Installation
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+From the project root directory:
 
-# Or using uv (from parent project root)
+```bash
 uv sync
 ```
 
 ## Usage
 
+All commands should be run from the RachioFlume directory:
+
 ### Data Collection
 
 ```bash
 # Run single data collection cycle
-python main.py collect --once
+uv run python main.py collect --once
 
 # Run continuous collection (every 5 minutes)
-python main.py collect --continuous
+uv run python main.py collect --continuous
 
 # Run continuous with custom interval (every 10 minutes)
-python main.py collect --continuous --interval 600
+uv run python main.py collect --continuous --interval 600
 ```
 
 ### System Status
 
 ```bash
 # Check current system status
-python main.py status
+uv run python main.py status
 ```
 
 ### Reports
 
 ```bash
 # Generate current week report
-python main.py report --current-week
+uv run python main.py report --current-week
 
-# Generate last week report  
-python main.py report --last-week
+# Generate last week report
+uv run python main.py report --last-week
 
 # Save report to JSON file
-python main.py report --current-week --save
+uv run python main.py report --current-week --save
 
 # Zone efficiency analysis
-python main.py report --efficiency
+uv run python main.py report --efficiency
 ```
 
 ## Architecture
@@ -142,9 +142,9 @@ SUMMARY:
 ZONE DETAILS:
 Zone Name                Sessions Duration(h) Water(gal) Avg Rate(gpm)
 ----------------------------------------------------------------------
-1    Front Lawn          4        2.5         127.5       0.85    
+1    Front Lawn          4        2.5         127.5       0.85
 2    Back Yard           3        2.0         98.2        0.82
-3    Side Garden         3        1.8         89.1        0.83  
+3    Side Garden         3        1.8         89.1        0.83
 4    Vegetable Garden    2        2.2         110.5       0.84
 ```
 
@@ -165,10 +165,10 @@ Last Flume Collection: 2023-07-15T10:35:00
 
 ```bash
 # Run all tests
-python -m pytest test_integration.py -v
+uv run python -m pytest test_integration.py -v
 
 # Run specific test class
-python -m pytest test_integration.py::TestRachioClient -v
+uv run python -m pytest test_integration.py::TestRachioClient -v
 ```
 
 ## Development
