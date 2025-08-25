@@ -3,9 +3,12 @@ description: "🏠 Smart IoT Home Automation & Monitoring System with ML-powered
 url: "https://homely-vibes.deviationlabs.com"
 baseurl: ""
 
-# GitHub integration
+# GitHub integration - ensure assets load from GitHub Pages
 github:
   repository_url: "https://github.com/abutala/homely-vibes"
+  repository_name: "homely-vibes"
+  owner_name: "abutala"
+  owner_url: "https://github.com/abutala"
   is_project_page: true
 
 # SEO and social
