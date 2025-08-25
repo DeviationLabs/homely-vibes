@@ -3,8 +3,8 @@
 A comprehensive home automation and monitoring system with Python-based IoT integrations, ML-powered analytics, and smart device management.
 
 <div class="btn-group">
-  <a href="#quick-start" class="btn">Get Started</a>
-  <a href="https://github.com/abutala/homely-vibes" class="btn btn-secondary">View on GitHub</a>
+  <a href="#quick-start" class="btn-custom" title="Jump to installation and setup instructions">🚀 Get Started</a>
+  <a href="https://github.com/abutala/homely-vibes" class="btn-custom btn-secondary" title="View source code and contribute on GitHub">💻 View on GitHub</a>
 </div>
 
 ## Quick Start
@@ -52,11 +52,13 @@ uv run python RachioFlume/main.py
   <div class="project-card">
     <h3>🤖 Bimpop.ai</h3>
     <p>RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores.</p>
+    <a href="Bimpop.ai/README.md" title="View detailed documentation">📖 Read More</a>
   </div>
   
   <div class="project-card">
     <h3>🌐 BrowserAlert</h3>
     <p>Web usage monitoring and alerting system for tracking browsing activity and digital wellness.</p>
+    <a href="BrowserAlert/README.md" title="View setup and configuration guide">📖 Read More</a>
   </div>
   
   <div class="project-card">
@@ -87,6 +89,7 @@ uv run python RachioFlume/main.py
   <div class="project-card">
     <h3>💧 RachioFlume</h3>
     <p>Water usage tracking integration between Rachio irrigation systems and Flume water monitoring.</p>
+    <a href="RachioFlume/README.md" title="View integration guide and API documentation">📖 Read More</a>
   </div>
   
   <div class="project-card">

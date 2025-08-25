@@ -1,5 +1,5 @@
 title: "Homely Vibes"
-description: "IoT Home Automation and Monitoring System with ML-powered Analytics"
+description: "🏠 Smart IoT Home Automation & Monitoring System with ML-powered Analytics"
 url: "https://homely-vibes.deviationlabs.com"
 baseurl: ""
 
@@ -16,6 +16,10 @@ social:
   name: "Amit Butala"
   links:
     - "https://github.com/abutala"
+
+# Page metadata
+lang: en
+timezone: America/Los_Angeles
 
 remote_theme: pages-themes/cayman@v0.2.0
 plugins:
