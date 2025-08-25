@@ -189,7 +189,27 @@ h2::before {
   color: #5a6c7d;
   font-size: 1rem;
   line-height: 1.6;
-  margin-bottom: 0;
+  margin-bottom: 1rem;
+}
+
+.project-card a {
+  display: inline-block;
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid #667eea;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  margin-top: 0.5rem;
+}
+
+.project-card a:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 /* Quick start section styling */
