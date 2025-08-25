@@ -141,50 +141,52 @@
         background: linear-gradient(90deg, #667eea, #764ba2);
       }
       
-      /* Table styling */
+      /* Table styling - force override */
       table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        margin: 2rem 0;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        border-radius: 8px;
-        overflow: hidden;
+        width: 100% !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        margin: 2rem 0 !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+        table-layout: fixed !important;
       }
       table th {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.5rem 2rem;
-        text-align: left;
-        font-weight: 600;
-        font-size: 1.1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        color: white !important;
+        padding: 2rem 2.5rem !important;
+        text-align: left !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
       }
       table td {
-        padding: 1.5rem 2rem;
-        border-bottom: 1px solid #e1e8ed;
-        vertical-align: top;
+        padding: 2rem 2.5rem !important;
+        border-bottom: 1px solid #e1e8ed !important;
+        vertical-align: top !important;
       }
       table tr:nth-child(even) {
-        background: #f8f9fa;
+        background: #f8f9fa !important;
       }
       table tr:hover {
-        background: #e3f2fd;
-        transition: background 0.2s ease;
+        background: #e3f2fd !important;
+        transition: background 0.2s ease !important;
       }
       table th:nth-child(1), table td:nth-child(1) {
-        width: 220px;
-        min-width: 220px;
-        white-space: nowrap;
+        width: 25% !important;
+        min-width: 250px !important;
+        white-space: nowrap !important;
+        padding-right: 3rem !important;
       }
       table th:nth-child(2), table td:nth-child(2) {
-        width: auto;
-        min-width: 400px;
-        padding-right: 3rem;
+        width: 60% !important;
+        min-width: 450px !important;
+        padding-right: 4rem !important;
       }
       table th:nth-child(3), table td:nth-child(3) {
-        width: 140px;
-        min-width: 140px;
-        text-align: center;
+        width: 15% !important;
+        min-width: 150px !important;
+        text-align: center !important;
       }
       
       /* Links */
@@ -203,10 +205,10 @@
         .project-name { font-size: 2.5rem; }
         .project-tagline { font-size: 1.2rem; }
         .main-content { padding: 2rem 1rem; }
-        table th, table td { padding: 1rem 1.5rem; }
-        table th:nth-child(1), table td:nth-child(1) { width: 160px; min-width: 160px; font-size: 0.9rem; }
-        table th:nth-child(2), table td:nth-child(2) { min-width: 250px; font-size: 0.9rem; padding-right: 2rem; }
-        table th:nth-child(3), table td:nth-child(3) { width: 120px; min-width: 120px; }
+        table th, table td { padding: 1.5rem 2rem !important; }
+        table th:nth-child(1), table td:nth-child(1) { width: 30% !important; min-width: 180px !important; font-size: 0.9rem !important; padding-right: 2rem !important; }
+        table th:nth-child(2), table td:nth-child(2) { width: 55% !important; min-width: 280px !important; font-size: 0.9rem !important; padding-right: 3rem !important; }
+        table th:nth-child(3), table td:nth-child(3) { width: 15% !important; min-width: 130px !important; }
       }
     </style>
     {% include head-custom.html %}
