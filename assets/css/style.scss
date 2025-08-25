@@ -260,6 +260,61 @@ pre code {
   font-weight: normal;
 }
 
+/* Table styling for better component display */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+table th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e1e8ed;
+  vertical-align: top;
+}
+
+table tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+table tr:hover {
+  background: #e3f2fd;
+  transition: background 0.2s ease;
+}
+
+/* Specific column widths for component table */
+table th:nth-child(1),
+table td:nth-child(1) {
+  width: 200px;
+  min-width: 200px;
+  white-space: nowrap;
+}
+
+table th:nth-child(2),
+table td:nth-child(2) {
+  width: auto;
+  min-width: 300px;
+}
+
+table th:nth-child(3),
+table td:nth-child(3) {
+  width: 120px;
+  min-width: 120px;
+  text-align: center;
+}
+
 /* Enhanced links */
 a {
   color: #667eea;
@@ -275,6 +330,26 @@ a:hover {
 @media (max-width: 768px) {
   .page-header {
     padding: 3rem 1rem;
+  }
+  
+  /* Make table responsive on mobile */
+  table th:nth-child(1),
+  table td:nth-child(1) {
+    width: 140px;
+    min-width: 140px;
+    font-size: 0.9rem;
+  }
+  
+  table th:nth-child(2),
+  table td:nth-child(2) {
+    min-width: 200px;
+    font-size: 0.9rem;
+  }
+  
+  table th:nth-child(3),
+  table td:nth-child(3) {
+    width: 100px;
+    min-width: 100px;
   }
   
   .project-name {

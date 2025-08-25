@@ -49,7 +49,7 @@ uv run python RachioFlume/main.py
 ## Project Components
 
 | Component | Description | Documentation |
-|-----------|-------------|---------------|
+|:----------|:------------|:-------------:|
 | 🤖 **Bimpop.ai** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/Bimpop.ai/README.md) |
 | 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/BrowserAlert/README.md) |
 | 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | - |
