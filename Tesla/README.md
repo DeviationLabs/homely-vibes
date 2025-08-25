@@ -46,12 +46,11 @@ This will:
 The system uses TeslaPy for Tesla API access. You'll need to authenticate once:
 
 ```bash
-# Run TeslaPy GUI for initial authentication
-cd lib/TeslaPy
-python gui.py
+# Script will automatically run the following command for initial authentication
+uv run lib/TeslaPy/tesla/gui.py
 ```
 
-This will open a browser window for Tesla OAuth authentication. Follow the prompts to authorize the application.
+This will open a browser window for Tesla OAuth authentication, but if you are on a machine without a browser,  you can just copy the authURL and authenticate on some other machine
 
 ## Usage
 
@@ -61,31 +60,22 @@ Run commands from the project root directory:
 
 ```bash
 # Run power management with default settings
-uv run python manage_power.py
+uv run python Tesla/manage_power.py --send-notifications --quiet
 
-# Run with specific battery threshold
-uv run python manage_power.py --battery-threshold 80
-
-# Enable notifications
-uv run python manage_power.py --notify
-
-# Dry run mode (no actual changes)
-uv run python manage_power.py --dry-run
-```
 
 ### Configuration Options
 
 ```bash
 # Show all available options
-uv run python manage_power.py --help
+uv run python Tesla/manage_power.py --help
 ```
 
 Key options:
 
-- `--battery-threshold`: Set minimum battery percentage (default: 75)
-- `--notify`: Enable Pushover notifications
-- `--dry-run`: Test mode without making actual changes
-- `--verbose`: Enable detailed logging
+- `--send-notifications`: Enable Pushover notifications
+- `--debug`: Enable debug logging
+- `--quiet`: Suppress console output (logs still written to file)
+- `--email`: Specify Tesla account email (defaults to Constants.POWERWALL_EMAIL)
 
 ## Architecture
 
@@ -146,7 +136,8 @@ DecisionPoint(
 
 ```bash
 # Run all tests
-uv run python -m pytest test_manage_power.py -v
+uv run python -m pytest Tesla/test_manage_power.py -v
+```
 
 ## Troubleshooting
 
