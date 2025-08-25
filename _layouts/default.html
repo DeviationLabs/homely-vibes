@@ -14,7 +14,29 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
     
-    <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+    <!-- Primary stylesheet with absolute URL -->
+    <link rel="stylesheet" href="{{ site.url }}{{ site.baseurl }}/assets/css/style.css?v={{ site.github.build_revision | default: 'local' }}">
+    <!-- Fallback with relative URL -->
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+    <!-- Critical CSS fallback for immediate styling -->
+    <style>
+      .page-header { 
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+        padding: 4rem 0; 
+        color: white; 
+        text-align: center;
+      }
+      .project-name { 
+        font-size: 3.2rem; 
+        font-weight: 700; 
+        margin-bottom: 0.5rem;
+      }
+      .main-content { 
+        max-width: 1200px; 
+        margin: 0 auto; 
+        padding: 3rem 2rem; 
+      }
+    </style>
     {% include head-custom.html %}
   </head>
   <body>
