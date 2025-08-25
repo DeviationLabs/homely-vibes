@@ -2,10 +2,11 @@
 <html lang="{{ site.lang | default: "en-US" }}">
   <head>
     <meta charset="UTF-8">
-
-{% seo %}
+    <title>{{ page.title | default: site.title | default: site.github.repository_name }}</title>
+    <meta name="description" content="{{ page.description | default: site.description | default: site.github.project_tagline }}"/>
     <link rel="preconnect" href="https://fonts.gstatic.com">
-    <link rel="preload" href="https://fonts.googleapis.com/css?family=Open+Sans:400,700&display=swap" as="style" type="text/css" crossorigin>
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" as="style" type="text/css" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,28 +14,194 @@
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
-    
-    <!-- Primary stylesheet with absolute URL -->
-    <link rel="stylesheet" href="{{ site.url }}{{ site.baseurl }}/assets/css/style.css?v={{ site.github.build_revision | default: 'local' }}">
-    <!-- Fallback with relative URL -->
-    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
-    <!-- Critical CSS fallback for immediate styling -->
+    <!-- Comprehensive inline CSS to ensure styling works -->
     <style>
+      /* Base reset and typography */
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+        line-height: 1.5;
+        color: #333;
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+      }
+      
+      /* Header styling */
       .page-header { 
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
         padding: 4rem 0; 
         color: white; 
         text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .page-header::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+        opacity: 0.3;
       }
       .project-name { 
         font-size: 3.2rem; 
         font-weight: 700; 
         margin-bottom: 0.5rem;
+        position: relative;
+        z-index: 1;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.3);
       }
+      .project-tagline {
+        font-size: 1.4rem;
+        opacity: 0.95;
+        margin-top: 1rem;
+        font-weight: 300;
+        position: relative;
+        z-index: 1;
+      }
+      
+      /* Main content */
       .main-content { 
         max-width: 1200px; 
         margin: 0 auto; 
         padding: 3rem 2rem; 
+        line-height: 1.7;
+      }
+      
+      /* Button styling */
+      .btn {
+        position: relative;
+        z-index: 1;
+        margin-top: 2rem;
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(0,0,0,0.3);
+      }
+      .btn-custom {
+        display: inline-block;
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        margin: 0.5rem;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      }
+      .btn-custom:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        text-decoration: none;
+        color: white;
+      }
+      .btn-secondary {
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+      }
+      .btn-secondary:hover {
+        box-shadow: 0 8px 25px rgba(108, 117, 125, 0.4);
+      }
+      
+      /* Typography */
+      h1, h2, h3, h4, h5, h6 {
+        color: #2c3e50;
+        font-weight: 600;
+        margin-top: 2.5rem;
+        margin-bottom: 1rem;
+      }
+      h1 {
+        border-bottom: 3px solid #667eea;
+        padding-bottom: 0.8rem;
+        font-size: 2.5rem;
+      }
+      h2 {
+        border-bottom: 2px solid #e1e8ed;
+        padding-bottom: 0.5rem;
+        font-size: 2rem;
+        position: relative;
+      }
+      h2::before {
+        content: '';
+        position: absolute;
+        bottom: -2px; left: 0;
+        width: 60px; height: 2px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+      }
+      
+      /* Table styling */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 2rem 0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      table th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 1.1rem;
+      }
+      table td {
+        padding: 1rem;
+        border-bottom: 1px solid #e1e8ed;
+        vertical-align: top;
+      }
+      table tr:nth-child(even) {
+        background: #f8f9fa;
+      }
+      table tr:hover {
+        background: #e3f2fd;
+        transition: background 0.2s ease;
+      }
+      table th:nth-child(1), table td:nth-child(1) {
+        width: 200px;
+        min-width: 200px;
+        white-space: nowrap;
+      }
+      table th:nth-child(2), table td:nth-child(2) {
+        width: auto;
+        min-width: 300px;
+      }
+      table th:nth-child(3), table td:nth-child(3) {
+        width: 120px;
+        min-width: 120px;
+        text-align: center;
+      }
+      
+      /* Links */
+      a {
+        color: #667eea;
+        transition: color 0.3s ease;
+      }
+      a:hover {
+        color: #764ba2;
+        text-decoration: none;
+      }
+      
+      /* Mobile responsive */
+      @media (max-width: 768px) {
+        .page-header { padding: 3rem 1rem; }
+        .project-name { font-size: 2.5rem; }
+        .project-tagline { font-size: 1.2rem; }
+        .main-content { padding: 2rem 1rem; }
+        table th:nth-child(1), table td:nth-child(1) { width: 140px; min-width: 140px; font-size: 0.9rem; }
+        table th:nth-child(2), table td:nth-child(2) { min-width: 200px; font-size: 0.9rem; }
+        table th:nth-child(3), table td:nth-child(3) { width: 100px; min-width: 100px; }
       }
     </style>
     {% include head-custom.html %}
