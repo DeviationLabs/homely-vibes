@@ -3,12 +3,10 @@
 A comprehensive home automation and monitoring system with Python-based IoT integrations, ML-powered analytics, and smart device management.
 
 <div class="btn-group">
-  <a href="#quick-start" class="btn-custom" title="Jump to installation and setup instructions">🚀 Get Started</a>
   <a href="https://github.com/abutala/homely-vibes" class="btn-custom btn-secondary" title="View source code and contribute on GitHub">💻 View on GitHub</a>
 </div>
 
 ## Quick Start
-{: .quick-start}
 
 ### Prerequisites
 - Python 3.13+ (managed via pyenv)
@@ -49,7 +47,7 @@ uv run python RachioFlume/main.py
 ## Project Components
 
 | Component | Description | Documentation |
-|-----------|-------------|---------------|
+|:----------|:------------|:-------------:|
 | 🤖 **Bimpop.ai** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/Bimpop.ai/README.md) |
 | 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/BrowserAlert/README.md) |
 | 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | - |
