@@ -10,7 +10,6 @@ __pycache__/
 *.h5
 
 # hardcoded constants
-README.private.txt
 lib/Constants.py
 lib/Constants.sh
 lib/tuya_switch_config_cli.json
@@ -23,12 +22,6 @@ cache.json
 backups/
 nohup.out
 report.html
-# ext_lib/ contents ignored except for submodules
-ext_lib/*
-!ext_lib/TeslaPy/
+ext_lib*
 .env
 *.db
-
-# OpenAI automation logs
-openai-automation/openai_project_creation.log
-openai-automation/HackWeek2025.csv

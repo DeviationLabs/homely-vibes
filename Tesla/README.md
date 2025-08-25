@@ -47,7 +47,7 @@ The system uses TeslaPy for Tesla API access. You'll need to authenticate once:
 
 ```bash
 # Run TeslaPy GUI for initial authentication
-cd ext_lib/TeslaPy
+cd lib/TeslaPy
 python gui.py
 ```
 
@@ -55,29 +55,29 @@ This will open a browser window for Tesla OAuth authentication. Follow the promp
 
 ## Usage
 
-All commands should be run from the Tesla directory:
+Run commands from the project root directory:
 
 ### Basic Power Management
 
 ```bash
 # Run power management with default settings
-uv run python manage_power_clean.py
+uv run python manage_power.py
 
 # Run with specific battery threshold
-uv run python manage_power_clean.py --battery-threshold 80
+uv run python manage_power.py --battery-threshold 80
 
 # Enable notifications
-uv run python manage_power_clean.py --notify
+uv run python manage_power.py --notify
 
 # Dry run mode (no actual changes)
-uv run python manage_power_clean.py --dry-run
+uv run python manage_power.py --dry-run
 ```
 
 ### Configuration Options
 
 ```bash
 # Show all available options
-uv run python manage_power_clean.py --help
+uv run python manage_power.py --help
 ```
 
 Key options:
@@ -91,17 +91,17 @@ Key options:
 
 ### Core Components
 
-1. **PowerwallManager** (`manage_power_clean.py`)
+1. **PowerwallManager** (`manage_power.py`)
    - Main orchestrator for power management decisions
    - Handles Tesla API communication
    - Manages decision point evaluation
 
-2. **BatteryHistory** (`manage_power_clean.py`)
+2. **BatteryHistory** (`manage_power.py`)
    - Tracks battery percentage over time
    - Calculates gradients and trends
    - Supports extrapolation for future predictions
 
-3. **DecisionPoint** (`manage_power_clean.py`)
+3. **DecisionPoint** (`manage_power.py`)
    - Configurable rules for power management
    - Time-based thresholds and actions
    - Support for conditional logic and trailing stops
@@ -146,11 +146,7 @@ DecisionPoint(
 
 ```bash
 # Run all tests
-uv run python -m pytest test_manage_power_clean.py -v
-
-# Run specific test classes
-uv run python -m pytest test_manage_power_clean.py::TestBatteryHistory -v
-```
+uv run python -m pytest test_manage_power.py -v
 
 ## Troubleshooting
 
@@ -159,32 +155,8 @@ uv run python -m pytest test_manage_power_clean.py::TestBatteryHistory -v
 If you see "Tesla token expired" errors:
 
 ```bash
-cd ../ext_lib/TeslaPy
+cd lib/TeslaPy
 python gui.py
 ```
 
 This will refresh your Tesla authentication token.
-
-### TeslaPy Not Found
-
-Ensure the ext_lib directory is properly created and TeslaPy is cloned:
-
-```bash
-ls -la ext_lib/TeslaPy/
-```
-
-You should see the TeslaPy files including `teslapy.py`.
-
-### Constants Configuration
-
-Make sure `lib/Constants.py` exists and is properly configured with your credentials and settings.
-
-## Development
-
-The system follows the existing project patterns:
-
-- Uses dataclasses for structured data
-- Implements comprehensive error handling
-- Includes detailed logging throughout
-- Supports both production and testing modes
-- Maintains clean separation of concerns
