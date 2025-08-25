@@ -48,67 +48,17 @@ uv run python RachioFlume/main.py
 
 ## Project Components
 
-<div class="project-grid">
-  <div class="project-card">
-    <h3>🤖 Bimpop.ai</h3>
-    <p>RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores.</p>
-    <a href="https://github.com/abutala/homely-vibes/blob/main/Bimpop.ai/README.md" title="View detailed documentation">📖 Read More</a>
-  </div>
-  
-  <div class="project-card">
-    <h3>🌐 BrowserAlert</h3>
-    <p>Web usage monitoring and alerting system for tracking browsing activity and digital wellness.</p>
-    <a href="https://github.com/abutala/homely-vibes/blob/main/BrowserAlert/README.md" title="View setup and configuration guide">📖 Read More</a>
-  </div>
-  
-  <div class="project-card">
-    <h3>🚗 GarageCheck</h3>
-    <p>Machine learning-based garage door status detection using image classification and computer vision.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>📧 LambdaEmailFwder</h3>
-    <p>AWS Lambda function for automated email forwarding and intelligent message processing.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>🌐 NetworkCheck</h3>
-    <p>Network uplink testing and connectivity monitoring utilities for reliable internet connections.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>🖥️ NodeCheck</h3>
-    <p>System node monitoring, Foscam camera management, and automated reboot coordination.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>🔧 OpenAIAdmin</h3>
-    <p>OpenAI project management and administration tools for API governance and usage tracking.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>💧 RachioFlume</h3>
-    <p>Water usage tracking integration between Rachio irrigation systems and Flume water monitoring.</p>
-    <a href="https://github.com/abutala/homely-vibes/blob/main/RachioFlume/README.md" title="View integration guide and API documentation">📖 Read More</a>
-  </div>
-  
-  <div class="project-card">
-    <h3>⚡ Tesla</h3>
-    <p>Tesla Powerwall monitoring and intelligent power management automation for home energy optimization.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>📊 WaterLogging</h3>
-    <p>Comprehensive data collection scripts for Rachio, Flume, and Tuya smart water devices.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>📈 WaterParser</h3>
-    <p>Advanced water usage data processing, statistical analysis, and interactive HTML report generation.</p>
-  </div>
-  
-  <div class="project-card">
-    <h3>🛠️ lib</h3>
-    <p>Shared utilities library for email, push notifications, networking, and essential system helpers.</p>
-  </div>
-</div>
+| Component | Description | Documentation |
+|-----------|-------------|---------------|
+| 🤖 **Bimpop.ai** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/Bimpop.ai/README.md) |
+| 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/BrowserAlert/README.md) |
+| 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | - |
+| 📧 **LambdaEmailFwder** | AWS Lambda function for automated email forwarding and intelligent message processing. | - |
+| 🌐 **NetworkCheck** | Network uplink testing and connectivity monitoring utilities for reliable internet connections. | - |
+| 🖥️ **NodeCheck** | System node monitoring, Foscam camera management, and automated reboot coordination. | - |
+| 🔧 **OpenAIAdmin** | OpenAI project management and administration tools for API governance and usage tracking. | - |
+| 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/RachioFlume/README.md) |
+| ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | - |
+| 📊 **WaterLogging** | Comprehensive data collection scripts for Rachio, Flume, and Tuya smart water devices. | - |
+| 📈 **WaterParser** | Advanced water usage data processing, statistical analysis, and interactive HTML report generation. | - |
+| 🛠️ **lib** | Shared utilities library for email, push notifications, networking, and essential system helpers. | - |
