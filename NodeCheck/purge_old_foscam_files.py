@@ -3,7 +3,6 @@ import argparse
 import os
 import subprocess
 import sys
-from lib import Constants
 from lib.logger import SystemLogger
 import Mailer
 

@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
-import os
 import subprocess
 import sys
 import urllib.request
-from lib import Constants
 from lib import Mailer
 from lib.logger import SystemLogger
 
