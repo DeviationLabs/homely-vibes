@@ -90,10 +90,10 @@ class FlumeClient:
             "password": self.password,
         }
 
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        headers = {"Content-Type": "application/json"}
 
         try:
-            response = requests.post(url, data=payload, headers=headers)
+            response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
 
             token_data = response.json()
