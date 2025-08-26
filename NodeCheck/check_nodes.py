@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 import argparse
-import logging
-import os
 import re
 import sys
 import time
 import traceback
 from lib import Constants
-import FoscamImager
-import Mailer
-import NetHelpers
+from lib.logger import SystemLogger
+from lib.FoscamImager import FoscamImager
+from lib import Mailer
+from lib import NetHelpers
+
+logger = SystemLogger.get_logger(__name__)
 
 system_healthy = True
 state = dict()
@@ -73,7 +74,7 @@ def check_if_can_image(nodeName, display_image):
                 return True
         except Exception:
             temp = "\n%s" % traceback.format_exc()
-            logging.error(temp)
+            logger.error(temp)
             time.sleep(30)
     log_message(">> ERROR: Got image, but failed to preview from: %s" % nodeName)
     return False
@@ -81,7 +82,7 @@ def check_if_can_image(nodeName, display_image):
 
 def log_message(msg):
     global message
-    logging.info(msg)
+    logger.info(msg)
     message += msg + "\n"
 
 
@@ -91,7 +92,7 @@ def check_state(desired_up, attempts):
     for nodeName, nodeIP in nodes.items():
         state[nodeName] = False
     for attempt in range(attempts):
-        logging.debug(f"{state.values()=}")
+        logger.debug(f"{state.values()=}")
         if all(state.values()):
             return
         time.sleep(1)
@@ -101,7 +102,7 @@ def check_state(desired_up, attempts):
                 state[nodeName] = NetHelpers.ping_output(
                     node=nodeIP, desired_up=desired_up
                 )
-                logging.debug(
+                logger.debug(
                     f"{attempt=} for {nodeName}, {desired_up=} In desired state: {state[nodeName]}"
                 )
     else:
@@ -134,13 +135,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logfile = "%s/%s.log" % (Constants.LOGGING_DIR, os.path.basename(__file__))
-    log_format = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
-    logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
-    if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-    logging.info("============")
-    logging.info("Invoked command: %s" % " ".join(sys.argv))
+    logger.info("============")
+    logger.info("Invoked command: %s" % " ".join(sys.argv))
 
     nodes = Constants.FOSCAM_NODES if args.mode == "foscam" else Constants.WINDOWS_NODES
 
@@ -158,11 +154,11 @@ if __name__ == "__main__":
         log_message("Rebooting now...")
         for nodeName, nodeIP in nodes.items():
             if args.mode == "foscam":
-                logging.debug(reboot_foscam(nodeName))
+                logger.debug(reboot_foscam(nodeName))
             else:
                 # If windows and alive, do a deep check before rebooting.
                 log_message(print_deep_state(nodeName))
-                logging.debug(reboot_windows(nodeIP))
+                logger.debug(reboot_windows(nodeIP))
         check_state(desired_up=False, attempts=180)
         for nodeName, nodeIP in nodes.items():
             if state[nodeName]:

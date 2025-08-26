@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 from importlib import reload
-import logging
 import os
 import re
 import sys
@@ -11,6 +10,9 @@ from lib import Constants
 from lib import Mailer
 from lib import MyTwilio
 from lib import NetHelpers
+from lib.logger import SystemLogger
+
+logger = SystemLogger.get_logger(__name__)
 
 
 records = {}
@@ -89,27 +91,20 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logfile = "%s/%s.%s.log" % (
-        Constants.LOGGING_DIR,
-        os.path.basename(__file__),
-        args.machine,
-    )
-    log_format = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
-    logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
-    logging.info("============")
-    logging.info("Invoked command: %s" % " ".join(sys.argv))
+    logger.info("============")
+    logger.info("Invoked command: %s" % " ".join(sys.argv))
 
     SEND_SMS_FLAG = f"/tmp/sms_enabled.{args.machine}"
     if args.send_sms:
         with open(SEND_SMS_FLAG, "w") as fp:
             pass
-        logging.info("Enabling SMS")
+        logger.info("Enabling SMS")
     else:
         try:
             os.remove(SEND_SMS_FLAG)
         except OSError:
             pass
-        logging.info("Disabling SMS")
+        logger.info("Disabling SMS")
 
     time.sleep(args.start_after_seconds)
 
@@ -122,7 +117,7 @@ if __name__ == "__main__":
     except Exception:
         client = None
         print("Machine offline, but still continuing...")
-        logging.info("Machine offline, but still continuing...")
+        logger.info("Machine offline, but still continuing...")
 
     cool_down_attempts = Constants.MIN_REPORTING_GAP
 
@@ -176,7 +171,7 @@ if __name__ == "__main__":
                             )
 
         print(msg)
-        logging.info(msg)
+        logger.info(msg)
         if alert:
             temp = msg.split("\n")[0]
             if os.path.exists(SEND_SMS_FLAG) and (
@@ -187,12 +182,12 @@ if __name__ == "__main__":
                     and currtime.tm_hour < Constants.HR_STOP_MONITORING
                 )
             ):
-                logging.info(f"Badness Sending SMS: {temp}")
+                logger.info(f"Badness Sending SMS: {temp}")
                 cool_down_attempts = Constants.MIN_REPORTING_GAP
                 for rcpt in host["sms_inform"]:
                     MyTwilio.sendsms(rcpt, f"[BLACKLIST][{args.machine}] : {matched}")
             else:
-                logging.info(f"Badness No SMS: {temp}")
+                logger.info(f"Badness No SMS: {temp}")
                 for i in range(3):
                     print("\a")  # , end='') ## Doesn't work
                     time.sleep(1)

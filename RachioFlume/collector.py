@@ -7,7 +7,7 @@ from typing import Optional
 from rachio_client import RachioClient
 from flume_client import FlumeClient
 from data_storage import WaterTrackingDB
-from logger import get_logger
+from lib.logger import get_logger
 
 
 class WaterTrackingCollector:

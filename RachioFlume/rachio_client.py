@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 import requests
 from pydantic import BaseModel
 
-from logger import get_logger
+from lib.logger import get_logger
 
 
 class Zone(BaseModel):

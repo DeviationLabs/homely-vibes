@@ -1,12 +1,13 @@
 """Generic logging configuration for the water tracking system."""
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional
 
 
-class WaterTrackingLogger:
+class SystemLogger:
     """Centralized logger configuration for all water tracking modules."""
 
     _initialized = False
@@ -19,21 +20,25 @@ class WaterTrackingLogger:
         log_file: Optional[str] = None,
         console_output: bool = True,
         format_string: Optional[str] = None,
+        default_log_dir: str = "~/logs",
     ) -> None:
         """Set up logging configuration for the entire application.
 
         Args:
             level: Logging level (default: INFO)
-            log_file: Optional file path for log output
+            log_file: Optional file path for log output (if relative, uses default_log_dir)
             console_output: Whether to output to console (default: True)
             format_string: Custom format string (optional)
+            default_log_dir: Default directory for log files (default: ~/logs)
         """
         if cls._initialized:
             return
 
         # Default format
         if format_string is None:
-            format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            format_string = (
+                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+            )
 
         # Clear any existing handlers
         root_logger = logging.getLogger()
@@ -53,7 +58,13 @@ class WaterTrackingLogger:
 
         # File handler
         if log_file:
-            cls._log_file = Path(log_file)
+            # Handle relative paths by using default_log_dir
+            if not os.path.isabs(log_file):
+                log_dir = os.path.expanduser(default_log_dir)
+                cls._log_file = Path(log_dir) / log_file
+            else:
+                cls._log_file = Path(log_file)
+
             cls._log_file.parent.mkdir(parents=True, exist_ok=True)
 
             file_handler = logging.FileHandler(cls._log_file)
@@ -124,7 +135,7 @@ class WaterTrackingLogger:
             formatter = root_logger.handlers[0].formatter
         else:
             formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
             )
 
         file_handler = logging.FileHandler(cls._log_file)
@@ -143,4 +154,4 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         Configured logger instance
     """
-    return WaterTrackingLogger.get_logger(name)
+    return SystemLogger.get_logger(name)
