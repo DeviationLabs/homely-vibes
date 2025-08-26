@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from lib.logger import SystemLogger
-import Mailer
+from lib import Mailer
 
 logger = SystemLogger.get_logger(__name__)
 

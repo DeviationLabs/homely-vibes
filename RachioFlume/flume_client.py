@@ -48,7 +48,7 @@ class FlumeClient:
         """
         # Setup logging first
         self.logger = get_logger(__name__)
-        
+
         # OAuth credentials
         self.client_id = client_id or os.getenv("FLUME_CLIENT_ID")
         self.client_secret = client_secret or os.getenv("FLUME_CLIENT_SECRET")
@@ -94,7 +94,7 @@ class FlumeClient:
             return token_data["access_token"]
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
-            if hasattr(e, 'response') and e.response is not None:
+            if hasattr(e, "response") and e.response is not None:
                 self.logger.error(f"Response status: {e.response.status_code}")
                 self.logger.error(f"Response body: {e.response.text}")
             raise
