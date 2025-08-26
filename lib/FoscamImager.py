@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import io
 import logging
 import time
-from . import Constants
-from . import NetHelpers
+from lib import Constants
+from lib import NetHelpers
 
 
 def print_ipinfo(returncode, params):

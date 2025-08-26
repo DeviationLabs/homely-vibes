@@ -32,6 +32,7 @@ dependencies = [
     "selenium>=4.35.0",
     "pywebview>=6.0",
     "pyfoscam (>=1.2,<2.0)",
+    "matplotlib>=3.10.5",
 ]
 
 [project.optional-dependencies]
