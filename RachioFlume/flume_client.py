@@ -79,7 +79,7 @@ class FlumeClient:
             "grant_type": "password",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "email": self.username,  # Flume API expects email field, not username
+            "username": self.username,  # API error shows it expects username parameter
             "password": self.password,
         }
 
