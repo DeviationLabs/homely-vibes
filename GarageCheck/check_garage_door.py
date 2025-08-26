@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 import argparse
-import logging
 import os
 import sys
 import traceback
 import time
 from lib import Constants
+from lib.logger import SystemLogger
 import FoscamImager
 import Mailer
+
+logger = SystemLogger.get_logger(__name__)
 # import TFOneShot ## Imported on demand
 
 if __name__ == "__main__":
@@ -37,11 +39,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_file", help="Trained model", default=None)
     args = parser.parse_args()
 
-    logfile = "%s/%s.log" % (Constants.LOGGING_DIR, os.path.basename(__file__))
-    log_format = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
-    logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
-    logging.info("============")
-    logging.info("Invoked command: %s" % " ".join(sys.argv))
+    logger.info("============")
+    logger.info("Invoked command: %s" % " ".join(sys.argv))
 
     send_email = args.always_email
     model = None
@@ -67,7 +66,7 @@ if __name__ == "__main__":
 
             if model is not None:
                 label, tmp_msg = TFOneShot.run_predictor(model, model_labels, img)
-                logging.info(tmp_msg)
+                logger.info(tmp_msg)
                 msg += f"\n{tmp_msg}"
             else:
                 # We've already saved the image. don't keep looping
@@ -85,10 +84,10 @@ if __name__ == "__main__":
 
         except Exception:
             msg += traceback.format_exc()
-            logging.error(traceback.format_exc())
+            logger.error(traceback.format_exc())
             send_email = True
 
         time.sleep(30)
 
-    logging.info("Done!")
+    logger.info("Done!")
     print("Done!")

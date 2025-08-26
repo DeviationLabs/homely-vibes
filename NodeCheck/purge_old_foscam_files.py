@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse
-import logging
 import os
 import subprocess
 import sys
 from lib import Constants
+from lib.logger import SystemLogger
 import Mailer
+
+logger = SystemLogger.get_logger(__name__)
 
 #### Main Routine ####
 if __name__ == "__main__":
@@ -15,11 +17,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logfile = "%s/%s.log" % (Constants.LOGGING_DIR, os.path.basename(__file__))
-    log_format = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
-    logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
-    logging.info("============")
-    logging.info("Invoked command: %s" % " ".join(sys.argv))
+    logger.info("============")
+    logger.info("Invoked command: %s" % " ".join(sys.argv))
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
     cmd = "%s/purge_old_foscam_files.sh" % script_dir
@@ -36,7 +35,7 @@ if __name__ == "__main__":
         msg = e.output
         alert = True
     finally:
-        logging.info(msg)
+        logger.info(msg)
 
     Mailer.sendmail(
         topic="[PurgeFoscam]", alert=alert, message=msg, always_email=args.always_email
