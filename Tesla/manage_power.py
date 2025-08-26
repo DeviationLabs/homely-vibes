@@ -2,7 +2,6 @@
 """Clean Tesla Powerwall management system."""
 
 import argparse
-import logging
 import os
 import sys
 import time
@@ -12,6 +11,7 @@ import importlib
 from lib import Constants
 from lib import MyPushover
 from lib.TeslaPy.teslapy import Tesla as TeslaClient
+from lib.logger import SystemLogger, get_logger
 
 
 @dataclass
@@ -79,17 +79,18 @@ class PowerwallManager:
         self.cached_op_mode = (
             None  # APB: 5/25/23 seems we are no longer getting this data from the query
         )
+        self.logger = get_logger(__name__)
 
     def send_pushover(self, message: str) -> None:
         """Send notification via configured channels."""
         if self.send_notifications:
             try:
                 MyPushover.send_pushover(Constants.POWERWALL_PUSHOVER_RCPT, message)
-                logging.info(f"Notification sent: {message}")
+                self.logger.info(f"Notification sent: {message}")
             except Exception as e:
-                logging.error(f"Failed to send notification: {e}")
+                self.logger.error(f"Failed to send notification: {e}")
         else:
-            logging.info(f"Notification skipped: {message}")
+            self.logger.info(f"Notification skipped: {message}")
 
     def sanitize_battery_percentage(self, pct: float, time_sampling: float) -> float:
         """Sanitize battery percentage using history and extrapolation."""
@@ -109,7 +110,7 @@ class PowerwallManager:
         self.battery_history.add_percentage(original_pct if original_pct != 0 else pct)
 
         if abs(pct - original_pct) > 0.5:
-            logging.warning(
+            self.logger.warning(
                 f"Bad battery data: {original_pct}% -> {pct}% "
                 f"from history {self.battery_history.percentages}"
             )
@@ -212,7 +213,7 @@ class PowerwallManager:
                 f"At: {data['battery_percent']}%, {decision_point.reason} - "
                 f"{' | '.join(status_messages)}"
             )
-            logging.warning(message)
+            self.logger.warning(message)
 
             if self.send_notifications or decision_point.always_notify:
                 self.send_pushover(message)
@@ -238,7 +239,7 @@ class PowerwallManager:
 
             future_pct = self.battery_history.extrapolate() or data["battery_percent"]
 
-            logging.info(
+            self.logger.info(
                 f"Evaluating {decision_point.reason}: "
                 f"current={data['battery_percent']:.2f}% vs "
                 f"trigger={trigger_now:.2f}%, future={future_pct:.2f}% vs "
@@ -249,7 +250,7 @@ class PowerwallManager:
             if self.evaluate_condition(
                 data["battery_percent"], trigger_now, decision_point.iff_higher
             ):
-                logging.info(f"Matched current condition: {decision_point.reason}")
+                self.logger.info(f"Matched current condition: {decision_point.reason}")
                 self.apply_decision_point(product, data, decision_point, trigger_now)
                 return sleep_time
 
@@ -257,15 +258,17 @@ class PowerwallManager:
             elif self.evaluate_condition(
                 future_pct, trigger_next, decision_point.iff_higher
             ):
-                logging.warning(
+                self.logger.warning(
                     f"Future condition match: {decision_point.reason} - fast retry"
                 )
                 return min(sleep_time, 60)
 
             else:
-                logging.info(f"In time window but no match: {decision_point.reason}")
+                self.logger.info(
+                    f"In time window but no match: {decision_point.reason}"
+                )
 
-        logging.warning("No decision point matched - is this expected?")
+        self.logger.warning("No decision point matched - is this expected?")
         return sleep_time
 
     def run_monitoring_loop(self) -> None:
@@ -273,7 +276,7 @@ class PowerwallManager:
         with TeslaClient(self.email, verify=False) as client:
             product = client.battery_list()[0]
             site_name = product["site_name"]
-            logging.info(f"Connected to site: {site_name}")
+            self.logger.info(f"Connected to site: {site_name}")
             self.send_pushover(f"Powerwall monitoring started for: {site_name}")
 
             sleep_time = 0
@@ -287,7 +290,7 @@ class PowerwallManager:
                 current_time = time.localtime()
                 poll_time = Constants.POWERWALL_POLL_TIME
 
-                logging.info(f"Loop {self.loop_count}")
+                self.logger.info(f"Loop {self.loop_count}")
 
                 try:
                     data = self.get_powerwall_data(product)
@@ -297,7 +300,7 @@ class PowerwallManager:
                         data["battery_percent"], sleep_time / poll_time
                     )
 
-                    logging.info(
+                    self.logger.info(
                         f"Battery: {data['battery_percent']:.2f}%, "
                         f"Mode: {data['operation_mode']}, "
                         f"Export: {data['can_export']}, "
@@ -312,7 +315,7 @@ class PowerwallManager:
 
                 except Exception as e:
                     self.fail_count += 1
-                    logging.warning(f"Attempt {self.fail_count} failed: {e}")
+                    self.logger.warning(f"Attempt {self.fail_count} failed: {e}")
 
                     if self.fail_count > 10:
                         raise RuntimeError(f"Too many consecutive failures: {e}")
@@ -323,17 +326,22 @@ class PowerwallManager:
 
 def setup_logging(debug: bool, quiet: bool) -> None:
     """Configure logging settings."""
+    import logging
+
     logfile = f"{Constants.LOGGING_DIR}/{os.path.basename(__file__)}.log"
-    log_format = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
+    log_format = "%(levelname)s:%(module)s:%(lineno)d:%(asctime)s: %(message)s"
 
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(filename=logfile, format=log_format, level=level)
+    SystemLogger.setup(
+        level=level,
+        log_file=logfile,
+        console_output=not quiet,
+        format_string=log_format,
+    )
 
-    if not quiet:
-        logging.getLogger().addHandler(logging.StreamHandler())
-
-    logging.info("=" * 50)
-    logging.info(f"Started: {' '.join(sys.argv)}")
+    logger = get_logger(__name__)
+    logger.info("=" * 50)
+    logger.info(f"Started: {' '.join(sys.argv)}")
 
 
 def main() -> None:
@@ -364,19 +372,22 @@ def main() -> None:
 
     except EnvironmentError as e:
         error_msg = f"Tesla token expired? Run TeslaPy gui.py. Error: {e}"
-        logging.error(error_msg)
+        logger = get_logger(__name__)
+        logger.error(error_msg)
         manager.send_pushover("Tesla token expired - run TeslaPy gui.py")
 
     except Exception as e:
         import traceback
 
         tb_str = traceback.format_exc()
-        logging.error(f"Unexpected error: {e}\nTraceback:\n{tb_str}")
+        logger = get_logger(__name__)
+        logger.error(f"Unexpected error: {e}\nTraceback:\n{tb_str}")
         if "manager" in locals():
             manager.send_pushover(f"Powerwall monitoring error: {e}")
 
     finally:
-        logging.error("Exiting after 1-hour delay to prevent respawn churn")
+        logger = get_logger(__name__)
+        logger.error("Exiting after 1-hour delay to prevent respawn churn")
         time.sleep(3600)
 
 

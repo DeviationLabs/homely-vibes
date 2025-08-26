@@ -8,7 +8,7 @@ from contextlib import contextmanager
 
 from rachio_client import WateringEvent, Zone
 from flume_client import WaterReading
-from logger import get_logger
+from lib.logger import get_logger
 
 
 class WaterTrackingDB:

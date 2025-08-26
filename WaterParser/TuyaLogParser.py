@@ -4,7 +4,7 @@ import csv
 from enum import Enum
 import json
 import logging
-import Mailer
+from lib import Mailer
 
 
 class TuyaLogParser:
