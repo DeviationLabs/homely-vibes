@@ -75,11 +75,32 @@ class FlumeClient:
 
         # Cache for device info
         self._devices: Optional[List[Device]] = None
+        
+    def test_credentials(self) -> dict:
+        """Test if credentials are properly configured without making API calls.
+        
+        Returns:
+            Dict with credential validation results
+        """
+        results = {
+            "client_id_set": bool(self.client_id),
+            "client_secret_set": bool(self.client_secret), 
+            "username_set": bool(self.username),
+            "password_set": bool(self.password),
+            "all_credentials_present": bool(all([self.client_id, self.client_secret, self.username, self.password]))
+        }
+        
+        if results["all_credentials_present"] and self.client_id and self.username:
+            results["client_id_preview"] = f"{self.client_id[:8]}..." if len(self.client_id) > 8 else self.client_id
+            results["username_preview"] = self.username
+        
+        return results
 
     def _get_access_token(self) -> str:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
         self.logger.info(f"Authenticating with Flume API using OAuth2 for user: {self.username}")
         self.logger.debug(f"Using client_id: {self.client_id[:8] if self.client_id else 'None'}...")
+        
         url = "https://api.flumewater.com/oauth/token"
 
         payload = {
@@ -91,6 +112,11 @@ class FlumeClient:
         }
 
         headers = {"Content-Type": "application/json"}
+        
+        # Log request details for debugging
+        self.logger.debug(f"Request URL: {url}")
+        self.logger.debug(f"Payload structure: grant_type={payload.get('grant_type')}, username={'***' if self.username else 'None'}, password={'***' if self.password else 'None'}")
+        self.logger.debug(f"Request headers: {headers}")
 
         try:
             response = requests.post(url, json=payload, headers=headers)
