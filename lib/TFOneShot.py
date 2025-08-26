@@ -14,7 +14,7 @@ from keras.models import load_model
 from keras.preprocessing import image
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.generic_utils import CustomObjectScope
-from . import Constants
+from lib import Constants
 
 tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
