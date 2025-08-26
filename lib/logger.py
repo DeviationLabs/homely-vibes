@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 
-class WaterTrackingLogger:
+class SystemLogger:
     """Centralized logger configuration for all water tracking modules."""
 
     _initialized = False
@@ -143,4 +143,4 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         Configured logger instance
     """
-    return WaterTrackingLogger.get_logger(name)
+    return SystemLogger.get_logger(name)

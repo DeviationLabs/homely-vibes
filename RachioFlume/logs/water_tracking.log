@@ -1,0 +1,10 @@
+2025-08-25 19:24:32,775 - __main__ - INFO - Starting Rachio-Flume Water Tracking Integration
+2025-08-25 19:24:32,776 - data_storage - INFO - Initializing water tracking database at water_tracking.db
+2025-08-25 19:25:25,784 - __main__ - INFO - Starting Rachio-Flume Water Tracking Integration
+2025-08-25 19:25:25,786 - data_storage - INFO - Initializing water tracking database at water_tracking.db
+2025-08-25 19:25:25,786 - rachio_client - INFO - Rachio client initialized for device 5d11b1a5-2c5f-42ce-a751-78c6c263bf1e
+2025-08-25 19:25:25,786 - collector - INFO - Rachio client initialized
+2025-08-25 19:25:25,786 - flume_client - INFO - Authenticating with Flume API using OAuth2
+2025-08-25 19:25:26,130 - flume_client - ERROR - Failed to authenticate with Flume API: 400 Client Error: Bad Request for url: https://api.flumewater.com/oauth/token
+2025-08-25 19:25:26,130 - flume_client - ERROR - Response status: 400
+2025-08-25 19:25:26,130 - flume_client - ERROR - Response body: {"success":false,"message":"invalid_request","http_code":400,"http_message":"Bad Request","detailed":["Missing parameter: `username`"],"data":[],"count":0,"pagination":null}
