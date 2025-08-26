@@ -34,6 +34,8 @@ dependencies = [
     "pyfoscam (>=1.2,<2.0)",
     "matplotlib>=3.10.5",
     "tld>=0.13.1",
+    "oauthlib>=3.3.1",
+    "setuptools>=80.9.0",
 ]
 
 [project.optional-dependencies]
