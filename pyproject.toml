@@ -33,6 +33,7 @@ dependencies = [
     "pywebview>=6.0",
     "pyfoscam (>=1.2,<2.0)",
     "matplotlib>=3.10.5",
+    "tld>=0.13.1",
 ]
 
 [project.optional-dependencies]
