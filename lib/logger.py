@@ -36,7 +36,9 @@ class SystemLogger:
 
         # Default format
         if format_string is None:
-            format_string = "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+            format_string = (
+                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+            )
 
         # Clear any existing handlers
         root_logger = logging.getLogger()
@@ -62,7 +64,7 @@ class SystemLogger:
                 cls._log_file = Path(log_dir) / log_file
             else:
                 cls._log_file = Path(log_file)
-                
+
             cls._log_file.parent.mkdir(parents=True, exist_ok=True)
 
             file_handler = logging.FileHandler(cls._log_file)

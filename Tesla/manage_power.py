@@ -264,7 +264,9 @@ class PowerwallManager:
                 return min(sleep_time, 60)
 
             else:
-                self.logger.info(f"In time window but no match: {decision_point.reason}")
+                self.logger.info(
+                    f"In time window but no match: {decision_point.reason}"
+                )
 
         self.logger.warning("No decision point matched - is this expected?")
         return sleep_time
@@ -325,6 +327,7 @@ class PowerwallManager:
 def setup_logging(debug: bool, quiet: bool) -> None:
     """Configure logging settings."""
     import logging
+
     logfile = f"{Constants.LOGGING_DIR}/{os.path.basename(__file__)}.log"
     log_format = "%(levelname)s:%(module)s:%(lineno)d:%(asctime)s: %(message)s"
 
@@ -333,7 +336,7 @@ def setup_logging(debug: bool, quiet: bool) -> None:
         level=level,
         log_file=logfile,
         console_output=not quiet,
-        format_string=log_format
+        format_string=log_format,
     )
 
     logger = get_logger(__name__)
