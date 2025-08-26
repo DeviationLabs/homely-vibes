@@ -56,8 +56,14 @@ class FlumeClient:
         self.password = password or os.getenv("FLUME_PASSWORD")
 
         if not all([self.client_id, self.client_secret, self.username, self.password]):
+            missing = []
+            if not self.client_id: missing.append("FLUME_CLIENT_ID")
+            if not self.client_secret: missing.append("FLUME_CLIENT_SECRET")
+            if not self.username: missing.append("FLUME_USER_EMAIL")
+            if not self.password: missing.append("FLUME_PASSWORD")
             raise ValueError(
-                "All OAuth credentials (client_id, client_secret, username, password) are required"
+                f"Missing required Flume credentials: {', '.join(missing)}. "
+                "Please check your environment variables."
             )
 
         self.access_token = self._get_access_token()
@@ -72,7 +78,8 @@ class FlumeClient:
 
     def _get_access_token(self) -> str:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
-        self.logger.info("Authenticating with Flume API using OAuth2")
+        self.logger.info(f"Authenticating with Flume API using OAuth2 for user: {self.username}")
+        self.logger.debug(f"Using client_id: {self.client_id[:8] if self.client_id else 'None'}...")
         url = "https://api.flumewater.com/oauth/token"
 
         payload = {
@@ -91,12 +98,31 @@ class FlumeClient:
 
             token_data = response.json()
             self.logger.info("Successfully obtained access token from Flume API")
+            self.logger.debug(f"Access token length: {len(token_data['access_token'])} characters")
             return token_data["access_token"]
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
             if hasattr(e, "response") and e.response is not None:
                 self.logger.error(f"Response status: {e.response.status_code}")
                 self.logger.error(f"Response body: {e.response.text}")
+                
+                # Parse error response for better debugging
+                try:
+                    error_data = e.response.json()
+                    if "detailed" in error_data:
+                        self.logger.error(f"API error details: {error_data['detailed']}")
+                    
+                    # Check for credential-specific errors
+                    if error_data.get("message") == "invalid_grant":
+                        self.logger.error(
+                            "Credential validation failed. Please verify:\n"
+                            "1. FLUME_USER_EMAIL is correct (should be your Flume login email)\n"
+                            "2. FLUME_PASSWORD is correct\n"
+                            "3. FLUME_CLIENT_ID and FLUME_CLIENT_SECRET are valid OAuth credentials\n"
+                            "4. Your Flume account has API access enabled"
+                        )
+                except Exception:
+                    pass  # If we can't parse the response, just continue
             raise
 
     def get_devices(self) -> List[Device]:
