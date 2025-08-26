@@ -6,7 +6,7 @@ from typing import Optional, List
 import requests
 from pydantic import BaseModel
 
-from logger import get_logger
+from lib.logger import get_logger
 
 
 class WaterReading(BaseModel):

@@ -6,7 +6,7 @@ from typing import Dict, Any
 from pathlib import Path
 
 from data_storage import WaterTrackingDB
-from logger import get_logger
+from lib.logger import get_logger
 
 
 class WeeklyReporter:

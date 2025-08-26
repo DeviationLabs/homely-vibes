@@ -33,7 +33,7 @@ class SystemLogger:
 
         # Default format
         if format_string is None:
-            format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            format_string = "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
 
         # Clear any existing handlers
         root_logger = logging.getLogger()
@@ -124,7 +124,7 @@ class SystemLogger:
             formatter = root_logger.handlers[0].formatter
         else:
             formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
             )
 
         file_handler = logging.FileHandler(cls._log_file)
