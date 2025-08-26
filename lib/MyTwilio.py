@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from twilio.rest import Client
-from . import Constants
+from lib import Constants
 import logging
 
 
