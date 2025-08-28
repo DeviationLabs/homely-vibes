@@ -83,14 +83,11 @@ class PowerwallManager:
 
     def send_pushover(self, message: str) -> None:
         """Send notification via configured channels."""
-        if self.send_notifications:
-            try:
-                MyPushover.send_pushover(Constants.POWERWALL_PUSHOVER_RCPT, message)
-                self.logger.info(f"Notification sent: {message}")
-            except Exception as e:
-                self.logger.error(f"Failed to send notification: {e}")
-        else:
-            self.logger.info(f"Notification skipped: {message}")
+        try:
+            MyPushover.send_pushover(Constants.POWERWALL_PUSHOVER_RCPT, message)
+            self.logger.info(f"Notification sent: {message}")
+        except Exception as e:
+            self.logger.error(f"Failed to send notification: {e}")
 
     def sanitize_battery_percentage(self, pct: float, time_sampling: float) -> float:
         """Sanitize battery percentage using history and extrapolation."""
