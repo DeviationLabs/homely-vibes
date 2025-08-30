@@ -261,18 +261,22 @@ class FlumeClient:
         """Get current water usage rate across all devices in gallons per minute."""
         # Get usage for last 5 minutes
         end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=5)
+        start_time = end_time - timedelta(minutes=3)
 
         readings = self.get_usage(start_time, end_time, bucket="MIN")
 
         if not readings:
             return None
 
-        # Calculate average rate from recent readings
-        total_usage = sum(r.value for r in readings)
-        time_span_minutes = len(readings)
-
-        return total_usage / time_span_minutes if time_span_minutes > 0 else 0.0
+        # Each reading is already in GPM (gallons per minute)
+        # Find the most recent non-zero reading, or average recent non-zero readings
+        non_zero_readings = [r.value for r in readings if r.value > 0]
+        
+        if not non_zero_readings:
+            return 0.0
+            
+        # Use average of recent non-zero readings for stability
+        return sum(non_zero_readings) / len(non_zero_readings)
 
     def get_usage_for_period(self, start_time: datetime, end_time: datetime) -> float:
         """Get total water usage for a specific time period across all devices.
