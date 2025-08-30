@@ -118,7 +118,7 @@ class FlumeClient:
         if self._user_id is not None:
             return self._user_id
         
-        url = f"{self.BASE_URL}/users/me"
+        url = f"{self.BASE_URL}/me"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         
