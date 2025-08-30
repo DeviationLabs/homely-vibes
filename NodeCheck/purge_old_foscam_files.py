@@ -2,7 +2,7 @@
 import argparse
 import os
 import sys
-import subprocess
+import time
 from pathlib import Path
 from lib.logger import SystemLogger
 from lib import Mailer
@@ -42,26 +42,35 @@ def purge_old_foscam_files():
         messages.append(step_msg)
         
         try:
-            # Use find command to locate and remove old files
-            find_cmd = [
-                'find', '.', '-mindepth', '2', '-type', 'f', 
-                '-mtime', f'+{purge_after_days}', '-delete'
-            ]
-            result = subprocess.run(find_cmd, capture_output=True, text=True, timeout=300)
+            # Use pathlib to find and remove old files (Pythonic approach)
+            current_time = time.time()
+            cutoff_time = current_time - (purge_after_days * 24 * 60 * 60)  # Convert days to seconds
             
-            if result.returncode == 0:
-                messages.append("File deletion completed successfully")
-            else:
-                error_msg = f"Error during file deletion: {result.stderr}"
-                messages.append(error_msg)
-                logger.error(error_msg)
-                success = False
+            deleted_count = 0
+            error_count = 0
+            
+            # Walk through directories at depth >= 2 (mindepth 2 equivalent)
+            for file_path in Path('.').rglob('*'):
+                # Skip if not a file or if depth < 2
+                if not file_path.is_file() or len(file_path.parts) < 3:
+                    continue
                 
-        except subprocess.TimeoutExpired:
-            error_msg = "File deletion timed out after 5 minutes"
-            messages.append(error_msg)
-            logger.error(error_msg)
-            success = False
+                try:
+                    # Check file modification time
+                    if file_path.stat().st_mtime < cutoff_time:
+                        file_path.unlink()  # Remove the file
+                        deleted_count += 1
+                except (OSError, PermissionError) as e:
+                    error_count += 1
+                    logger.warning(f"Could not delete {file_path}: {e}")
+            
+            if error_count == 0:
+                messages.append(f"File deletion completed successfully - removed {deleted_count} files")
+            else:
+                messages.append(f"File deletion completed with {error_count} errors - removed {deleted_count} files")
+                if error_count > deleted_count * 0.1:  # If errors > 10% of deletions, flag as failure
+                    success = False
+                
         except Exception as e:
             error_msg = f"Error during file deletion: {str(e)}"
             messages.append(error_msg)
