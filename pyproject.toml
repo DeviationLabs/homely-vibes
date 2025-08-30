@@ -36,7 +36,6 @@ dependencies = [
     "tld>=0.13.1",
     "oauthlib>=3.3.1",
     "setuptools>=80.9.0",
-    "streamlit (>=1.49.1,<2.0.0)",
     "asyncio-mqtt (>=0.16.2,<0.17.0)",
 ]
 
