@@ -88,17 +88,37 @@ class RachioClient:
 
     def get_active_zone(self) -> Optional[Zone]:
         """Get currently active watering zone."""
-        device_info = self.get_device_info()
-
-        # Check if any schedule is running
-        for schedule in device_info.get("scheduleRules", []):
-            if schedule.get("enabled", False):
-                # This is a simplified check - in practice you'd need to check
-                # current schedule execution status
-                pass
-
-        # For now, return None if no zone is active
-        # Real implementation would check current watering status
+        try:
+            # Check current schedule execution status
+            url = f"{self.BASE_URL}/device/{self.device_id}/current_schedule"
+            response = requests.get(url, headers=self.headers)
+            
+            if response.status_code == 200:
+                current_schedule = response.json()
+                
+                # If status is PROCESSING, there's an active zone
+                if current_schedule.get("status") == "PROCESSING":
+                    zone_id = current_schedule.get("zoneId")
+                    zone_number = current_schedule.get("zoneNumber")
+                    
+                    if zone_id and zone_number:
+                        # Get zone details from device info
+                        device_info = self.get_device_info()
+                        for zone_data in device_info.get("zones", []):
+                            if zone_data["id"] == zone_id:
+                                return Zone(
+                                    id=zone_data["id"],
+                                    zone_number=zone_data["zoneNumber"],
+                                    name=zone_data["name"],
+                                    enabled=zone_data["enabled"],
+                                )
+            elif response.status_code == 204:
+                # No current schedule running
+                self.logger.debug("No current schedule running (204 response)")
+                
+        except Exception as e:
+            self.logger.error(f"Error checking current schedule: {e}")
+        
         return None
 
     def get_events(
