@@ -118,8 +118,8 @@ class FlumeClient:
             self.logger.debug("Returning cached device list")
             return self._devices
 
-        # Use /users/me/devices per API documentation
-        url = f"{self.BASE_URL}/users/me/devices"
+        # Use /me/devices format per API behavior
+        url = f"{self.BASE_URL}/me/devices"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
 
@@ -180,7 +180,7 @@ class FlumeClient:
         )
 
         for device in devices:
-            url = f"{self.BASE_URL}/users/me/devices/{device.id}/query"
+            url = f"{self.BASE_URL}/me/devices/{device.id}/query"
 
             payload = {
                 "queries": [
