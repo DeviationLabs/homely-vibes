@@ -20,8 +20,6 @@ ALWAYS_EMAIL = False
 GMAIL_USERNAME = 'user_from'
 GMAIL_PASSWORD = 'XXX'
 
-
-
 # Twilio SMS
 TWILIO_SID = 'sid'
 AUTH_TOKEN = 'token'
@@ -71,7 +69,7 @@ NODES={
      "ip": "192.168.1.D",
      "username": "XYZA",
      "password": None,
-     "histfile": '/Users/user1/Library/Application\ Support/Google/Chrome/Default/History',
+     "histfile": r'/Users/user1/Library/Application\ Support/Google/Chrome/Default/History',
      "sms_inform": ['+1408-------'],
      "whitelist": "kahoot", # Full python regex
    },
@@ -79,7 +77,7 @@ NODES={
      "ip": "192.168.1.E",
      "username": "XYZA",
      "password": None,
-     "histfile": '/Users/user2/Library/Application\ Support/Google/Chrome/Default/History',
+     "histfile": r'/Users/user2/Library/Application\ Support/Google/Chrome/Default/History',
      "sms_inform": ['+1408-------'],
    },
 }
@@ -106,6 +104,16 @@ POWERWALL_PUSHOVER_RCPT = 'group_name'
 
 TESLA_EMAIL="a@aa.aa"
 TESLA_PASSWORD="XTZA"
+
+# Rachio API
+RACHIO_API_KEY="some_key"
+RACHIO_ID="some_id"
+
+# Flume API
+FLUME_CLIENT_ID="some_id"
+FLUME_CLIENT_SECRET="some_secret"
+FLUME_USER_EMAIL="some user"
+FLUME_PASSWORD="some pass"
 
 @dataclass
 class OpModeConfig:
