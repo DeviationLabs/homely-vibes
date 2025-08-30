@@ -86,7 +86,7 @@ def main():
 def run_collection(args):
     """Run data collection."""
     logger = get_logger(__name__)
-    
+
     try:
         collector = WaterTrackingCollector(args.db, args.interval)
 
@@ -110,7 +110,7 @@ def run_collection(args):
 def show_status(args):
     """Show current system status."""
     logger = get_logger(__name__)
-    
+
     try:
         collector = WaterTrackingCollector(args.db)
         status = collector.get_current_status()
@@ -160,7 +160,7 @@ def show_status(args):
 def generate_report(args):
     """Generate reports."""
     logger = get_logger(__name__)
-    
+
     try:
         reporter = WeeklyReporter(args.db)
 

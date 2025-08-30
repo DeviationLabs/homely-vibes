@@ -63,9 +63,7 @@ def check_if_can_image(nodeName, display_image):
     while count < MAX_COUNT:
         count += 1
         try:
-            myCam = FoscamImager(
-                Constants.FOSCAM_NODES[nodeName], display_image
-            )
+            myCam = FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
             if myCam.getImage() is not None:
                 log_message("   Got image from node: %s" % nodeName)
                 if display_image:
