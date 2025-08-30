@@ -127,6 +127,7 @@ DEP002 = [
     "urllib3",
     "cffi",
     "asyncio-mqtt",
+    "streamlit",
     # Tesla/GUI dependencies used in specific modules
     "geopy",
     "requests-oauthlib",
