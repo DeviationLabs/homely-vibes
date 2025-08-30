@@ -27,9 +27,7 @@ class WaterTrackingCollector:
 
         self.db = WaterTrackingDB(db_path)
         self.rachio_client = RachioClient()
-        self.logger.info("Rachio client initialized")
         self.flume_client = FlumeClient()
-        self.logger.info("Flume client initialized")
         self.poll_interval = poll_interval_seconds
 
         # Track last collection times to avoid duplicates
@@ -171,20 +169,3 @@ class WaterTrackingCollector:
         except Exception as e:
             self.logger.error(f"Error getting current status: {e}")
             return {"error": str(e)}
-
-
-async def main():
-    """Main entry point for running the collector."""
-    collector = WaterTrackingCollector()
-
-    # Run once for testing, or continuously
-    import sys
-
-    if "--once" in sys.argv:
-        await collector.collect_once()
-    else:
-        await collector.run_continuous()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
