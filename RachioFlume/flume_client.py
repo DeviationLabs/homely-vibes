@@ -89,11 +89,17 @@ class FlumeClient:
             token_data = response.json()
             self.logger.info("Successfully obtained access token from Flume API")
             
-            # Handle envelope response format
-            if "data" in token_data:
-                return token_data["data"]["access_token"]
-            else:
-                return token_data["access_token"]
+            # Handle different response formats
+            if isinstance(token_data, dict):
+                if "data" in token_data and isinstance(token_data["data"], dict):
+                    return token_data["data"]["access_token"]
+                elif "access_token" in token_data:
+                    return token_data["access_token"]
+            elif isinstance(token_data, list) and len(token_data) > 0:
+                # Handle list response format
+                return token_data[0]["access_token"]
+            
+            raise ValueError(f"Unexpected token response format: {token_data}")
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
             if hasattr(e, "response") and e.response is not None:
