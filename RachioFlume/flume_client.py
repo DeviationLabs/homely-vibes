@@ -199,17 +199,20 @@ class FlumeClient:
 
                 data = response.json()
 
-                # Parse response - structure may vary based on Flume API
+                # Parse response - Flume API returns data keyed by request_id
                 for query_result in data.get("data", []):
-                    for reading in query_result.get("data", []):
-                        timestamp = datetime.fromisoformat(
-                            reading["datetime"].replace("Z", "+00:00")
-                        )
-                        value = float(reading["value"])
+                    # Each query_result is a dict with request_id as key
+                    for _, reading_list in query_result.items():
+                        if isinstance(reading_list, list):
+                            for reading in reading_list:
+                                # Parse datetime - Flume returns "YYYY-MM-DD HH:MM:SS" format
+                                datetime_str = reading["datetime"]
+                                timestamp = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
+                                value = float(reading["value"])
 
-                        all_readings.append(
-                            WaterReading(timestamp=timestamp, value=value)
-                        )
+                                all_readings.append(
+                                    WaterReading(timestamp=timestamp, value=value)
+                                )
 
             except requests.RequestException as e:
                 # Log error but continue with other devices
