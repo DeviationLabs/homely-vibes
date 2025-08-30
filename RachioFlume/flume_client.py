@@ -61,9 +61,8 @@ class FlumeClient:
             "Content-Type": "application/json",
         }
 
-        # Cache for device info and user ID
+        # Cache for device info
         self._devices: Optional[List[Device]] = None
-        self._user_id: Optional[str] = None
 
     def _get_access_token(self) -> str:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
@@ -113,37 +112,14 @@ class FlumeClient:
                 self.logger.error(f"Response body: {e.response.text}")
             raise
 
-    def _get_user_id(self) -> str:
-        """Get the current user's ID."""
-        if self._user_id is not None:
-            return self._user_id
-        
-        url = f"{self.BASE_URL}/me"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        
-        user_data = response.json()
-        
-        # Extract user ID from response
-        if user_data.get("success", True):
-            data_array = user_data.get("data", [])
-            if data_array and isinstance(data_array, list):
-                user_info = data_array[0]
-                user_id = user_info.get("id")
-                if user_id:
-                    self._user_id = str(user_id)
-                    return self._user_id
-        
-        raise ValueError("Could not retrieve user ID from Flume API")
-
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""
         if self._devices is not None:
             self.logger.debug("Returning cached device list")
             return self._devices
 
-        user_id = self._get_user_id()
-        url = f"{self.BASE_URL}/users/{user_id}/devices"
+        # Use /users/me/devices per API documentation
+        url = f"{self.BASE_URL}/users/me/devices"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
 
@@ -204,8 +180,7 @@ class FlumeClient:
         )
 
         for device in devices:
-            user_id = self._get_user_id()
-            url = f"{self.BASE_URL}/users/{user_id}/devices/{device.id}/query"
+            url = f"{self.BASE_URL}/users/me/devices/{device.id}/query"
 
             payload = {
                 "queries": [
