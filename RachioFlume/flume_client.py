@@ -86,20 +86,25 @@ class FlumeClient:
             response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
 
-            token_data = response.json()
+            response_data = response.json()
+            
+            # Check API success status
+            if not response_data.get("success", True):
+                error_msg = response_data.get("detailed", response_data.get("message", "Authentication failed"))
+                raise ValueError(f"Flume API error: {error_msg}")
+            
+            # Extract token from data array (per Flume API documentation)
+            data_array = response_data.get("data", [])
+            if not data_array or not isinstance(data_array, list):
+                raise ValueError("No token data returned from Flume API")
+            
+            token_info = data_array[0]
+            access_token = token_info.get("access_token")
+            if not access_token:
+                raise ValueError("No access_token found in Flume API response")
+            
             self.logger.info("Successfully obtained access token from Flume API")
-            
-            # Handle different response formats
-            if isinstance(token_data, dict):
-                if "data" in token_data and isinstance(token_data["data"], dict):
-                    return token_data["data"]["access_token"]
-                elif "access_token" in token_data:
-                    return token_data["access_token"]
-            elif isinstance(token_data, list) and len(token_data) > 0:
-                # Handle list response format
-                return token_data[0]["access_token"]
-            
-            raise ValueError(f"Unexpected token response format: {token_data}")
+            return access_token
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
             if hasattr(e, "response") and e.response is not None:
