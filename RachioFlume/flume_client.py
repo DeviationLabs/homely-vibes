@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 import requests
 from pydantic import BaseModel
-
 from lib.logger import get_logger
 
 
@@ -29,7 +28,7 @@ class Device(BaseModel):
 class FlumeClient:
     """Client for Flume water monitoring API."""
 
-    BASE_URL = "https://api.flumetech.com"
+    BASE_URL = "https://api.flumewater.com"
 
     def __init__(
         self,
@@ -55,11 +54,6 @@ class FlumeClient:
         self.username = username or os.getenv("FLUME_USER_EMAIL")
         self.password = password or os.getenv("FLUME_PASSWORD")
 
-        if not all([self.client_id, self.client_secret, self.username, self.password]):
-            raise ValueError(
-                "All OAuth credentials (client_id, client_secret, username, password) are required"
-            )
-
         self.access_token = self._get_access_token()
 
         self.headers = {
@@ -72,26 +66,45 @@ class FlumeClient:
 
     def _get_access_token(self) -> str:
         """Get access token using OAuth2 Resource Owner Credentials Grant."""
-        self.logger.info("Authenticating with Flume API using OAuth2")
-        url = "https://api.flumewater.com/oauth/token"
+        self.logger.info(
+            f"Authenticating with Flume API using OAuth2 for user: {self.username}"
+        )
+
+        url = "https://api.flumewater.com/oauth/token?envelope=true"
 
         payload = {
             "grant_type": "password",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "email": self.username,  # Flume API expects email field, not username
+            "username": self.username,
             "password": self.password,
         }
 
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        headers = {"accept": "application/json", "content-type": "application/json"}
 
         try:
-            response = requests.post(url, data=payload, headers=headers)
+            response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
 
-            token_data = response.json()
+            response_data = response.json()
+            
+            # Check API success status
+            if not response_data.get("success", True):
+                error_msg = response_data.get("detailed", response_data.get("message", "Authentication failed"))
+                raise ValueError(f"Flume API error: {error_msg}")
+            
+            # Extract token from data array (per Flume API documentation)
+            data_array = response_data.get("data", [])
+            if not data_array or not isinstance(data_array, list):
+                raise ValueError("No token data returned from Flume API")
+            
+            token_info = data_array[0]
+            access_token = token_info.get("access_token")
+            if not access_token:
+                raise ValueError("No access_token found in Flume API response")
+            
             self.logger.info("Successfully obtained access token from Flume API")
-            return token_data["access_token"]
+            return access_token
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
             if hasattr(e, "response") and e.response is not None:
@@ -105,20 +118,24 @@ class FlumeClient:
             self.logger.debug("Returning cached device list")
             return self._devices
 
-        url = f"{self.BASE_URL}/users/me/devices"
+        # Use /me/devices format per API behavior
+        url = f"{self.BASE_URL}/me/devices"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
 
-        devices_data = response.json()
+        response_data = response.json()
+        
+        # Check API success status
+        if not response_data.get("success", True):
+            error_msg = response_data.get("detailed", response_data.get("message", "Failed to get devices"))
+            raise ValueError(f"Flume API error: {error_msg}")
+        
+        # Extract devices from data array
+        device_list = response_data.get("data", [])
+        if not isinstance(device_list, list):
+            raise ValueError("Invalid device data format from Flume API")
+        
         devices = []
-
-        # Handle different possible response structures
-        device_list = (
-            devices_data
-            if isinstance(devices_data, list)
-            else devices_data.get("data", [])
-        )
-
         for device_data in device_list:
             devices.append(
                 Device(
@@ -163,7 +180,7 @@ class FlumeClient:
         )
 
         for device in devices:
-            url = f"{self.BASE_URL}/users/me/devices/{device.id}/query"
+            url = f"{self.BASE_URL}/me/devices/{device.id}/query"
 
             payload = {
                 "queries": [
