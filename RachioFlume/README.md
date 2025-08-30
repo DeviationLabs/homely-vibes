@@ -16,21 +16,23 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 
 ## Setup
 
-### Environment Variables
+### Credentials Configuration
 
-Create a `.env` file in the project root with these variables:
+Add your API credentials to `lib/Constants.py`:
 
-```bash
-# Rachio API credentials
-RACHIO_API_KEY=your_rachio_api_key
-RACHIO_ID=your_rachio_device_id
+```python
+# Rachio API credentials  
+RACHIO_API_KEY = "abc123..."
+RACHIO_ID = "device-uuid..."
 
 # Flume API credentials (get from https://portal.flumetech.com/#token)
-FLUME_CLIENT_ID=your_flume_client_id
-FLUME_CLIENT_SECRET=your_flume_client_secret
-FLUME_USER_EMAIL=your_flume_email_address
-FLUME_PASSWORD=your_flume_password
+FLUME_CLIENT_ID = "client-id..."  
+FLUME_CLIENT_SECRET = "client-secret..."
+FLUME_USER_EMAIL = "your-email@example.com"
+FLUME_PASSWORD = "your-password..."
 ```
+
+**Note**: The credentials are sourced from `lib/Constants.py` instead of environment variables for consistency with the broader project architecture.
 
 ### Installation
 
@@ -42,42 +44,84 @@ uv sync
 
 ## Usage
 
-All commands should be run from the RachioFlume directory:
+All commands should be run from the RachioFlume directory.
 
-### Data Collection
+### Recommended Workflow
+
+1. **Start continuous data collection** (run in background)
+2. **Check status** anytime to see active zones and flow rates  
+3. **Generate reports** after collecting data for several days/weeks
+
+### 🔄 Data Collection (Continuous Operation)
+
+For best results, run the collector continuously to gather data over time:
 
 ```bash
-# Run single data collection cycle
-uv run python main.py collect --once
+# Start continuous collection in background (recommended)
+nohup uv run python main.py collect --continuous > water_tracking.log 2>&1 &
 
-# Run continuous collection (every 5 minutes)
+# Or run in foreground (will stop when terminal closes)
 uv run python main.py collect --continuous
 
-# Run continuous with custom interval (every 10 minutes)
-uv run python main.py collect --continuous --interval 600
+# Run single collection cycle (for testing)
+uv run python main.py collect --once
+
+# Custom collection intervals
+uv run python main.py collect --continuous --interval 120    # Every 2 minutes
+uv run python main.py collect --continuous --interval 600    # Every 10 minutes (default: 300)
 ```
 
-### System Status
+**💡 Pro Tip**: Let the collector run for at least a week to get meaningful reports and efficiency analysis!
+
+### 📊 System Status (Check Anytime)
 
 ```bash
-# Check current system status
+# See current active zone and real-time usage rate
 uv run python main.py status
 ```
 
-### Reports
+Example output:
+```
+==================================================
+WATER TRACKING SYSTEM STATUS
+==================================================
+Active Zone: #11 - Z11 BB - Outer Perim
+Current Usage Rate: 6.14 GPM
+Recent Sessions (24h): 15
+Last Rachio Collection: 2023-07-15T10:30:00
+Last Flume Collection: 2023-07-15T10:35:00
+==================================================
+```
+
+### 📈 Reports (After Data Collection)
+
+Generate comprehensive reports once you have collected data:
 
 ```bash
-# Generate current week report
+# Current week report
 uv run python main.py report --current-week
 
-# Generate last week report
+# Last week report  
 uv run python main.py report --last-week
 
-# Save report to JSON file
-uv run python main.py report --current-week --save
-
-# Zone efficiency analysis
+# Zone efficiency analysis (requires multiple watering sessions)
 uv run python main.py report --efficiency
+
+# Save reports to JSON files
+uv run python main.py report --current-week --save
+uv run python main.py report --last-week --save
+```
+
+### 🛑 Stop Data Collection
+
+```bash
+# Find the background process
+ps aux | grep "main.py collect"
+
+# Stop it
+kill <process_id>
+
+# Or if running in foreground, just use Ctrl+C
 ```
 
 ## Architecture

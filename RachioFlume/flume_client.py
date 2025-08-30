@@ -1,11 +1,11 @@
 """Flume API client for water consumption monitoring."""
 
-import os
 from datetime import datetime, timedelta
 from typing import Optional, List
 import requests
 from pydantic import BaseModel
 from lib.logger import get_logger
+from lib import Constants
 
 
 class WaterReading(BaseModel):
@@ -40,19 +40,19 @@ class FlumeClient:
         """Initialize Flume client.
 
         Args:
-            client_id: OAuth client ID (defaults to FLUME_CLIENT_ID env var)
-            client_secret: OAuth client secret (defaults to FLUME_CLIENT_SECRET env var)
-            username: Flume email address (defaults to FLUME_USER_EMAIL env var)
-            password: Flume password (defaults to FLUME_PASSWORD env var)
+            client_id: OAuth client ID (defaults to Constants.FLUME_CLIENT_ID)
+            client_secret: OAuth client secret (defaults to Constants.FLUME_CLIENT_SECRET)
+            username: Flume email address (defaults to Constants.FLUME_USER_EMAIL)
+            password: Flume password (defaults to Constants.FLUME_PASSWORD)
         """
         # Setup logging first
         self.logger = get_logger(__name__)
 
         # OAuth credentials
-        self.client_id = client_id or os.getenv("FLUME_CLIENT_ID")
-        self.client_secret = client_secret or os.getenv("FLUME_CLIENT_SECRET")
-        self.username = username or os.getenv("FLUME_USER_EMAIL")
-        self.password = password or os.getenv("FLUME_PASSWORD")
+        self.client_id = client_id or Constants.FLUME_CLIENT_ID
+        self.client_secret = client_secret or Constants.FLUME_CLIENT_SECRET
+        self.username = username or Constants.FLUME_USER_EMAIL
+        self.password = password or Constants.FLUME_PASSWORD
 
         self.access_token = self._get_access_token()
 
@@ -115,7 +115,6 @@ class FlumeClient:
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""
         if self._devices is not None:
-            self.logger.debug("Returning cached device list")
             return self._devices
 
         # Use /me/devices format per API behavior
@@ -135,14 +134,43 @@ class FlumeClient:
         if not isinstance(device_list, list):
             raise ValueError("Invalid device data format from Flume API")
         
+        # Get location name for better device naming
+        location_name = None
+        if device_list:
+            location_id = device_list[0].get("location_id")
+            if location_id:
+                try:
+                    loc_url = f"{self.BASE_URL}/me/locations/{location_id}"
+                    loc_response = requests.get(loc_url, headers=self.headers)
+                    if loc_response.status_code == 200:
+                        loc_data = loc_response.json()
+                        loc_info = loc_data.get("data", [])
+                        if loc_info and isinstance(loc_info, list):
+                            location_name = loc_info[0].get("name", "Home")
+                except Exception:
+                    pass  # Fall back to default naming
+        
         devices = []
         for device_data in device_list:
+            # Create meaningful device names based on type and location
+            device_type = device_data.get("type", 0)
+            product = device_data.get("product", "flume")
+            
+            if device_type == 1:
+                # Type 1 is typically the bridge/hub
+                device_name = f"{location_name or 'Flume'} Bridge"
+            elif device_type == 2:
+                # Type 2 is typically the water sensor
+                device_name = f"{location_name or 'Flume'} Water Sensor"
+            else:
+                device_name = f"{location_name or 'Flume'} Device ({product})"
+            
             devices.append(
                 Device(
                     id=device_data["id"],
-                    name=device_data.get("name", "Unknown Device"),
-                    location=device_data.get("location"),
-                    active=device_data.get("active", True),
+                    name=device_name,
+                    location=location_name,
+                    active=device_data.get("connected", True),
                 )
             )
 
@@ -199,17 +227,20 @@ class FlumeClient:
 
                 data = response.json()
 
-                # Parse response - structure may vary based on Flume API
+                # Parse response - Flume API returns data keyed by request_id
                 for query_result in data.get("data", []):
-                    for reading in query_result.get("data", []):
-                        timestamp = datetime.fromisoformat(
-                            reading["datetime"].replace("Z", "+00:00")
-                        )
-                        value = float(reading["value"])
+                    # Each query_result is a dict with request_id as key
+                    for _, reading_list in query_result.items():
+                        if isinstance(reading_list, list):
+                            for reading in reading_list:
+                                # Parse datetime - Flume returns "YYYY-MM-DD HH:MM:SS" format
+                                datetime_str = reading["datetime"]
+                                timestamp = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
+                                value = float(reading["value"])
 
-                        all_readings.append(
-                            WaterReading(timestamp=timestamp, value=value)
-                        )
+                                all_readings.append(
+                                    WaterReading(timestamp=timestamp, value=value)
+                                )
 
             except requests.RequestException as e:
                 # Log error but continue with other devices
@@ -229,18 +260,22 @@ class FlumeClient:
         """Get current water usage rate across all devices in gallons per minute."""
         # Get usage for last 5 minutes
         end_time = datetime.now()
-        start_time = end_time - timedelta(minutes=5)
+        start_time = end_time - timedelta(minutes=3)
 
         readings = self.get_usage(start_time, end_time, bucket="MIN")
 
         if not readings:
             return None
 
-        # Calculate average rate from recent readings
-        total_usage = sum(r.value for r in readings)
-        time_span_minutes = len(readings)
-
-        return total_usage / time_span_minutes if time_span_minutes > 0 else 0.0
+        # Each reading is already in GPM (gallons per minute)
+        # Find the most recent non-zero reading, or average recent non-zero readings
+        non_zero_readings = [r.value for r in readings if r.value > 0]
+        
+        if not non_zero_readings:
+            return 0.0
+            
+        # Use average of recent non-zero readings for stability
+        return sum(non_zero_readings) / len(non_zero_readings)
 
     def get_usage_for_period(self, start_time: datetime, end_time: datetime) -> float:
         """Get total water usage for a specific time period across all devices.

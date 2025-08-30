@@ -1,12 +1,12 @@
 """Rachio API client for zone monitoring and watering events."""
 
-import os
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import requests
 from pydantic import BaseModel
 
 from lib.logger import get_logger
+from lib import Constants
 
 
 class Zone(BaseModel):
@@ -37,11 +37,11 @@ class RachioClient:
         """Initialize Rachio client.
 
         Args:
-            api_key: Rachio API key (defaults to RACHIO_API_KEY env var)
-            device_id: Rachio device ID (defaults to RACHIO_ID env var)
+            api_key: Rachio API key (defaults to Constants.RACHIO_API_KEY)
+            device_id: Rachio device ID (defaults to Constants.RACHIO_ID)
         """
-        self.api_key = api_key or os.getenv("RACHIO_API_KEY")
-        self.device_id = device_id or os.getenv("RACHIO_ID")
+        self.api_key = api_key or Constants.RACHIO_API_KEY
+        self.device_id = device_id or Constants.RACHIO_ID
 
         if not self.api_key:
             raise ValueError("Rachio API key required")
@@ -59,7 +59,6 @@ class RachioClient:
 
     def get_device_info(self) -> Dict[str, Any]:
         """Get device information including zones."""
-        self.logger.debug(f"Fetching device info for {self.device_id}")
         url = f"{self.BASE_URL}/device/{self.device_id}"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
@@ -71,7 +70,6 @@ class RachioClient:
 
     def get_zones(self) -> List[Zone]:
         """Get all zones for the device."""
-        self.logger.debug("Fetching zones from device info")
         device_info = self.get_device_info()
         zones = []
         for zone_data in device_info.get("zones", []):
@@ -88,17 +86,37 @@ class RachioClient:
 
     def get_active_zone(self) -> Optional[Zone]:
         """Get currently active watering zone."""
-        device_info = self.get_device_info()
-
-        # Check if any schedule is running
-        for schedule in device_info.get("scheduleRules", []):
-            if schedule.get("enabled", False):
-                # This is a simplified check - in practice you'd need to check
-                # current schedule execution status
+        try:
+            # Check current schedule execution status
+            url = f"{self.BASE_URL}/device/{self.device_id}/current_schedule"
+            response = requests.get(url, headers=self.headers)
+            
+            if response.status_code == 200:
+                current_schedule = response.json()
+                
+                # If status is PROCESSING, there's an active zone
+                if current_schedule.get("status") == "PROCESSING":
+                    zone_id = current_schedule.get("zoneId")
+                    zone_number = current_schedule.get("zoneNumber")
+                    
+                    if zone_id and zone_number:
+                        # Get zone details from device info
+                        device_info = self.get_device_info()
+                        for zone_data in device_info.get("zones", []):
+                            if zone_data["id"] == zone_id:
+                                return Zone(
+                                    id=zone_data["id"],
+                                    zone_number=zone_data["zoneNumber"],
+                                    name=zone_data["name"],
+                                    enabled=zone_data["enabled"],
+                                )
+            elif response.status_code == 204:
+                # No current schedule running
                 pass
-
-        # For now, return None if no zone is active
-        # Real implementation would check current watering status
+                
+        except Exception as e:
+            self.logger.error(f"Error checking current schedule: {e}")
+        
         return None
 
     def get_events(
@@ -153,7 +171,6 @@ class RachioClient:
 
     def get_recent_events(self, days: int = 7) -> List[WateringEvent]:
         """Get watering events from the last N days."""
-        self.logger.debug(f"Fetching events from last {days} days")
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days)
         return self.get_events(start_time, end_time)
