@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import os
 
 from rachio_client import RachioClient, Zone, WateringEvent
-from flume_client import FlumeClient, WaterReading, Device
+from flume_client import FlumeClient, WaterReading
 from data_storage import WaterTrackingDB
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
@@ -72,7 +72,9 @@ class TestFlumeClient:
                 "FLUME_PASSWORD": "password789",
             },
         ):
-            with patch.object(FlumeClient, '_get_access_token', return_value="token123"):
+            with patch.object(
+                FlumeClient, "_get_access_token", return_value="token123"
+            ):
                 client = FlumeClient()
                 assert client.client_id == "client123"
                 assert client.client_secret == "secret456"

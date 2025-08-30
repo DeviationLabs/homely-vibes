@@ -53,13 +53,14 @@ FOSCAM_NODES={'Frontyard':    "192.168.1.A",
 FOSCAM_USERNAME="user_from"
 FOSCAM_PASSWORD="YYY"
 
+WINDOWS_NODES={'Alpha': "192.168.1.C", 'OtterBox': "192.168.1.D"}
+WINDOWS_USERNAME="user_from"
+WINDOWS_PASSWORD="YYY"
+
 # Foscam file purge settings
 FOSCAM_DIR="/path/to/foscam"  # Update this to actual foscam directory path
 PURGE_AFTER_DAYS=30
-
-WINDOWS_NODES={'Alpha': "192.168.1.C"}
-WINDOWS_USERNAME="user_from"
-WINDOWS_PASSWORD="YYY"
+FOSCAM_PUSHOVER_RCPT='a@aa.aa'
 
 # Network Check
 MIN_DL_BW = 150  # Mbps

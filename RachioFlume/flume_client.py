@@ -87,22 +87,24 @@ class FlumeClient:
             response.raise_for_status()
 
             response_data = response.json()
-            
+
             # Check API success status
             if not response_data.get("success", True):
-                error_msg = response_data.get("detailed", response_data.get("message", "Authentication failed"))
+                error_msg = response_data.get(
+                    "detailed", response_data.get("message", "Authentication failed")
+                )
                 raise ValueError(f"Flume API error: {error_msg}")
-            
+
             # Extract token from data array (per Flume API documentation)
             data_array = response_data.get("data", [])
             if not data_array or not isinstance(data_array, list):
                 raise ValueError("No token data returned from Flume API")
-            
+
             token_info = data_array[0]
             access_token = token_info.get("access_token")
             if not access_token:
                 raise ValueError("No access_token found in Flume API response")
-            
+
             self.logger.info("Successfully obtained access token from Flume API")
             return access_token
         except requests.RequestException as e:
@@ -123,17 +125,19 @@ class FlumeClient:
         response.raise_for_status()
 
         response_data = response.json()
-        
+
         # Check API success status
         if not response_data.get("success", True):
-            error_msg = response_data.get("detailed", response_data.get("message", "Failed to get devices"))
+            error_msg = response_data.get(
+                "detailed", response_data.get("message", "Failed to get devices")
+            )
             raise ValueError(f"Flume API error: {error_msg}")
-        
+
         # Extract devices from data array
         device_list = response_data.get("data", [])
         if not isinstance(device_list, list):
             raise ValueError("Invalid device data format from Flume API")
-        
+
         # Get location name for better device naming
         location_name = None
         if device_list:
@@ -149,13 +153,13 @@ class FlumeClient:
                             location_name = loc_info[0].get("name", "Home")
                 except Exception:
                     pass  # Fall back to default naming
-        
+
         devices = []
         for device_data in device_list:
             # Create meaningful device names based on type and location
             device_type = device_data.get("type", 0)
             product = device_data.get("product", "flume")
-            
+
             if device_type == 1:
                 # Type 1 is typically the bridge/hub
                 device_name = f"{location_name or 'Flume'} Bridge"
@@ -164,7 +168,7 @@ class FlumeClient:
                 device_name = f"{location_name or 'Flume'} Water Sensor"
             else:
                 device_name = f"{location_name or 'Flume'} Device ({product})"
-            
+
             devices.append(
                 Device(
                     id=device_data["id"],
@@ -235,7 +239,9 @@ class FlumeClient:
                             for reading in reading_list:
                                 # Parse datetime - Flume returns "YYYY-MM-DD HH:MM:SS" format
                                 datetime_str = reading["datetime"]
-                                timestamp = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
+                                timestamp = datetime.strptime(
+                                    datetime_str, "%Y-%m-%d %H:%M:%S"
+                                )
                                 value = float(reading["value"])
 
                                 all_readings.append(
@@ -270,10 +276,10 @@ class FlumeClient:
         # Each reading is already in GPM (gallons per minute)
         # Find the most recent non-zero reading, or average recent non-zero readings
         non_zero_readings = [r.value for r in readings if r.value > 0]
-        
+
         if not non_zero_readings:
             return 0.0
-            
+
         # Use average of recent non-zero readings for stability
         return sum(non_zero_readings) / len(non_zero_readings)
 

@@ -159,6 +159,14 @@ profile = "black"
 multi_line_output = 3
 line_length = 88
 
+[tool.ruff]
+exclude = [
+    ".git",
+    ".venv", 
+    "__pycache__",
+    "lib/TeslaPy/**",  # Exclude TeslaPy submodule from ruff checks
+]
+
 [tool.ruff.lint.per-file-ignores]
 "*/test_*.py" = ["E402"]  # Allow imports after mocks in test files
 "GarageCheck/transferlearn_on_imagenet.py" = ["E402"]  # Jupyter notebook style
