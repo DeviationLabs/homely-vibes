@@ -27,7 +27,6 @@ class WaterTrackingDB:
 
     def init_database(self) -> None:
         """Create database tables if they don't exist."""
-        self.logger.debug("Initializing database tables")
         with self.get_connection() as conn:
             cursor = conn.cursor()
 

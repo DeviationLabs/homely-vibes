@@ -115,7 +115,6 @@ class FlumeClient:
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""
         if self._devices is not None:
-            self.logger.debug("Returning cached device list")
             return self._devices
 
         # Use /me/devices format per API behavior

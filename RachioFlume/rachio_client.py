@@ -59,7 +59,6 @@ class RachioClient:
 
     def get_device_info(self) -> Dict[str, Any]:
         """Get device information including zones."""
-        self.logger.debug(f"Fetching device info for {self.device_id}")
         url = f"{self.BASE_URL}/device/{self.device_id}"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
@@ -71,7 +70,6 @@ class RachioClient:
 
     def get_zones(self) -> List[Zone]:
         """Get all zones for the device."""
-        self.logger.debug("Fetching zones from device info")
         device_info = self.get_device_info()
         zones = []
         for zone_data in device_info.get("zones", []):
@@ -114,7 +112,7 @@ class RachioClient:
                                 )
             elif response.status_code == 204:
                 # No current schedule running
-                self.logger.debug("No current schedule running (204 response)")
+                pass
                 
         except Exception as e:
             self.logger.error(f"Error checking current schedule: {e}")
@@ -173,7 +171,6 @@ class RachioClient:
 
     def get_recent_events(self, days: int = 7) -> List[WateringEvent]:
         """Get watering events from the last N days."""
-        self.logger.debug(f"Fetching events from last {days} days")
         end_time = datetime.now()
         start_time = end_time - timedelta(days=days)
         return self.get_events(start_time, end_time)
