@@ -1,11 +1,11 @@
 """Flume API client for water consumption monitoring."""
 
-import os
 from datetime import datetime, timedelta
 from typing import Optional, List
 import requests
 from pydantic import BaseModel
 from lib.logger import get_logger
+from lib import Constants
 
 
 class WaterReading(BaseModel):
@@ -40,19 +40,19 @@ class FlumeClient:
         """Initialize Flume client.
 
         Args:
-            client_id: OAuth client ID (defaults to FLUME_CLIENT_ID env var)
-            client_secret: OAuth client secret (defaults to FLUME_CLIENT_SECRET env var)
-            username: Flume email address (defaults to FLUME_USER_EMAIL env var)
-            password: Flume password (defaults to FLUME_PASSWORD env var)
+            client_id: OAuth client ID (defaults to Constants.FLUME_CLIENT_ID)
+            client_secret: OAuth client secret (defaults to Constants.FLUME_CLIENT_SECRET)
+            username: Flume email address (defaults to Constants.FLUME_USER_EMAIL)
+            password: Flume password (defaults to Constants.FLUME_PASSWORD)
         """
         # Setup logging first
         self.logger = get_logger(__name__)
 
         # OAuth credentials
-        self.client_id = client_id or os.getenv("FLUME_CLIENT_ID")
-        self.client_secret = client_secret or os.getenv("FLUME_CLIENT_SECRET")
-        self.username = username or os.getenv("FLUME_USER_EMAIL")
-        self.password = password or os.getenv("FLUME_PASSWORD")
+        self.client_id = client_id or Constants.FLUME_CLIENT_ID
+        self.client_secret = client_secret or Constants.FLUME_CLIENT_SECRET
+        self.username = username or Constants.FLUME_USER_EMAIL
+        self.password = password or Constants.FLUME_PASSWORD
 
         self.access_token = self._get_access_token()
 

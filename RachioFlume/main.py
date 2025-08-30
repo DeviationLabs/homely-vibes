@@ -115,7 +115,7 @@ def show_status(args):
         collector = WaterTrackingCollector(args.db)
         status = collector.get_current_status()
 
-        print("\\n" + "=" * 50)
+        print("\n" + "=" * 50)
         print("WATER TRACKING SYSTEM STATUS")
         print("=" * 50)
 
@@ -148,7 +148,7 @@ def show_status(args):
         else:
             print("Last Flume Collection: Never")
 
-        print("=" * 50 + "\\n")
+        print("=" * 50 + "\n")
         return 0
 
     except Exception as e:
@@ -184,7 +184,7 @@ def generate_report(args):
 
         elif args.efficiency:
             analysis = reporter.get_zone_efficiency_analysis()
-            print("\\n" + "=" * 60)
+            print("\n" + "=" * 60)
             print("ZONE EFFICIENCY ANALYSIS")
             print(f"Period: {analysis['analysis_period']}")
             print("=" * 60)
@@ -194,7 +194,7 @@ def generate_report(args):
                 return 0
 
             for zone_name, data in analysis["zones"].items():
-                print(f"\\n{zone_name}:")
+                print(f"\n{zone_name}:")
                 print(f"  Sessions: {data['total_sessions']}")
                 print(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
                 print(
@@ -204,7 +204,7 @@ def generate_report(args):
                     f"  Duration per session: {data['duration_per_session_minutes']} minutes"
                 )
 
-            print("\\n" + "=" * 60 + "\\n")
+            print("\n" + "=" * 60 + "\n")
 
         return 0
 
