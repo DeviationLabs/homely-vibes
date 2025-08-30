@@ -150,12 +150,20 @@ class RachioClient:
 
         events = []
         for event_data in response.json():
-            # Parse zone name from summary
+            # Parse zone name and number from summary (e.g., "Z5 BBS - flowers ...")
             summary = event_data.get("summary", "")
             zone_name = summary.split("-")[0].split("(")[0].strip()
 
-            # Extract zone number from event data
-            zone_number = event_data.get("zoneNumber", -1)
+            # Extract zone number from summary (e.g., "Z5" -> 5)
+            zone_number = -1
+            if zone_name.startswith("Z") and len(zone_name) > 1:
+                try:
+                    # Extract number from "Z5 BBS" format
+                    zone_part = zone_name.split()[0]  # Get "Z5"
+                    if zone_part[1:].isdigit():
+                        zone_number = int(zone_part[1:])
+                except (IndexError, ValueError):
+                    zone_number = -1
 
             event = WateringEvent(
                 event_date=datetime.fromtimestamp(event_data["eventDate"] / 1000),
