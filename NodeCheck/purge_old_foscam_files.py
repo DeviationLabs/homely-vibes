@@ -7,6 +7,7 @@ from pathlib import Path
 from lib.logger import SystemLogger
 from lib import Mailer
 from lib import Constants
+from lib import MyPushover
 
 logger = SystemLogger.get_logger(__name__)
 
@@ -64,12 +65,26 @@ def purge_old_foscam_files():
                     error_count += 1
                     logger.warning(f"Could not delete {file_path}: {e}")
             
-            if error_count == 0:
-                messages.append(f"File deletion completed successfully - removed {deleted_count} files")
+            # Report cleaning results prominently
+            if deleted_count == 0:
+                messages.append("No old files found to clean")
+                pushover_msg = f"Foscam cleanup: No old files to clean (older than {purge_after_days} days)"
+            elif error_count == 0:
+                messages.append(f"✓ Successfully cleaned {deleted_count} old files")
+                logger.info(f"Foscam cleanup: {deleted_count} files removed, 0 errors")
+                pushover_msg = f"✓ Foscam cleanup: Successfully removed {deleted_count} old files"
             else:
-                messages.append(f"File deletion completed with {error_count} errors - removed {deleted_count} files")
+                messages.append(f"⚠ Cleaned {deleted_count} old files with {error_count} errors")
+                logger.warning(f"Foscam cleanup: {deleted_count} files removed, {error_count} errors")
+                pushover_msg = f"⚠ Foscam cleanup: Removed {deleted_count} files with {error_count} errors"
                 if error_count > deleted_count * 0.1:  # If errors > 10% of deletions, flag as failure
                     success = False
+            
+            # Send Pushover notification with cleanup results
+            try:
+                MyPushover.send_pushover(Constants.POWERWALL_PUSHOVER_RCPT, pushover_msg)
+            except Exception as e:
+                logger.warning(f"Failed to send Pushover notification: {e}")
                 
         except Exception as e:
             error_msg = f"Error during file deletion: {str(e)}"
