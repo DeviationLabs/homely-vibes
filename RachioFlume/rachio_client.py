@@ -90,15 +90,15 @@ class RachioClient:
             # Check current schedule execution status
             url = f"{self.BASE_URL}/device/{self.device_id}/current_schedule"
             response = requests.get(url, headers=self.headers)
-            
+
             if response.status_code == 200:
                 current_schedule = response.json()
-                
+
                 # If status is PROCESSING, there's an active zone
                 if current_schedule.get("status") == "PROCESSING":
                     zone_id = current_schedule.get("zoneId")
                     zone_number = current_schedule.get("zoneNumber")
-                    
+
                     if zone_id and zone_number:
                         # Get zone details from device info
                         device_info = self.get_device_info()
@@ -113,10 +113,10 @@ class RachioClient:
             elif response.status_code == 204:
                 # No current schedule running
                 pass
-                
+
         except Exception as e:
             self.logger.error(f"Error checking current schedule: {e}")
-        
+
         return None
 
     def get_events(

@@ -36,6 +36,8 @@ dependencies = [
     "tld>=0.13.1",
     "oauthlib>=3.3.1",
     "setuptools>=80.9.0",
+    "streamlit (>=1.49.1,<2.0.0)",
+    "asyncio-mqtt (>=0.16.2,<0.17.0)",
 ]
 
 [project.optional-dependencies]
@@ -85,6 +87,7 @@ known_first_party = [
     "TuyaLogParser",
     "utils",  # for Bimpop.ai/fe/utils.py
 ]
+exclude = ["tests", ".venv", "backups", "lib/TeslaPy"]
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
@@ -124,10 +127,17 @@ DEP002 = [
     "openpyxl", 
     "urllib3",
     "cffi",
-    "asyncio-mqtt"
+    "asyncio-mqtt",
+    # Tesla/GUI dependencies used in specific modules
+    "geopy",
+    "requests-oauthlib",
+    "websocket-client", 
+    "selenium",
+    "pywebview",
+    "oauthlib",
+    "setuptools"
 ]
 DEP003 = ["google", "TeslaPy"]
-exclude = ["tests", ".venv", "backups"]
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "WaterParser", "Bimpop.ai"]
@@ -158,6 +168,14 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
+
+[tool.ruff]
+exclude = [
+    ".git",
+    ".venv", 
+    "__pycache__",
+    "lib/TeslaPy/**",  # Exclude TeslaPy submodule from ruff checks
+]
 
 [tool.ruff.lint.per-file-ignores]
 "*/test_*.py" = ["E402"]  # Allow imports after mocks in test files
