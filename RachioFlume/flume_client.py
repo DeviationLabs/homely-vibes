@@ -135,14 +135,43 @@ class FlumeClient:
         if not isinstance(device_list, list):
             raise ValueError("Invalid device data format from Flume API")
         
+        # Get location name for better device naming
+        location_name = None
+        if device_list:
+            location_id = device_list[0].get("location_id")
+            if location_id:
+                try:
+                    loc_url = f"{self.BASE_URL}/me/locations/{location_id}"
+                    loc_response = requests.get(loc_url, headers=self.headers)
+                    if loc_response.status_code == 200:
+                        loc_data = loc_response.json()
+                        loc_info = loc_data.get("data", [])
+                        if loc_info and isinstance(loc_info, list):
+                            location_name = loc_info[0].get("name", "Home")
+                except Exception:
+                    pass  # Fall back to default naming
+        
         devices = []
         for device_data in device_list:
+            # Create meaningful device names based on type and location
+            device_type = device_data.get("type", 0)
+            product = device_data.get("product", "flume")
+            
+            if device_type == 1:
+                # Type 1 is typically the bridge/hub
+                device_name = f"{location_name or 'Flume'} Bridge"
+            elif device_type == 2:
+                # Type 2 is typically the water sensor
+                device_name = f"{location_name or 'Flume'} Water Sensor"
+            else:
+                device_name = f"{location_name or 'Flume'} Device ({product})"
+            
             devices.append(
                 Device(
                     id=device_data["id"],
-                    name=device_data.get("name", "Unknown Device"),
-                    location=device_data.get("location"),
-                    active=device_data.get("active", True),
+                    name=device_name,
+                    location=location_name,
+                    active=device_data.get("connected", True),
                 )
             )
 
