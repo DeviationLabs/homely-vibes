@@ -143,7 +143,7 @@ class RachioClient:
                 event_date=datetime.fromtimestamp(event_data["eventDate"] / 1000),
                 zone_name=zone_name,
                 zone_number=zone_number,
-                event_type=event_data["subType"],
+                event_type=event_data.get("subType", "UNKNOWN"),
                 duration_seconds=event_data.get("durationSeconds"),
             )
             events.append(event)
