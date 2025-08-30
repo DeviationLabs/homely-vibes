@@ -85,30 +85,34 @@ def main():
 
 def run_collection(args):
     """Run data collection."""
+    logger = get_logger(__name__)
+    
     try:
         collector = WaterTrackingCollector(args.db, args.interval)
 
         if args.once:
-            print("Running single data collection cycle...")
+            logger.info("Running single data collection cycle")
             asyncio.run(collector.collect_once())
-            print("Collection completed.")
+            logger.info("Collection completed")
         elif args.continuous:
-            print(f"Starting continuous collection every {args.interval} seconds...")
-            print("Press Ctrl+C to stop.")
+            logger.info(f"Starting continuous collection every {args.interval} seconds")
+            logger.info("Press Ctrl+C to stop")
             asyncio.run(collector.run_continuous())
 
         return 0
 
     except KeyboardInterrupt:
-        print("\\nCollection stopped by user.")
+        logger.info("Collection stopped by user")
         return 0
     except Exception as e:
-        print(f"Error during collection: {e}")
+        logger.error(f"Error during collection: {e}")
         return 1
 
 
 def show_status(args):
     """Show current system status."""
+    logger = get_logger(__name__)
+    
     try:
         collector = WaterTrackingCollector(args.db)
         status = collector.get_current_status()
@@ -118,6 +122,7 @@ def show_status(args):
         print("=" * 50)
 
         if "error" in status:
+            logger.error(f"Status error: {status['error']}")
             print(f"Error: {status['error']}")
             return 1
 
@@ -126,58 +131,75 @@ def show_status(args):
             print(
                 f"Active Zone: #{active_zone['zone_number']} - {active_zone['zone_name']}"
             )
+            logger.info(f"Active Zone: {active_zone['zone_number']} - {active_zone['zone_name']}")
         else:
             print("Active Zone: None")
+            logger.info("No active irrigation zone")
 
         if status["current_usage_rate_gpm"]:
             print(f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM")
+            logger.info(f"Current usage rate: {status['current_usage_rate_gpm']:.2f} GPM")
         else:
             print("Current Usage Rate: Not available")
+            logger.info("Current usage rate not available")
 
         print(f"Recent Sessions (24h): {status['recent_sessions_count']}")
+        logger.info(f"Recent sessions in 24h: {status['recent_sessions_count']}")
 
         if status["last_rachio_collection"]:
             print(f"Last Rachio Collection: {status['last_rachio_collection']}")
+            logger.info(f"Last Rachio collection: {status['last_rachio_collection']}")
         else:
             print("Last Rachio Collection: Never")
+            logger.warning("No Rachio collection data available")
 
         if status["last_flume_collection"]:
             print(f"Last Flume Collection: {status['last_flume_collection']}")
+            logger.info(f"Last Flume collection: {status['last_flume_collection']}")
         else:
             print("Last Flume Collection: Never")
+            logger.warning("No Flume collection data available")
 
         print("=" * 50 + "\\n")
         return 0
 
     except Exception as e:
+        logger.error(f"Error getting status: {e}")
         print(f"Error getting status: {e}")
         return 1
 
 
 def generate_report(args):
     """Generate reports."""
+    logger = get_logger(__name__)
+    
     try:
         reporter = WeeklyReporter(args.db)
 
         if args.current_week:
+            logger.info("Generating current week report")
             report = reporter.generate_current_week_report()
             reporter.print_report(report)
 
             if args.save:
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
+                logger.info(f"Report saved to {filename}")
                 print(f"Report saved to {filename}")
 
         elif args.last_week:
+            logger.info("Generating last week report")
             report = reporter.generate_last_week_report()
             reporter.print_report(report)
 
             if args.save:
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
+                logger.info(f"Report saved to {filename}")
                 print(f"Report saved to {filename}")
 
         elif args.efficiency:
+            logger.info("Generating zone efficiency analysis")
             analysis = reporter.get_zone_efficiency_analysis()
             print("\\n" + "=" * 60)
             print("ZONE EFFICIENCY ANALYSIS")
@@ -185,6 +207,7 @@ def generate_report(args):
             print("=" * 60)
 
             if not analysis["zones"]:
+                logger.warning("No zone data available for efficiency analysis")
                 print("No zone data available for analysis.")
                 return 0
 
@@ -198,12 +221,14 @@ def generate_report(args):
                 print(
                     f"  Duration per session: {data['duration_per_session_minutes']} minutes"
                 )
+                logger.info(f"Zone {zone_name} - Sessions: {data['total_sessions']}, Avg flow: {data['average_flow_rate_gpm']} GPM")
 
             print("\\n" + "=" * 60 + "\\n")
 
         return 0
 
     except Exception as e:
+        logger.error(f"Error generating report: {e}")
         print(f"Error generating report: {e}")
         return 1
 
