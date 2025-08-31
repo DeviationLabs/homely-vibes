@@ -65,13 +65,6 @@ class Pushover:
             conn.close()
 
 
-def send_pushover(rcpt, msg):
-    """Legacy function for backward compatibility."""
-    from lib import Constants
-    pushover = Pushover(Constants.POWERWALL_PUSHOVER_TOKEN, Constants.PUSHOVER_USER)
-    return pushover.send_message(msg)
-
-
 if __name__ == "__main__":
     # Example usage - in real code, pass actual token and user values
     from lib import Constants

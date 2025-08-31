@@ -67,9 +67,6 @@ def main():
         "--email", action="store_true", help="Send report via email"
     )
     report_parser.add_argument(
-        "--alert", action="store_true", help="Mark email as alert"
-    )
-    report_parser.add_argument(
         "--db", default="water_tracking.db", help="Database file path"
     )
 
@@ -179,7 +176,7 @@ def generate_report(args):
                 logger.info(f"Report saved to {filename}")
             
             if args.email:
-                reporter.email_report(report, alert=args.alert)
+                reporter.email_report(report, alert=False)
                 logger.info("Report emailed")
 
         elif args.last_week:
@@ -192,7 +189,7 @@ def generate_report(args):
                 logger.info(f"Report saved to {filename}")
             
             if args.email:
-                reporter.email_report(report, alert=args.alert)
+                reporter.email_report(report, alert=False)
                 logger.info("Report emailed")
 
         elif args.efficiency:
