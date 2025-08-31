@@ -21,6 +21,10 @@ from lib.MyPushover import Pushover
 logger = SystemLogger.get_logger(__name__)
 pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['NetworkCheck'])
 
+# Constants
+SPEEDTEST_CMD = "/usr/bin/speedtest"
+SPEEDTEST_TIMEOUT = 600
+
 
 @dataclass
 class SpeedTestResult:
@@ -65,22 +69,20 @@ def run_speedtest() -> Tuple[Optional[SpeedTestResult], str]:
     Returns:
         Tuple of (SpeedTestResult or None, raw_message)
     """
-    cmd = "/usr/bin/speedtest -f json"
-    
     try:
         output = subprocess.check_output(
-            cmd.split(),
+            [SPEEDTEST_CMD, "-f", "json"],
             stderr=subprocess.STDOUT,
-            shell=False,
             universal_newlines=True,
-            timeout=600,
+            timeout=SPEEDTEST_TIMEOUT,
         )
         
         payload = parse_speedtest_output(output)
         
-        # Convert bandwidth from bytes/s to Mbps
-        download_mbps = payload.get("download", {}).get("bandwidth", 0) * 8 / 1024 / 1024
-        upload_mbps = payload.get("upload", {}).get("bandwidth", 0) * 8 / 1024 / 1024
+        # Convert bandwidth from bytes/s to Mbps (bytes * 8 bits/byte / 1024^2 = Mbps)
+        BYTES_TO_MBPS = 8 / (1024 * 1024)
+        download_mbps = payload.get("download", {}).get("bandwidth", 0) * BYTES_TO_MBPS
+        upload_mbps = payload.get("upload", {}).get("bandwidth", 0) * BYTES_TO_MBPS
         external_ip = payload.get("interface", {}).get("externalIp", "UNK")
         
         # Determine connection quality
@@ -162,8 +164,8 @@ def main() -> None:
             
         # Wait before retry (except on last attempt)
         if alert and attempt < args.max_retries:
-            logger.info("Waiting 2 minutes before retry...")
-            time.sleep(120)
+            logger.info("Waiting 1 minute before retry...")
+            time.sleep(60)
 
     # Prepare final message
     aggregate_message = "\n".join(all_messages)

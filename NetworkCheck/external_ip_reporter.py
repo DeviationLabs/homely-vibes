@@ -65,7 +65,7 @@ def main() -> None:
     title = "Eden External IP Address"
     
     Mailer.sendmail(
-        topic=title, 
+        topic=f"[{title}]", 
         message=ip_address, 
         always_email=True,
         alert=is_error
