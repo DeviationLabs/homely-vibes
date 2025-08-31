@@ -4,18 +4,23 @@
 import asyncio
 import argparse
 import sys
+from pathlib import Path
 
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
 from lib.logger import SystemLogger, get_logger
+from lib import Constants
 
+# Create default database path using Constants.LOGGING_DIR
+DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
 
 def main():
     """Main entry point with command line interface."""
     # Setup logging first
-    SystemLogger.setup(console_output=True, log_file="water_tracking.log")
+    SystemLogger.setup(console_output=True)
     logger = get_logger(__name__)
     logger.info("Starting Rachio-Flume Water Tracking Integration")
+
 
     parser = argparse.ArgumentParser(
         description="Rachio-Flume Water Tracking Integration"
@@ -38,15 +43,9 @@ def main():
         default=300,
         help="Collection interval in seconds (default: 300)",
     )
-    collect_parser.add_argument(
-        "--db", default="water_tracking.db", help="Database file path"
-    )
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show current system status")
-    status_parser.add_argument(
-        "--db", default="water_tracking.db", help="Database file path"
-    )
 
     # Reporting commands
     report_parser = subparsers.add_parser("report", help="Generate reports")
@@ -65,9 +64,6 @@ def main():
     )
     report_parser.add_argument(
         "--email", action="store_true", help="Send report via email"
-    )
-    report_parser.add_argument(
-        "--db", default="water_tracking.db", help="Database file path"
     )
 
     args = parser.parse_args()
@@ -91,7 +87,7 @@ def run_collection(args):
     logger = get_logger(__name__)
 
     try:
-        collector = WaterTrackingCollector(args.db, args.interval)
+        collector = WaterTrackingCollector(DB_PATH, args.interval)
 
         if args.once:
             asyncio.run(collector.collect_once())
@@ -115,7 +111,7 @@ def show_status(args):
     logger = get_logger(__name__)
 
     try:
-        collector = WaterTrackingCollector(args.db)
+        collector = WaterTrackingCollector(DB_PATH)
         status = collector.get_current_status()
 
         logger.info("\n" + "=" * 50)
@@ -135,7 +131,9 @@ def show_status(args):
             logger.info("Active Zone: None")
 
         if status["current_usage_rate_gpm"]:
-            logger.info(f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM")
+            logger.info(
+                f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM"
+            )
         else:
             logger.info("Current Usage Rate: Not available")
 
@@ -164,7 +162,7 @@ def generate_report(args):
     logger = get_logger(__name__)
 
     try:
-        reporter = WeeklyReporter(args.db)
+        reporter = WeeklyReporter(DB_PATH)
 
         if args.current_week:
             report = reporter.generate_current_week_report()
@@ -174,7 +172,7 @@ def generate_report(args):
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
                 logger.info(f"Report saved to {filename}")
-            
+
             if args.email:
                 reporter.email_report(report, alert=False)
                 logger.info("Report emailed")
@@ -187,34 +185,14 @@ def generate_report(args):
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
                 logger.info(f"Report saved to {filename}")
-            
+
             if args.email:
                 reporter.email_report(report, alert=False)
                 logger.info("Report emailed")
 
         elif args.efficiency:
             analysis = reporter.get_zone_efficiency_analysis()
-            logger.info("\n" + "=" * 60)
-            logger.info("ZONE EFFICIENCY ANALYSIS")
-            logger.info(f"Period: {analysis['analysis_period']}")
-            logger.info("=" * 60)
-
-            if not analysis["zones"]:
-                logger.info("No zone data available for analysis.")
-                return 0
-
-            for zone_name, data in analysis["zones"].items():
-                logger.info(f"\n{zone_name}:")
-                logger.info(f"  Sessions: {data['total_sessions']}")
-                logger.info(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-                logger.info(
-                    f"  Water per session: {data['water_per_session_gallons']} gallons"
-                )
-                logger.info(
-                    f"  Duration per session: {data['duration_per_session_minutes']} minutes"
-                )
-
-            logger.info("\n" + "=" * 60 + "\n")
+            reporter.print_efficiency_analysis(analysis)
 
         return 0
 

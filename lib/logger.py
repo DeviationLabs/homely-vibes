@@ -1,38 +1,41 @@
 """Generic logging configuration for the water tracking system."""
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Optional
+from lib import Constants
 
 
 class SystemLogger:
     """Centralized logger configuration for all water tracking modules."""
 
     _initialized = False
-    _log_file: Optional[Path] = None
+    _shared_log_file = None
 
     @classmethod
     def setup(
         cls,
         level: int = logging.INFO,
-        log_file: Optional[str] = None,
         console_output: bool = True,
         format_string: Optional[str] = None,
-        default_log_dir: str = "~/logs",
     ) -> None:
         """Set up logging configuration for the entire application.
 
         Args:
             level: Logging level (default: INFO)
-            log_file: Optional file path for log output (if relative, uses default_log_dir)
             console_output: Whether to output to console (default: True)
             format_string: Custom format string (optional)
-            default_log_dir: Default directory for log files (default: ~/logs)
         """
         if cls._initialized:
             return
+
+        # Determine main script name for shared log file
+        if cls._shared_log_file is None:
+            main_script = cls._get_main_script_name()
+            logs_dir = Path(Constants.LOGGING_DIR)
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            cls._shared_log_file = logs_dir / f"{main_script}.log"
 
         # Default format
         if format_string is None:
@@ -56,27 +59,34 @@ class SystemLogger:
             console_handler.setFormatter(formatter)
             root_logger.addHandler(console_handler)
 
-        # File handler
-        if log_file:
-            # Handle relative paths by using default_log_dir
-            if not os.path.isabs(log_file):
-                log_dir = os.path.expanduser(default_log_dir)
-                cls._log_file = Path(log_dir) / log_file
-            else:
-                cls._log_file = Path(log_file)
-
-            cls._log_file.parent.mkdir(parents=True, exist_ok=True)
-
-            file_handler = logging.FileHandler(cls._log_file)
-            file_handler.setLevel(level)
-            file_handler.setFormatter(formatter)
-            root_logger.addHandler(file_handler)
+        # Shared file handler for all loggers
+        file_handler = logging.FileHandler(cls._shared_log_file)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
 
         cls._initialized = True
 
     @classmethod
+    def _get_main_script_name(cls) -> str:
+        """Get the name of the main script being executed."""
+        try:
+            import __main__
+            if hasattr(__main__, '__file__') and __main__.__file__:
+                return Path(__main__.__file__).stem
+        except (ImportError, AttributeError):
+            pass
+        
+        # Fallback to sys.argv[0] if __main__.__file__ not available
+        if sys.argv and sys.argv[0]:
+            return Path(sys.argv[0]).stem
+            
+        # Last resort fallback
+        return "application"
+
+    @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
-        """Get a logger instance for a specific module.
+        """Get a logger instance that uses the shared log file.
 
         Args:
             name: Module name (typically __name__)
@@ -93,7 +103,7 @@ class SystemLogger:
     def reset(cls) -> None:
         """Reset logger configuration (mainly for testing)."""
         cls._initialized = False
-        cls._log_file = None
+        cls._shared_log_file = None
 
         # Clear all handlers
         root_logger = logging.getLogger()
@@ -113,35 +123,6 @@ class SystemLogger:
         # Update all handlers
         for handler in root_logger.handlers:
             handler.setLevel(level)
-
-    @classmethod
-    def add_file_output(cls, log_file: str) -> None:
-        """Add file output to existing logger configuration.
-
-        Args:
-            log_file: Path to log file
-        """
-        if cls._log_file:
-            return  # File handler already exists
-
-        cls._log_file = Path(log_file)
-        cls._log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        root_logger = logging.getLogger()
-
-        # Use same format as existing handlers
-        formatter = None
-        if root_logger.handlers:
-            formatter = root_logger.handlers[0].formatter
-        else:
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
-            )
-
-        file_handler = logging.FileHandler(cls._log_file)
-        file_handler.setLevel(root_logger.level)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
 
 
 # Convenience function for simple usage

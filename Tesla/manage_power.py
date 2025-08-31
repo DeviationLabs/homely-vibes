@@ -80,7 +80,9 @@ class PowerwallManager:
             None  # APB: 5/25/23 seems we are no longer getting this data from the query
         )
         self.logger = get_logger(__name__)
-        self.pushover = Pushover(Constants.POWERWALL_PUSHOVER_TOKEN, Constants.PUSHOVER_USER)
+        self.pushover = Pushover(
+            Constants.POWERWALL_PUSHOVER_TOKEN, Constants.PUSHOVER_USER
+        )
 
     def send_pushover(self, message: str) -> None:
         """Send notification via configured channels."""

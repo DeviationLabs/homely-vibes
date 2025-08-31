@@ -14,15 +14,8 @@ class WaterTrackingCollector:
     """Service that collects data from Rachio and Flume APIs."""
 
     def __init__(
-        self, db_path: str = "water_tracking.db", poll_interval_seconds: int = 300
+        self, db_path: str, poll_interval_seconds: int = 300
     ):  # 5 minutes default
-        """Initialize the collector.
-
-        Args:
-            db_path: Path to SQLite database
-            poll_interval_seconds: How often to poll APIs
-        """
-        # Setup logging
         self.logger = get_logger(__name__)
 
         self.db = WaterTrackingDB(db_path)
