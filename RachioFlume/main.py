@@ -45,15 +45,9 @@ def main():
         default=300,
         help="Collection interval in seconds (default: 300)",
     )
-    collect_parser.add_argument(
-        "--db", default=default_db_path, help="Database file path"
-    )
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show current system status")
-    status_parser.add_argument(
-        "--db", default=default_db_path, help="Database file path"
-    )
 
     # Reporting commands
     report_parser = subparsers.add_parser("report", help="Generate reports")
@@ -72,9 +66,6 @@ def main():
     )
     report_parser.add_argument(
         "--email", action="store_true", help="Send report via email"
-    )
-    report_parser.add_argument(
-        "--db", default=default_db_path, help="Database file path"
     )
 
     args = parser.parse_args()
