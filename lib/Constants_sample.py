@@ -27,6 +27,7 @@ SMS_FROM = '+18001234567'
 
 # Pushover Notifications Account
 PUSHOVER_USER='user'
+PUSHOVER_DELIVERY_GROUP = 'gid'
 PUSHOVER_DEFAULT_TOKEN="token"
 PUSHOVER_TOKENS= {
   'Foscam': "token",

@@ -8,7 +8,7 @@ import smtplib
 from lib import Constants
 
 
-def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
+def sendmail(topic, alert, message, always_email=False):
     today = datetime.datetime.today()
     day_today = calendar.day_name[today.weekday()]
     hour_today = today.hour
@@ -43,6 +43,6 @@ def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
         except smtplib.SMTPDataError as e:
             logging.error("%s Something went wrong..." % ts)
             logging.error(e)
-            print(e)
+            print(e)  # This gets trapped by cron
     else:
         logging.info("%s No email" % ts)

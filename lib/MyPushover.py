@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import http.client
-import urllib
+import urllib.parse
 import logging
 from lib import Constants
 
@@ -18,7 +18,7 @@ class Pushover:
         self.user = user
         self.token = token
 
-    def send_message(self, message: str, title: str = None, priority: int = 0) -> bool:
+    def send_message(self, message: str, title: str|None = None, priority: int = 0) -> bool:
         """Send a message via Pushover.
 
         Args:
@@ -41,7 +41,7 @@ class Pushover:
                 payload["title"] = title
 
             if priority != 0:
-                payload["priority"] = priority
+                payload["priority"] = str(priority)
 
             conn.request(
                 "POST",
@@ -67,8 +67,5 @@ class Pushover:
 
 
 if __name__ == "__main__":
-    # Example usage - in real code, pass actual token and user values
-    from lib import Constants
-
-    pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['Powerwall'])
+    pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_DEFAULT_TOKEN)
     pushover.send_message("test notification", title="Test")
