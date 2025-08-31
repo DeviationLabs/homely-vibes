@@ -79,8 +79,19 @@ class SystemLogger:
         logs_dir = Path(Constants.LOGGING_DIR)
         logs_dir.mkdir(parents=True, exist_ok=True)
         
-        # Use module name for log file (replace dots with underscores)
-        module_name = name.replace('.', '_')
+        # Use filename for log file when module is __main__
+        if name == '__main__':
+            # Extract filename from the main module
+            import __main__
+            if hasattr(__main__, '__file__') and __main__.__file__:
+                file_path = Path(__main__.__file__)
+                module_name = file_path.stem  # Get filename without extension
+            else:
+                module_name = 'main'
+        else:
+            # Use module name for log file (replace dots with underscores)
+            module_name = name.replace('.', '_')
+        
         log_file_path = logs_dir / f"{module_name}.log"
         
         # Add file handler for this specific module
