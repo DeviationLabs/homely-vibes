@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 import importlib
 from lib import Constants
-from lib import MyPushover
+from lib.MyPushover import Pushover
 from lib.TeslaPy.teslapy import Tesla as TeslaClient
 from lib.logger import SystemLogger, get_logger
 
@@ -80,12 +80,16 @@ class PowerwallManager:
             None  # APB: 5/25/23 seems we are no longer getting this data from the query
         )
         self.logger = get_logger(__name__)
+        self.pushover = Pushover(Constants.POWERWALL_PUSHOVER_TOKEN, Constants.PUSHOVER_USER)
 
     def send_pushover(self, message: str) -> None:
         """Send notification via configured channels."""
         try:
-            MyPushover.send_pushover(Constants.POWERWALL_PUSHOVER_RCPT, message)
-            self.logger.info(f"Notification sent: {message}")
+            success = self.pushover.send_message(message, title="Powerwall Alert")
+            if success:
+                self.logger.info(f"Notification sent: {message}")
+            else:
+                self.logger.error(f"Failed to send notification: {message}")
         except Exception as e:
             self.logger.error(f"Failed to send notification: {e}")
 
