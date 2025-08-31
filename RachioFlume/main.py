@@ -194,27 +194,7 @@ def generate_report(args):
 
         elif args.efficiency:
             analysis = reporter.get_zone_efficiency_analysis()
-            logger.info("\n" + "=" * 60)
-            logger.info("ZONE EFFICIENCY ANALYSIS")
-            logger.info(f"Period: {analysis['analysis_period']}")
-            logger.info("=" * 60)
-
-            if not analysis["zones"]:
-                logger.info("No zone data available for analysis.")
-                return 0
-
-            for zone_name, data in analysis["zones"].items():
-                logger.info(f"\n{zone_name}:")
-                logger.info(f"  Sessions: {data['total_sessions']}")
-                logger.info(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-                logger.info(
-                    f"  Water per session: {data['water_per_session_gallons']} gallons"
-                )
-                logger.info(
-                    f"  Duration per session: {data['duration_per_session_minutes']} minutes"
-                )
-
-            logger.info("\n" + "=" * 60 + "\n")
+            reporter.print_efficiency_analysis(analysis)
 
         return 0
 

@@ -114,44 +114,15 @@ class WeeklyReporter:
         with open(output_path, "w") as f:
             json.dump(report, f, indent=2, default=str)
 
-    def print_report(self, report: Dict[str, Any]) -> None:
-        """Print report in a readable format."""
-        self.logger.info("\n" + "=" * 60)
-        self.logger.info("WEEKLY WATER USAGE REPORT")
-        self.logger.info(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
-        self.logger.info("=" * 60)
-
-        summary = report["summary"]
-        self.logger.info("\nSUMMARY:")
-        self.logger.info(f"  Total watering sessions: {summary['total_watering_sessions']}")
-        self.logger.info(f"  Total duration: {summary['total_duration_hours']} hours")
-        self.logger.info(f"  Total water used: {summary['total_water_used_gallons']} gallons")
-        self.logger.info(f"  Zones watered: {summary['zones_watered']}")
-
-        if report["zones"]:
-            self.logger.info("\nZONE DETAILS:")
-            self.logger.info(
-                f"{'Zone':<4} {'Name':<20} {'Sessions':<8} {'Duration(h)':<12} {'Water(gal)':<12} {'Avg Rate(gpm)':<14}"
-            )
-            self.logger.info("-" * 70)
-
-            for zone in report["zones"]:
-                self.logger.info(
-                    f"{zone['zone_number']:<4} {zone['zone_name']:<20} "
-                    f"{zone['sessions']:<8} {zone['total_duration_hours']:<12} "
-                    f"{zone['total_water_gallons']:<12} {zone['average_flow_rate_gpm']:<14}"
-                )
-
-        self.logger.info("\n" + "=" * 60 + "\n")
-
-    def email_report(self, report: Dict[str, Any], alert: bool = False) -> None:
-        """Email report in formatted text.
+    def format_report_text(self, report: Dict[str, Any]) -> str:
+        """Generate formatted text version of the report.
 
         Args:
             report: Report data
-            alert: Whether to mark as alert email
+
+        Returns:
+            Formatted report as string
         """
-        # Generate formatted text version of the report with fixed-width formatting
         report_text = []
         report_text.append("WEEKLY WATER USAGE REPORT")
         report_text.append(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
@@ -166,7 +137,7 @@ class WeeklyReporter:
 
         if report["zones"]:
             report_text.append("\nZONE DETAILS:")
-            # Use fixed-width formatting for better email display
+            # Use fixed-width formatting for better display
             header = f"{'Zone':<6}{'Name':<22}{'Sessions':<10}{'Duration(h)':<12}{'Water(gal)':<12}{'Rate(gpm)':<10}"
             report_text.append(header)
             report_text.append("-" * len(header))
@@ -183,15 +154,30 @@ class WeeklyReporter:
                 report_text.append(zone_line)
 
         report_text.append("\n" + "=" * 70)
+        return "\n".join(report_text)
 
-        # Send email
-        email_body = "\n".join(report_text)
+    def print_report(self, report: Dict[str, Any]) -> None:
+        """Print report in a readable format."""
+        report_text = self.format_report_text(report)
+        
+        # Log each line separately for proper logger formatting
+        for line in report_text.split('\n'):
+            self.logger.info(line)
+
+    def email_report(self, report: Dict[str, Any], alert: bool = False) -> None:
+        """Email report in formatted text.
+
+        Args:
+            report: Report data
+            alert: Whether to mark as alert email
+        """
+        report_text = self.format_report_text(report)
         week_start = report['week_start'][:10]
         
         Mailer.sendmail(
             topic=f"[Water Report] Week {week_start}",
             alert=alert,
-            message=email_body,
+            message=report_text,
             always_email=True
         )
         
@@ -254,6 +240,42 @@ class WeeklyReporter:
             "zones": efficiency_analysis,
         }
 
+    def format_efficiency_text(self, analysis: Dict[str, Any]) -> str:
+        """Generate formatted text version of efficiency analysis.
+
+        Args:
+            analysis: Efficiency analysis data
+
+        Returns:
+            Formatted analysis as string
+        """
+        report_text = []
+        report_text.append("ZONE EFFICIENCY ANALYSIS")
+        report_text.append(f"Period: {analysis['analysis_period']}")
+        report_text.append("=" * 60)
+
+        if not analysis["zones"]:
+            report_text.append("No zone data available for analysis.")
+            return "\n".join(report_text)
+
+        for zone_name, data in analysis["zones"].items():
+            report_text.append(f"\n{zone_name}:")
+            report_text.append(f"  Sessions: {data['total_sessions']}")
+            report_text.append(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
+            report_text.append(f"  Water per session: {data['water_per_session_gallons']} gallons")
+            report_text.append(f"  Duration per session: {data['duration_per_session_minutes']} minutes")
+
+        report_text.append("\n" + "=" * 60)
+        return "\n".join(report_text)
+
+    def print_efficiency_analysis(self, analysis: Dict[str, Any]) -> None:
+        """Print efficiency analysis in a readable format."""
+        analysis_text = self.format_efficiency_text(analysis)
+        
+        # Log each line separately for proper logger formatting
+        for line in analysis_text.split('\n'):
+            self.logger.info(line)
+
 
 def main():
     """Main entry point for generating reports."""
@@ -291,19 +313,7 @@ def main():
 
     elif "--efficiency" in sys.argv:
         analysis = reporter.get_zone_efficiency_analysis()
-        reporter.logger.info("\n" + "=" * 60)
-        reporter.logger.info("ZONE EFFICIENCY ANALYSIS")
-        reporter.logger.info(f"Period: {analysis['analysis_period']}")
-        reporter.logger.info("=" * 60)
-
-        for zone_name, data in analysis["zones"].items():
-            reporter.logger.info(f"\n{zone_name}:")
-            reporter.logger.info(f"  Sessions: {data['total_sessions']}")
-            reporter.logger.info(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-            reporter.logger.info(f"  Water per session: {data['water_per_session_gallons']} gallons")
-            reporter.logger.info(
-                f"  Duration per session: {data['duration_per_session_minutes']} minutes"
-            )
+        reporter.print_efficiency_analysis(analysis)
 
     else:
         print("Usage:")
