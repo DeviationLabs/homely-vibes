@@ -1,11 +1,9 @@
 """Generic logging configuration for the water tracking system."""
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Optional
-from lib import Constants
 
 
 class SystemLogger:
@@ -18,19 +16,15 @@ class SystemLogger:
     def setup(
         cls,
         level: int = logging.INFO,
-        log_file: Optional[str] = None,
         console_output: bool = True,
         format_string: Optional[str] = None,
-        default_log_dir: Optional[str] = None,
     ) -> None:
         """Set up logging configuration for the entire application.
 
         Args:
             level: Logging level (default: INFO)
-            log_file: Optional file path for log output (if relative, uses default_log_dir)
             console_output: Whether to output to console (default: True)
             format_string: Custom format string (optional)
-            default_log_dir: Default directory for log files (defaults to Constants.LOGGING_DIR)
         """
         if cls._initialized:
             return
@@ -56,25 +50,6 @@ class SystemLogger:
             console_handler.setLevel(level)
             console_handler.setFormatter(formatter)
             root_logger.addHandler(console_handler)
-
-        # File handler
-        if log_file:
-            # Handle relative paths by using default_log_dir
-            if not os.path.isabs(log_file):
-                if default_log_dir is None:
-                    log_dir = Constants.LOGGING_DIR
-                else:
-                    log_dir = os.path.expanduser(default_log_dir)
-                cls._log_file = Path(log_dir) / log_file
-            else:
-                cls._log_file = Path(log_file)
-
-            cls._log_file.parent.mkdir(parents=True, exist_ok=True)
-
-            file_handler = logging.FileHandler(cls._log_file)
-            file_handler.setLevel(level)
-            file_handler.setFormatter(formatter)
-            root_logger.addHandler(file_handler)
 
         cls._initialized = True
 
