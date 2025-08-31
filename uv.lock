@@ -610,6 +610,7 @@ name = "homely-vibes"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "asyncio-mqtt" },
     { name = "cffi" },
     { name = "fastapi" },
     { name = "geopy" },
@@ -662,6 +663,7 @@ streamlit = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncio-mqtt", specifier = ">=0.16.2,<0.17.0" },
     { name = "asyncio-mqtt", marker = "extra == 'iot'", specifier = ">=0.11.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.3.0" },
     { name = "cffi", specifier = ">=1.17.1" },

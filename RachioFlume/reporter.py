@@ -7,6 +7,7 @@ from pathlib import Path
 
 from data_storage import WaterTrackingDB
 from lib.logger import get_logger
+from lib import Mailer
 
 
 class WeeklyReporter:
@@ -115,33 +116,82 @@ class WeeklyReporter:
 
     def print_report(self, report: Dict[str, Any]) -> None:
         """Print report in a readable format."""
-        print("\\n" + "=" * 60)
-        print("WEEKLY WATER USAGE REPORT")
-        print(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
-        print("=" * 60)
+        self.logger.info("\n" + "=" * 60)
+        self.logger.info("WEEKLY WATER USAGE REPORT")
+        self.logger.info(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
+        self.logger.info("=" * 60)
 
         summary = report["summary"]
-        print("\\nSUMMARY:")
-        print(f"  Total watering sessions: {summary['total_watering_sessions']}")
-        print(f"  Total duration: {summary['total_duration_hours']} hours")
-        print(f"  Total water used: {summary['total_water_used_gallons']} gallons")
-        print(f"  Zones watered: {summary['zones_watered']}")
+        self.logger.info("\nSUMMARY:")
+        self.logger.info(f"  Total watering sessions: {summary['total_watering_sessions']}")
+        self.logger.info(f"  Total duration: {summary['total_duration_hours']} hours")
+        self.logger.info(f"  Total water used: {summary['total_water_used_gallons']} gallons")
+        self.logger.info(f"  Zones watered: {summary['zones_watered']}")
 
         if report["zones"]:
-            print("\\nZONE DETAILS:")
-            print(
+            self.logger.info("\nZONE DETAILS:")
+            self.logger.info(
                 f"{'Zone':<4} {'Name':<20} {'Sessions':<8} {'Duration(h)':<12} {'Water(gal)':<12} {'Avg Rate(gpm)':<14}"
             )
-            print("-" * 70)
+            self.logger.info("-" * 70)
 
             for zone in report["zones"]:
-                print(
+                self.logger.info(
                     f"{zone['zone_number']:<4} {zone['zone_name']:<20} "
                     f"{zone['sessions']:<8} {zone['total_duration_hours']:<12} "
                     f"{zone['total_water_gallons']:<12} {zone['average_flow_rate_gpm']:<14}"
                 )
 
-        print("\\n" + "=" * 60 + "\\n")
+        self.logger.info("\n" + "=" * 60 + "\n")
+
+    def email_report(self, report: Dict[str, Any], alert: bool = False) -> None:
+        """Email report in formatted text.
+
+        Args:
+            report: Report data
+            alert: Whether to mark as alert email
+        """
+        # Generate formatted text version of the report
+        report_text = []
+        report_text.append("WEEKLY WATER USAGE REPORT")
+        report_text.append(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
+        report_text.append("=" * 60)
+
+        summary = report["summary"]
+        report_text.append("\nSUMMARY:")
+        report_text.append(f"  Total watering sessions: {summary['total_watering_sessions']}")
+        report_text.append(f"  Total duration: {summary['total_duration_hours']} hours")
+        report_text.append(f"  Total water used: {summary['total_water_used_gallons']} gallons")
+        report_text.append(f"  Zones watered: {summary['zones_watered']}")
+
+        if report["zones"]:
+            report_text.append("\nZONE DETAILS:")
+            report_text.append(
+                f"{'Zone':<4} {'Name':<20} {'Sessions':<8} {'Duration(h)':<12} {'Water(gal)':<12} {'Avg Rate(gpm)':<14}"
+            )
+            report_text.append("-" * 70)
+
+            for zone in report["zones"]:
+                report_text.append(
+                    f"{zone['zone_number']:<4} {zone['zone_name']:<20} "
+                    f"{zone['sessions']:<8} {zone['total_duration_hours']:<12} "
+                    f"{zone['total_water_gallons']:<12} {zone['average_flow_rate_gpm']:<14}"
+                )
+
+        report_text.append("\n" + "=" * 60)
+
+        # Send email
+        email_body = "\n".join(report_text)
+        week_start = report['week_start'][:10]
+        
+        Mailer.sendmail(
+            topic=f"[Water Report] Week {week_start}",
+            alert=alert,
+            message=email_body,
+            always_email=True
+        )
+        
+        self.logger.info(f"Weekly report emailed for week starting {week_start}")
 
     def get_zone_efficiency_analysis(self, weeks_back: int = 4) -> Dict[str, Any]:
         """Analyze zone efficiency over multiple weeks.
@@ -214,7 +264,12 @@ def main():
         if "--save" in sys.argv:
             filename = f"weekly_report_{report['week_start'][:10]}.json"
             reporter.save_report_to_file(report, filename)
-            print(f"Report saved to {filename}")
+            reporter.logger.info(f"Report saved to {filename}")
+        
+        if "--email" in sys.argv:
+            alert = "--alert" in sys.argv
+            reporter.email_report(report, alert=alert)
+            reporter.logger.info("Report emailed")
 
     elif "--last-week" in sys.argv:
         report = reporter.generate_last_week_report()
@@ -223,29 +278,39 @@ def main():
         if "--save" in sys.argv:
             filename = f"weekly_report_{report['week_start'][:10]}.json"
             reporter.save_report_to_file(report, filename)
-            print(f"Report saved to {filename}")
+            reporter.logger.info(f"Report saved to {filename}")
+        
+        if "--email" in sys.argv:
+            alert = "--alert" in sys.argv
+            reporter.email_report(report, alert=alert)
+            reporter.logger.info("Report emailed")
 
     elif "--efficiency" in sys.argv:
         analysis = reporter.get_zone_efficiency_analysis()
-        print("\\n" + "=" * 60)
-        print("ZONE EFFICIENCY ANALYSIS")
-        print(f"Period: {analysis['analysis_period']}")
-        print("=" * 60)
+        reporter.logger.info("\n" + "=" * 60)
+        reporter.logger.info("ZONE EFFICIENCY ANALYSIS")
+        reporter.logger.info(f"Period: {analysis['analysis_period']}")
+        reporter.logger.info("=" * 60)
 
         for zone_name, data in analysis["zones"].items():
-            print(f"\\n{zone_name}:")
-            print(f"  Sessions: {data['total_sessions']}")
-            print(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-            print(f"  Water per session: {data['water_per_session_gallons']} gallons")
-            print(
+            reporter.logger.info(f"\n{zone_name}:")
+            reporter.logger.info(f"  Sessions: {data['total_sessions']}")
+            reporter.logger.info(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
+            reporter.logger.info(f"  Water per session: {data['water_per_session_gallons']} gallons")
+            reporter.logger.info(
                 f"  Duration per session: {data['duration_per_session_minutes']} minutes"
             )
 
     else:
         print("Usage:")
-        print("  python reporter.py --current-week [--save]")
-        print("  python reporter.py --last-week [--save]")
+        print("  python reporter.py --current-week [--save] [--email] [--alert]")
+        print("  python reporter.py --last-week [--save] [--email] [--alert]")
         print("  python reporter.py --efficiency")
+        print("")
+        print("Options:")
+        print("  --save    Save report as JSON file")
+        print("  --email   Send report via email")
+        print("  --alert   Mark email as alert (adds [ALERT] flag)")
 
 
 if __name__ == "__main__":
