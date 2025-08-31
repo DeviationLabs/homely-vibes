@@ -11,6 +11,8 @@ from reporter import WeeklyReporter
 from lib.logger import SystemLogger, get_logger
 from lib import Constants
 
+# Create default database path using Constants.LOGGING_DIR
+DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
 
 def main():
     """Main entry point with command line interface."""
@@ -19,10 +21,6 @@ def main():
     logger = get_logger(__name__)
     logger.info("Starting Rachio-Flume Water Tracking Integration")
 
-    # Create default database path using Constants.LOGGING_DIR
-    logs_dir = Path(Constants.LOGGING_DIR)
-    logs_dir.mkdir(exist_ok=True)
-    default_db_path = str(logs_dir / "water_tracking.db")
 
     parser = argparse.ArgumentParser(
         description="Rachio-Flume Water Tracking Integration"
@@ -89,7 +87,7 @@ def run_collection(args):
     logger = get_logger(__name__)
 
     try:
-        collector = WaterTrackingCollector(args.db, args.interval)
+        collector = WaterTrackingCollector(DB_PATH, args.interval)
 
         if args.once:
             asyncio.run(collector.collect_once())
@@ -113,7 +111,7 @@ def show_status(args):
     logger = get_logger(__name__)
 
     try:
-        collector = WaterTrackingCollector(args.db)
+        collector = WaterTrackingCollector(DB_PATH)
         status = collector.get_current_status()
 
         logger.info("\n" + "=" * 50)
@@ -164,7 +162,7 @@ def generate_report(args):
     logger = get_logger(__name__)
 
     try:
-        reporter = WeeklyReporter(args.db)
+        reporter = WeeklyReporter(DB_PATH)
 
         if args.current_week:
             report = reporter.generate_current_week_report()
