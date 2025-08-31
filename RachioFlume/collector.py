@@ -3,25 +3,31 @@
 import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
+from pathlib import Path
 
 from rachio_client import RachioClient
 from flume_client import FlumeClient
 from data_storage import WaterTrackingDB
 from lib.logger import get_logger
+from lib import Constants
 
 
 class WaterTrackingCollector:
     """Service that collects data from Rachio and Flume APIs."""
 
     def __init__(
-        self, db_path: str = "water_tracking.db", poll_interval_seconds: int = 300
+        self, db_path: Optional[str] = None, poll_interval_seconds: int = 300
     ):  # 5 minutes default
         """Initialize the collector.
 
         Args:
-            db_path: Path to SQLite database
+            db_path: Path to SQLite database (defaults to ~/logs/water_tracking.db)
             poll_interval_seconds: How often to poll APIs
         """
+        if db_path is None:
+            logs_dir = Path(Constants.LOGGING_DIR)
+            logs_dir.mkdir(exist_ok=True)
+            db_path = str(logs_dir / "water_tracking.db")
         # Setup logging
         self.logger = get_logger(__name__)
 

@@ -4,10 +4,12 @@
 import asyncio
 import argparse
 import sys
+from pathlib import Path
 
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
 from lib.logger import SystemLogger, get_logger
+from lib import Constants
 
 
 def main():
@@ -16,6 +18,11 @@ def main():
     SystemLogger.setup(console_output=True, log_file="water_tracking.log")
     logger = get_logger(__name__)
     logger.info("Starting Rachio-Flume Water Tracking Integration")
+
+    # Create default database path using Constants.LOGGING_DIR
+    logs_dir = Path(Constants.LOGGING_DIR)
+    logs_dir.mkdir(exist_ok=True)
+    default_db_path = str(logs_dir / "water_tracking.db")
 
     parser = argparse.ArgumentParser(
         description="Rachio-Flume Water Tracking Integration"
@@ -39,13 +46,13 @@ def main():
         help="Collection interval in seconds (default: 300)",
     )
     collect_parser.add_argument(
-        "--db", default="water_tracking.db", help="Database file path"
+        "--db", default=default_db_path, help="Database file path"
     )
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Show current system status")
     status_parser.add_argument(
-        "--db", default="water_tracking.db", help="Database file path"
+        "--db", default=default_db_path, help="Database file path"
     )
 
     # Reporting commands
@@ -67,7 +74,7 @@ def main():
         "--email", action="store_true", help="Send report via email"
     )
     report_parser.add_argument(
-        "--db", default="water_tracking.db", help="Database file path"
+        "--db", default=default_db_path, help="Database file path"
     )
 
     args = parser.parse_args()

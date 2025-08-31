@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional
+from lib import Constants
 
 
 class SystemLogger:
@@ -20,7 +21,7 @@ class SystemLogger:
         log_file: Optional[str] = None,
         console_output: bool = True,
         format_string: Optional[str] = None,
-        default_log_dir: str = "~/logs",
+        default_log_dir: Optional[str] = None,
     ) -> None:
         """Set up logging configuration for the entire application.
 
@@ -29,7 +30,7 @@ class SystemLogger:
             log_file: Optional file path for log output (if relative, uses default_log_dir)
             console_output: Whether to output to console (default: True)
             format_string: Custom format string (optional)
-            default_log_dir: Default directory for log files (default: ~/logs)
+            default_log_dir: Default directory for log files (defaults to Constants.LOGGING_DIR)
         """
         if cls._initialized:
             return
@@ -60,7 +61,10 @@ class SystemLogger:
         if log_file:
             # Handle relative paths by using default_log_dir
             if not os.path.isabs(log_file):
-                log_dir = os.path.expanduser(default_log_dir)
+                if default_log_dir is None:
+                    log_dir = Constants.LOGGING_DIR
+                else:
+                    log_dir = os.path.expanduser(default_log_dir)
                 cls._log_file = Path(log_dir) / log_file
             else:
                 cls._log_file = Path(log_file)
