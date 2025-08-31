@@ -122,13 +122,19 @@ def show_status(args):
             logger.error(f"Error: {status['error']}")
             return 1
 
-        active_zone = status["active_zone"]
-        if active_zone["zone_number"]:
-            logger.info(
-                f"Active Zone: #{active_zone['zone_number']} - {active_zone['zone_name']}"
-            )
+        # Show information about multiple devices
+        logger.info(f"Rachio Devices: {status.get('rachio_devices_count', 1)}")
+        
+        # Show all active zones from all devices
+        active_zones = status.get("active_zones", [])
+        if active_zones:
+            logger.info("Active Zones:")
+            for zone in active_zones:
+                logger.info(
+                    f"  Device {zone['device']}: Zone #{zone['zone_number']} - {zone['zone_name']}"
+                )
         else:
-            logger.info("Active Zone: None")
+            logger.info("Active Zones: None")
 
         if status["current_usage_rate_gpm"]:
             logger.info(

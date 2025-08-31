@@ -8,6 +8,7 @@ from rachio_client import RachioClient
 from flume_client import FlumeClient
 from data_storage import WaterTrackingDB
 from lib.logger import get_logger
+from lib import Constants
 
 
 class WaterTrackingCollector:
@@ -19,7 +20,17 @@ class WaterTrackingCollector:
         self.logger = get_logger(__name__)
 
         self.db = WaterTrackingDB(db_path)
-        self.rachio_client = RachioClient()
+        
+        # Initialize Rachio clients for multiple devices
+        self.rachio_clients = []
+        if hasattr(Constants, 'RACHIO_ID') and Constants.RACHIO_ID:
+            self.rachio_clients.append(RachioClient(device_id=Constants.RACHIO_ID))
+        if hasattr(Constants, 'RACHIO_ID_2') and Constants.RACHIO_ID_2:
+            self.rachio_clients.append(RachioClient(device_id=Constants.RACHIO_ID_2))
+            
+        if not self.rachio_clients:
+            raise ValueError("At least one Rachio device ID must be configured")
+            
         self.flume_client = FlumeClient()
         self.poll_interval = poll_interval_seconds
 
@@ -28,26 +39,40 @@ class WaterTrackingCollector:
         self.last_flume_collection: Optional[datetime] = None
 
     async def collect_rachio_data(self) -> None:
-        """Collect data from Rachio API."""
+        """Collect data from all Rachio devices."""
         try:
-            # Collect zone information
-            zones = self.rachio_client.get_zones()
-            self.db.save_zones(zones)
-            self.logger.info(f"Collected {len(zones)} zones from Rachio")
+            all_zones = []
+            all_events = []
+            
+            for i, rachio_client in enumerate(self.rachio_clients, 1):
+                self.logger.info(f"Collecting data from Rachio device {i}")
+                
+                # Collect zone information
+                zones = rachio_client.get_zones()
+                all_zones.extend(zones)
+                self.logger.info(f"Collected {len(zones)} zones from Rachio device {i}")
 
-            # Collect recent events (last 24 hours)
-            if not self.last_rachio_collection:
-                # First run - get last 7 days of events
-                events = self.rachio_client.get_recent_events(days=7)
-            else:
-                # Get events since last collection
-                events = self.rachio_client.get_events(
-                    self.last_rachio_collection, datetime.now()
-                )
+                # Collect recent events
+                if not self.last_rachio_collection:
+                    # First run - get last 7 days of events
+                    events = rachio_client.get_recent_events(days=7)
+                else:
+                    # Get events since last collection
+                    events = rachio_client.get_events(
+                        self.last_rachio_collection, datetime.now()
+                    )
 
-            if events:
-                self.db.save_watering_events(events)
-                self.logger.info(f"Collected {len(events)} watering events from Rachio")
+                all_events.extend(events)
+                self.logger.info(f"Collected {len(events)} watering events from Rachio device {i}")
+
+            # Save all collected data
+            if all_zones:
+                self.db.save_zones(all_zones)
+                self.logger.info(f"Saved total of {len(all_zones)} zones from {len(self.rachio_clients)} devices")
+
+            if all_events:
+                self.db.save_watering_events(all_events)
+                self.logger.info(f"Saved total of {len(all_events)} watering events from {len(self.rachio_clients)} devices")
 
             self.last_rachio_collection = datetime.now()
 
@@ -129,8 +154,16 @@ class WaterTrackingCollector:
     def get_current_status(self) -> dict:
         """Get current status of water tracking system."""
         try:
-            # Get current active zone from Rachio
-            active_zone = self.rachio_client.get_active_zone()
+            # Check all Rachio devices for active zones
+            active_zones = []
+            for i, rachio_client in enumerate(self.rachio_clients, 1):
+                active_zone = rachio_client.get_active_zone()
+                if active_zone:
+                    active_zones.append({
+                        "device": i,
+                        "zone_number": active_zone.zone_number,
+                        "zone_name": active_zone.name,
+                    })
 
             # Get current water usage rate from Flume
             current_usage_rate = self.flume_client.get_current_usage_rate()
@@ -140,13 +173,18 @@ class WaterTrackingCollector:
                 datetime.now() - timedelta(hours=24), datetime.now()
             )
 
+            # For backward compatibility, provide single active_zone format
+            primary_active_zone = active_zones[0] if active_zones else {}
+
             return {
                 "active_zone": {
-                    "zone_number": active_zone.zone_number if active_zone else None,
-                    "zone_name": active_zone.name if active_zone else None,
+                    "zone_number": primary_active_zone.get("zone_number"),
+                    "zone_name": primary_active_zone.get("zone_name"),
                 },
+                "active_zones": active_zones,  # All active zones from all devices
                 "current_usage_rate_gpm": current_usage_rate,
                 "recent_sessions_count": len(recent_sessions),
+                "rachio_devices_count": len(self.rachio_clients),
                 "last_rachio_collection": (
                     self.last_rachio_collection.isoformat()
                     if self.last_rachio_collection
