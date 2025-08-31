@@ -29,9 +29,10 @@ def sendmail(topic, alert, message, always_email=Constants.ALWAYS_EMAIL):
                 minute_today,
             )
             if "<html>" in message:
-                msg.attach(MIMEText(message, "html"))
+                msg.attach(MIMEText(message, "html", "utf-8"))
             else:
-                msg.attach(MIMEText(message, "plain"))
+                # Use plain text with UTF-8 encoding to preserve formatting
+                msg.attach(MIMEText(message, "plain", "utf-8"))
 
             server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
             server.ehlo()

@@ -37,15 +37,6 @@ class FlumeClient:
         username: Optional[str] = None,
         password: Optional[str] = None,
     ):
-        """Initialize Flume client.
-
-        Args:
-            client_id: OAuth client ID (defaults to Constants.FLUME_CLIENT_ID)
-            client_secret: OAuth client secret (defaults to Constants.FLUME_CLIENT_SECRET)
-            username: Flume email address (defaults to Constants.FLUME_USER_EMAIL)
-            password: Flume password (defaults to Constants.FLUME_PASSWORD)
-        """
-        # Setup logging first
         self.logger = get_logger(__name__)
 
         # OAuth credentials

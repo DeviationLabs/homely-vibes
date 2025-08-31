@@ -14,12 +14,7 @@ from lib.logger import get_logger
 class WaterTrackingDB:
     """SQLite database for storing water tracking data."""
 
-    def __init__(self, db_path: str = "water_tracking.db"):
-        """Initialize database connection.
-
-        Args:
-            db_path: Path to SQLite database file
-        """
+    def __init__(self, db_path: str):
         self.db_path = Path(db_path)
         self.logger = get_logger(__name__)
         self.logger.info(f"Initializing water tracking database at {self.db_path}")
