@@ -1,7 +1,6 @@
 """Generic logging configuration for the water tracking system."""
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -69,47 +68,31 @@ class SystemLogger:
 
         # Get logger for this module
         logger = logging.getLogger(name)
-        
+
         # Check if this logger already has file handlers to avoid duplicates
-        has_file_handler = any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+        has_file_handler = any(
+            isinstance(h, logging.FileHandler) for h in logger.handlers
+        )
         if has_file_handler:
             return logger
-        
-        # Create module-specific log file in LOGGING_DIR
+
         logs_dir = Path(Constants.LOGGING_DIR)
         logs_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Use filename for log file when module is __main__
-        if name == '__main__':
-            # Extract filename from the main module
-            import __main__
-            if hasattr(__main__, '__file__') and __main__.__file__:
-                file_path = Path(__main__.__file__)
-                module_name = file_path.stem  # Get filename without extension
-            else:
-                module_name = 'main'
-        else:
-            # Use module name for log file (replace dots with underscores)
-            module_name = name.replace('.', '_')
-        
+
+        module_name = name.replace(".", "_")
         log_file_path = logs_dir / f"{module_name}.log"
-        
+
         # Add file handler for this specific module
         file_handler = logging.FileHandler(log_file_path)
         file_handler.setLevel(logging.INFO)
-        
-        # Use same formatter as console
-        if logger.parent and logger.parent.handlers:
-            formatter = logger.parent.handlers[0].formatter
-        else:
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
-            )
+
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+        )
         file_handler.setFormatter(formatter)
-        
-        # Add handler to logger
+
         logger.addHandler(file_handler)
-        
+
         return logger
 
     @classmethod
@@ -135,7 +118,6 @@ class SystemLogger:
         # Update all handlers
         for handler in root_logger.handlers:
             handler.setLevel(level)
-
 
 
 # Convenience function for simple usage

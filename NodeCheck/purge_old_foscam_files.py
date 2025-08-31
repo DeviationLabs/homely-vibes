@@ -12,10 +12,7 @@ from lib.MyPushover import Pushover
 logger = SystemLogger.get_logger(__name__)
 
 # Initialize Pushover client for Foscam notifications
-pushover = Pushover(
-    Constants.FSOCAM_PUSHOVER_TOKEN,
-    Constants.PUSHOVER_USER
-)
+pushover = Pushover(Constants.FSOCAM_PUSHOVER_TOKEN, Constants.PUSHOVER_USER)
 
 
 def purge_old_foscam_files():

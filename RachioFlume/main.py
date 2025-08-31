@@ -142,7 +142,9 @@ def show_status(args):
             logger.info("Active Zone: None")
 
         if status["current_usage_rate_gpm"]:
-            logger.info(f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM")
+            logger.info(
+                f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM"
+            )
         else:
             logger.info("Current Usage Rate: Not available")
 
@@ -181,7 +183,7 @@ def generate_report(args):
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
                 logger.info(f"Report saved to {filename}")
-            
+
             if args.email:
                 reporter.email_report(report, alert=False)
                 logger.info("Report emailed")
@@ -194,7 +196,7 @@ def generate_report(args):
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
                 logger.info(f"Report saved to {filename}")
-            
+
             if args.email:
                 reporter.email_report(report, alert=False)
                 logger.info("Report emailed")
