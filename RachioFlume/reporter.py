@@ -2,28 +2,18 @@
 
 import json
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from pathlib import Path
 
 from data_storage import WaterTrackingDB
 from lib.logger import get_logger
 from lib import Mailer
-from lib import Constants
 
 
 class WeeklyReporter:
     """Generate weekly water usage reports by zone."""
 
-    def __init__(self, db_path: Optional[str] = None):
-        """Initialize the reporter.
-
-        Args:
-            db_path: Path to SQLite database (defaults to ~/logs/water_tracking.db)
-        """
-        if db_path is None:
-            logs_dir = Path(Constants.LOGGING_DIR)
-            logs_dir.mkdir(exist_ok=True)
-            db_path = str(logs_dir / "water_tracking.db")
+    def __init__(self, db_path: str):
         self.db = WaterTrackingDB(db_path)
         self.logger = get_logger(__name__)
         self.logger.info("Weekly reporter initialized")
@@ -286,7 +276,7 @@ def main():
     """Main entry point for generating reports."""
     import sys
 
-    reporter = WeeklyReporter()
+    reporter = WeeklyReporter("water_tracking.db")
 
     if "--current-week" in sys.argv:
         report = reporter.generate_current_week_report()
