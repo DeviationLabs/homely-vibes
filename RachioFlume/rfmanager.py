@@ -17,8 +17,8 @@ DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
 def main():
     """Main entry point with command line interface."""
     # Setup logging first
-    SystemLogger.setup(console_output=True)
     logger = get_logger(__name__)
+    logger.info("=" * 50)
     logger.info("Starting Rachio-Flume Water Tracking Integration")
 
 
