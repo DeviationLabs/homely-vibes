@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional
 from lib import Constants
 
 
@@ -12,7 +12,6 @@ class SystemLogger:
     """Centralized logger configuration for all water tracking modules."""
 
     _initialized = False
-    _module_loggers: Dict[str, logging.Logger] = {}
 
     @classmethod
     def setup(
@@ -68,12 +67,13 @@ class SystemLogger:
         if not cls._initialized:
             cls.setup()
 
-        # Return existing logger if already created
-        if name in cls._module_loggers:
-            return cls._module_loggers[name]
-
-        # Create logger for this module
+        # Get logger for this module
         logger = logging.getLogger(name)
+        
+        # Check if this logger already has file handlers to avoid duplicates
+        has_file_handler = any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+        if has_file_handler:
+            return logger
         
         # Create module-specific log file in LOGGING_DIR
         logs_dir = Path(Constants.LOGGING_DIR)
@@ -110,16 +110,12 @@ class SystemLogger:
         # Add handler to logger
         logger.addHandler(file_handler)
         
-        # Cache the logger
-        cls._module_loggers[name] = logger
-        
         return logger
 
     @classmethod
     def reset(cls) -> None:
         """Reset logger configuration (mainly for testing)."""
         cls._initialized = False
-        cls._module_loggers.clear()
 
         # Clear all handlers
         root_logger = logging.getLogger()
