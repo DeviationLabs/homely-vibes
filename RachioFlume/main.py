@@ -64,6 +64,9 @@ def main():
         "--save", action="store_true", help="Save report to file"
     )
     report_parser.add_argument(
+        "--email", action="store_true", help="Send report via email"
+    )
+    report_parser.add_argument(
         "--db", default="water_tracking.db", help="Database file path"
     )
 
@@ -115,45 +118,44 @@ def show_status(args):
         collector = WaterTrackingCollector(args.db)
         status = collector.get_current_status()
 
-        print("\n" + "=" * 50)
-        print("WATER TRACKING SYSTEM STATUS")
-        print("=" * 50)
+        logger.info("\n" + "=" * 50)
+        logger.info("WATER TRACKING SYSTEM STATUS")
+        logger.info("=" * 50)
 
         if "error" in status:
-            print(f"Error: {status['error']}")
+            logger.error(f"Error: {status['error']}")
             return 1
 
         active_zone = status["active_zone"]
         if active_zone["zone_number"]:
-            print(
+            logger.info(
                 f"Active Zone: #{active_zone['zone_number']} - {active_zone['zone_name']}"
             )
         else:
-            print("Active Zone: None")
+            logger.info("Active Zone: None")
 
         if status["current_usage_rate_gpm"]:
-            print(f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM")
+            logger.info(f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM")
         else:
-            print("Current Usage Rate: Not available")
+            logger.info("Current Usage Rate: Not available")
 
-        print(f"Recent Sessions (24h): {status['recent_sessions_count']}")
+        logger.info(f"Recent Sessions (24h): {status['recent_sessions_count']}")
 
         if status["last_rachio_collection"]:
-            print(f"Last Rachio Collection: {status['last_rachio_collection']}")
+            logger.info(f"Last Rachio Collection: {status['last_rachio_collection']}")
         else:
-            print("Last Rachio Collection: Never")
+            logger.info("Last Rachio Collection: Never")
 
         if status["last_flume_collection"]:
-            print(f"Last Flume Collection: {status['last_flume_collection']}")
+            logger.info(f"Last Flume Collection: {status['last_flume_collection']}")
         else:
-            print("Last Flume Collection: Never")
+            logger.info("Last Flume Collection: Never")
 
-        print("=" * 50 + "\n")
+        logger.info("=" * 50 + "\n")
         return 0
 
     except Exception as e:
         logger.error(f"Error getting status: {e}")
-        print(f"Error getting status: {e}")
         return 1
 
 
@@ -171,7 +173,11 @@ def generate_report(args):
             if args.save:
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
-                print(f"Report saved to {filename}")
+                logger.info(f"Report saved to {filename}")
+            
+            if args.email:
+                reporter.email_report(report, alert=False)
+                logger.info("Report emailed")
 
         elif args.last_week:
             report = reporter.generate_last_week_report()
@@ -180,37 +186,40 @@ def generate_report(args):
             if args.save:
                 filename = f"weekly_report_{report['week_start'][:10]}.json"
                 reporter.save_report_to_file(report, filename)
-                print(f"Report saved to {filename}")
+                logger.info(f"Report saved to {filename}")
+            
+            if args.email:
+                reporter.email_report(report, alert=False)
+                logger.info("Report emailed")
 
         elif args.efficiency:
             analysis = reporter.get_zone_efficiency_analysis()
-            print("\n" + "=" * 60)
-            print("ZONE EFFICIENCY ANALYSIS")
-            print(f"Period: {analysis['analysis_period']}")
-            print("=" * 60)
+            logger.info("\n" + "=" * 60)
+            logger.info("ZONE EFFICIENCY ANALYSIS")
+            logger.info(f"Period: {analysis['analysis_period']}")
+            logger.info("=" * 60)
 
             if not analysis["zones"]:
-                print("No zone data available for analysis.")
+                logger.info("No zone data available for analysis.")
                 return 0
 
             for zone_name, data in analysis["zones"].items():
-                print(f"\n{zone_name}:")
-                print(f"  Sessions: {data['total_sessions']}")
-                print(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-                print(
+                logger.info(f"\n{zone_name}:")
+                logger.info(f"  Sessions: {data['total_sessions']}")
+                logger.info(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
+                logger.info(
                     f"  Water per session: {data['water_per_session_gallons']} gallons"
                 )
-                print(
+                logger.info(
                     f"  Duration per session: {data['duration_per_session_minutes']} minutes"
                 )
 
-            print("\n" + "=" * 60 + "\n")
+            logger.info("\n" + "=" * 60 + "\n")
 
         return 0
 
     except Exception as e:
         logger.error(f"Error generating report: {e}")
-        print(f"Error generating report: {e}")
         return 1
 
 

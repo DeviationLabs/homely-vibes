@@ -7,9 +7,15 @@ from pathlib import Path
 from lib.logger import SystemLogger
 from lib import Mailer
 from lib import Constants
-from lib import MyPushover
+from lib.MyPushover import Pushover
 
 logger = SystemLogger.get_logger(__name__)
+
+# Initialize Pushover client for Foscam notifications
+pushover = Pushover(
+    Constants.FSOCAM_PUSHOVER_TOKEN,
+    Constants.PUSHOVER_USER
+)
 
 
 def purge_old_foscam_files():
@@ -90,7 +96,7 @@ def purge_old_foscam_files():
                 ):  # If errors > 10% of deletions, flag as failure
                     success = False
 
-            MyPushover.send_pushover(Constants.FOSCAM_PUSHOVER_RCPT, pushover_msg)
+            pushover.send_message(pushover_msg, title="Foscam Cleanup")
 
         except Exception as e:
             error_msg = f"Error during file deletion: {str(e)}"
