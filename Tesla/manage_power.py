@@ -327,24 +327,6 @@ class PowerwallManager:
                     continue
 
 
-def setup_logging(debug: bool, quiet: bool) -> None:
-    """Configure logging settings."""
-    import logging
-
-    logfile = f"{Constants.LOGGING_DIR}/{os.path.basename(__file__)}.log"
-    log_format = "%(levelname)s:%(module)s:%(lineno)d:%(asctime)s: %(message)s"
-
-    level = logging.DEBUG if debug else logging.INFO
-    SystemLogger.setup(
-        level=level,
-        log_file=logfile,
-        console_output=not quiet,
-        format_string=log_format,
-    )
-
-    logger = get_logger(__name__)
-    logger.info("=" * 50)
-    logger.info(f"Started: {' '.join(sys.argv)}")
 
 
 def main() -> None:
@@ -367,7 +349,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    setup_logging(args.debug, args.quiet)
+    logger = get_logger(__name__)
+    logger.info("=" * 50)
+    logger.info(f"Started: {' '.join(sys.argv)}")
 
     try:
         manager = PowerwallManager(args.email, args.send_notifications)
