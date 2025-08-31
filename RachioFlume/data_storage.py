@@ -3,28 +3,18 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from contextlib import contextmanager
 
 from rachio_client import WateringEvent, Zone
 from flume_client import WaterReading
 from lib.logger import get_logger
-from lib import Constants
 
 
 class WaterTrackingDB:
     """SQLite database for storing water tracking data."""
 
-    def __init__(self, db_path: Optional[str] = None):
-        """Initialize database connection.
-
-        Args:
-            db_path: Path to SQLite database file (defaults to ~/logs/water_tracking.db)
-        """
-        if db_path is None:
-            logs_dir = Path(Constants.LOGGING_DIR)
-            logs_dir.mkdir(exist_ok=True)
-            db_path = str(logs_dir / "water_tracking.db")
+    def __init__(self, db_path: str):
         self.db_path = Path(db_path)
         self.logger = get_logger(__name__)
         self.logger.info(f"Initializing water tracking database at {self.db_path}")
