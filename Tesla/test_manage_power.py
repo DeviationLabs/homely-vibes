@@ -6,13 +6,21 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 
 # Mock external modules before importing our code
+mock_pushover_class = MagicMock()
+mock_pushover_module = MagicMock()
+mock_pushover_module.Pushover = mock_pushover_class
+
 sys.modules["Constants"] = MagicMock()
 sys.modules["lib"] = MagicMock()
-sys.modules["lib.MyPushover"] = MagicMock()
+sys.modules["lib.Constants"] = MagicMock()
+sys.modules["lib.MyPushover"] = mock_pushover_module
+sys.modules["lib.logger"] = MagicMock()
 sys.modules["TeslaPy"] = MagicMock()
 sys.modules["TeslaPy.teslapy"] = MagicMock()
+sys.modules["lib.TeslaPy"] = MagicMock()
+sys.modules["lib.TeslaPy.teslapy"] = MagicMock()
 
-from Tesla.manage_power_clean import BatteryHistory, PowerwallManager, DecisionPoint
+from Tesla.manage_power import BatteryHistory, PowerwallManager, DecisionPoint
 
 
 class TestBatteryHistory(unittest.TestCase):
