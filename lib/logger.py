@@ -1,16 +1,18 @@
 """Generic logging configuration for the water tracking system."""
 
 import logging
+import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
+from lib import Constants
 
 
 class SystemLogger:
     """Centralized logger configuration for all water tracking modules."""
 
     _initialized = False
-    _log_file: Optional[Path] = None
+    _module_loggers: Dict[str, logging.Logger] = {}
 
     @classmethod
     def setup(
@@ -55,24 +57,58 @@ class SystemLogger:
 
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
-        """Get a logger instance for a specific module.
+        """Get a logger instance for a specific module with automatic file logging.
 
         Args:
             name: Module name (typically __name__)
 
         Returns:
-            Configured logger instance
+            Configured logger instance with file handler for this module
         """
         if not cls._initialized:
             cls.setup()
 
-        return logging.getLogger(name)
+        # Return existing logger if already created
+        if name in cls._module_loggers:
+            return cls._module_loggers[name]
+
+        # Create logger for this module
+        logger = logging.getLogger(name)
+        
+        # Create module-specific log file in LOGGING_DIR
+        logs_dir = Path(Constants.LOGGING_DIR)
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Use module name for log file (replace dots with underscores)
+        module_name = name.replace('.', '_')
+        log_file_path = logs_dir / f"{module_name}.log"
+        
+        # Add file handler for this specific module
+        file_handler = logging.FileHandler(log_file_path)
+        file_handler.setLevel(logging.INFO)
+        
+        # Use same formatter as console
+        if logger.parent and logger.parent.handlers:
+            formatter = logger.parent.handlers[0].formatter
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+            )
+        file_handler.setFormatter(formatter)
+        
+        # Add handler to logger
+        logger.addHandler(file_handler)
+        
+        # Cache the logger
+        cls._module_loggers[name] = logger
+        
+        return logger
 
     @classmethod
     def reset(cls) -> None:
         """Reset logger configuration (mainly for testing)."""
         cls._initialized = False
-        cls._log_file = None
+        cls._module_loggers.clear()
 
         # Clear all handlers
         root_logger = logging.getLogger()
@@ -93,34 +129,6 @@ class SystemLogger:
         for handler in root_logger.handlers:
             handler.setLevel(level)
 
-    @classmethod
-    def add_file_output(cls, log_file: str) -> None:
-        """Add file output to existing logger configuration.
-
-        Args:
-            log_file: Path to log file
-        """
-        if cls._log_file:
-            return  # File handler already exists
-
-        cls._log_file = Path(log_file)
-        cls._log_file.parent.mkdir(parents=True, exist_ok=True)
-
-        root_logger = logging.getLogger()
-
-        # Use same format as existing handlers
-        formatter = None
-        if root_logger.handlers:
-            formatter = root_logger.handlers[0].formatter
-        else:
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
-            )
-
-        file_handler = logging.FileHandler(cls._log_file)
-        file_handler.setLevel(root_logger.level)
-        file_handler.setFormatter(formatter)
-        root_logger.addHandler(file_handler)
 
 
 # Convenience function for simple usage
