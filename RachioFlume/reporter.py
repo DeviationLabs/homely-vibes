@@ -151,11 +151,11 @@ class WeeklyReporter:
             report: Report data
             alert: Whether to mark as alert email
         """
-        # Generate formatted text version of the report
+        # Generate formatted text version of the report with fixed-width formatting
         report_text = []
         report_text.append("WEEKLY WATER USAGE REPORT")
         report_text.append(f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}")
-        report_text.append("=" * 60)
+        report_text.append("=" * 70)
 
         summary = report["summary"]
         report_text.append("\nSUMMARY:")
@@ -166,19 +166,23 @@ class WeeklyReporter:
 
         if report["zones"]:
             report_text.append("\nZONE DETAILS:")
-            report_text.append(
-                f"{'Zone':<4} {'Name':<20} {'Sessions':<8} {'Duration(h)':<12} {'Water(gal)':<12} {'Avg Rate(gpm)':<14}"
-            )
-            report_text.append("-" * 70)
+            # Use fixed-width formatting for better email display
+            header = f"{'Zone':<6}{'Name':<22}{'Sessions':<10}{'Duration(h)':<12}{'Water(gal)':<12}{'Rate(gpm)':<10}"
+            report_text.append(header)
+            report_text.append("-" * len(header))
 
             for zone in report["zones"]:
-                report_text.append(
-                    f"{zone['zone_number']:<4} {zone['zone_name']:<20} "
-                    f"{zone['sessions']:<8} {zone['total_duration_hours']:<12} "
-                    f"{zone['total_water_gallons']:<12} {zone['average_flow_rate_gpm']:<14}"
+                zone_line = (
+                    f"{zone['zone_number']:<6}"
+                    f"{zone['zone_name'][:20]:<22}"
+                    f"{zone['sessions']:<10}"
+                    f"{zone['total_duration_hours']:<12.1f}"
+                    f"{zone['total_water_gallons']:<12.1f}"
+                    f"{zone['average_flow_rate_gpm']:<10.1f}"
                 )
+                report_text.append(zone_line)
 
-        report_text.append("\n" + "=" * 60)
+        report_text.append("\n" + "=" * 70)
 
         # Send email
         email_body = "\n".join(report_text)
