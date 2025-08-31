@@ -58,17 +58,17 @@ For best results, run the collector continuously to gather data over time:
 
 ```bash
 # Start continuous collection in background (recommended)
-nohup uv run python main.py collect --continuous > water_tracking.log 2>&1 &
+nohup uv run python rfmanager.py collect --continuous > water_tracking.log 2>&1 &
 
 # Or run in foreground (will stop when terminal closes)
-uv run python main.py collect --continuous
+uv run python rfmanager.py collect --continuous
 
 # Run single collection cycle (for testing)
-uv run python main.py collect --once
+uv run python rfmanager.py collect --once
 
 # Custom collection intervals
-uv run python main.py collect --continuous --interval 120    # Every 2 minutes
-uv run python main.py collect --continuous --interval 600    # Every 10 minutes (default: 300)
+uv run python rfmanager.py collect --continuous --interval 120    # Every 2 minutes
+uv run python rfmanager.py collect --continuous --interval 600    # Every 10 minutes (default: 300)
 ```
 
 **💡 Pro Tip**: Let the collector run for at least a week to get meaningful reports and efficiency analysis!
@@ -77,7 +77,7 @@ uv run python main.py collect --continuous --interval 600    # Every 10 minutes 
 
 ```bash
 # See current active zone and real-time usage rate
-uv run python main.py status
+uv run python rfmanager.py status
 ```
 
 Example output:
@@ -99,24 +99,24 @@ Generate comprehensive reports once you have collected data:
 
 ```bash
 # Current week report
-uv run python main.py report --current-week
+uv run python rfmanager.py report --current-week
 
 # Last week report  
-uv run python main.py report --last-week
+uv run python rfmanager.py report --last-week
 
 # Zone efficiency analysis (requires multiple watering sessions)
-uv run python main.py report --efficiency
+uv run python rfmanager.py report --efficiency
 
 # Save reports to JSON files
-uv run python main.py report --current-week --save
-uv run python main.py report --last-week --save
+uv run python rfmanager.py report --current-week --save
+uv run python rfmanager.py report --last-week --save
 ```
 
 ### 🛑 Stop Data Collection
 
 ```bash
 # Find the background process
-ps aux | grep "main.py collect"
+ps aux | grep "rfmanager.py collect"
 
 # Stop it
 kill <process_id>
