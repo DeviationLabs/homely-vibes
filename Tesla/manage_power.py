@@ -81,7 +81,7 @@ class PowerwallManager:
         )
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
-            Constants.POWERWALL_PUSHOVER_TOKEN, Constants.PUSHOVER_USER
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['Powerwall']
         )
 
     def send_pushover(self, message: str) -> None:

@@ -27,6 +27,12 @@ SMS_FROM = '+18001234567'
 
 # Pushover Notifications Account
 PUSHOVER_USER='user'
+PUSHOVER_DEFAULT_TOKEN="token"
+PUSHOVER_TOKENS= {
+  'Foscam': "token",
+  'Powerwall': "token",
+  'NetworkCheck': "token"
+}
 
 # WaterMonitor: Processing
 MAX_ZONES = 16
@@ -60,7 +66,6 @@ WINDOWS_PASSWORD="YYY"
 FOSCAM_DIR="/path/to/foscam"  # Update this to actual foscam directory path
 PURGE_AFTER_DAYS=30
 FOSCAM_PUSHOVER_RCPT='a@aa.aa'
-FOSCAM_PUSHOVER_TOKEN='token'
 
 # Network Check
 MIN_DL_BW = 150  # Mbps
@@ -105,8 +110,6 @@ POWERWALL_EMAIL="a@aa.aa"
 POWERWALL_PASSWORD="XYZA"
 POWERWALL_SMS_RCPT = '+18001234567'
 POWERWALL_POLL_TIME = 180
-POWERWALL_PUSHOVER_RCPT = 'group_name'
-POWERWALL_PUSHOVER_TOKEN='token'
 
 TESLA_EMAIL="a@aa.aa"
 TESLA_PASSWORD="XTZA"
