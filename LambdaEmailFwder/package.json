@@ -1,0 +1,26 @@
+{
+  "name": "lambda-email-forwarder",
+  "version": "5.0.0",
+  "description": "AWS Lambda SES Email Forwarder",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.658.1",
+    "@aws-sdk/client-ses": "^3.658.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "ses",
+    "email",
+    "forwarder"
+  ],
+  "author": "arithmetic",
+  "license": "MIT"
+}
