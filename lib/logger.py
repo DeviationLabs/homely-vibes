@@ -40,7 +40,7 @@ class SystemLogger:
         # Default format
         if format_string is None:
             format_string = (
-                "%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s"
+                "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
             )
 
         # Clear any existing handlers
@@ -73,13 +73,13 @@ class SystemLogger:
         try:
             import __main__
             if hasattr(__main__, '__file__') and __main__.__file__:
-                return Path(__main__.__file__).stem
+                return Path(__main__.__file__).name
         except (ImportError, AttributeError):
             pass
         
         # Fallback to sys.argv[0] if __main__.__file__ not available
         if sys.argv and sys.argv[0]:
-            return Path(sys.argv[0]).stem
+            return Path(sys.argv[0]).name
             
         # Last resort fallback
         return "application"
