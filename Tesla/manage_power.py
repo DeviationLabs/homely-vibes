@@ -2,7 +2,6 @@
 """Clean Tesla Powerwall management system."""
 
 import argparse
-import os
 import sys
 import time
 from dataclasses import dataclass
@@ -11,7 +10,7 @@ import importlib
 from lib import Constants
 from lib.MyPushover import Pushover
 from lib.TeslaPy.teslapy import Tesla as TeslaClient
-from lib.logger import SystemLogger, get_logger
+from lib.logger import get_logger
 
 
 @dataclass

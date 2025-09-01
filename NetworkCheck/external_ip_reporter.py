@@ -6,7 +6,6 @@ Fetches and reports the current external IP address via email and pushover notif
 Useful for monitoring IP changes when using dynamic IP addresses.
 """
 
-import argparse
 import sys
 import urllib.request
 import urllib.error

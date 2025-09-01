@@ -4,11 +4,10 @@
 import asyncio
 import argparse
 import sys
-from pathlib import Path
 
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
-from lib.logger import SystemLogger, get_logger
+from lib.logger import get_logger
 from lib import Constants
 
 # Create default database path using Constants.LOGGING_DIR
@@ -45,25 +44,27 @@ def main():
     )
 
     # Status command
-    status_parser = subparsers.add_parser("status", help="Show current system status")
+    subparsers.add_parser("status", help="Show current system status")
 
     # Reporting commands
-    report_parser = subparsers.add_parser("report", help="Generate reports")
-    report_group = report_parser.add_mutually_exclusive_group(required=True)
-    report_group.add_argument(
-        "--current-week", action="store_true", help="Generate current week report"
-    )
-    report_group.add_argument(
-        "--last-week", action="store_true", help="Generate last week report"
-    )
-    report_group.add_argument(
-        "--efficiency", action="store_true", help="Generate efficiency analysis"
+    report_parser = subparsers.add_parser("report", help="Generate period reports")
+    report_parser.add_argument(
+        "--end-date", type=str, help="End date for report (YYYY-MM-DD format, defaults to today)"
     )
     report_parser.add_argument(
-        "--save", action="store_true", help="Save report to file"
+        "--lookback", type=int, default=7, help="Number of days to look back from end date (default: 7)"
     )
     report_parser.add_argument(
         "--email", action="store_true", help="Send report via email"
+    )
+
+    # Summary command
+    subparsers.add_parser("summary", help="Generate efficiency analysis")
+
+    # Raw data command
+    raw_parser = subparsers.add_parser("raw", help="Generate raw data report (5-minute intervals)")
+    raw_parser.add_argument(
+        "--hours", type=int, default=24, help="Number of hours for raw data report (default: 24)"
     )
 
     args = parser.parse_args()
@@ -78,6 +79,10 @@ def main():
         return show_status(args)
     elif args.command == "report":
         return generate_report(args)
+    elif args.command == "summary":
+        return generate_summary_report(args)
+    elif args.command == "raw":
+        return generate_raw_report(args)
 
     return 0
 
@@ -164,40 +169,53 @@ def generate_report(args):
     try:
         reporter = WeeklyReporter(DB_PATH)
 
-        if args.current_week:
-            report = reporter.generate_current_week_report()
-            reporter.print_report(report)
+        report = reporter.generate_period_report(args.end_date, args.lookback)
+        reporter.print_report(report)
 
-            if args.save:
-                filename = f"weekly_report_{report['week_start'][:10]}.json"
-                reporter.save_report_to_file(report, filename)
-                logger.info(f"Report saved to {filename}")
-
-            if args.email:
-                reporter.email_report(report, alert=False)
-                logger.info("Report emailed")
-
-        elif args.last_week:
-            report = reporter.generate_last_week_report()
-            reporter.print_report(report)
-
-            if args.save:
-                filename = f"weekly_report_{report['week_start'][:10]}.json"
-                reporter.save_report_to_file(report, filename)
-                logger.info(f"Report saved to {filename}")
-
-            if args.email:
-                reporter.email_report(report, alert=False)
-                logger.info("Report emailed")
-
-        elif args.efficiency:
-            analysis = reporter.get_zone_efficiency_analysis()
-            reporter.print_efficiency_analysis(analysis)
+        if args.email:
+            reporter.email_report(report, alert=False)
+            logger.info("Report emailed")
 
         return 0
 
     except Exception as e:
         logger.error(f"Error generating report: {e}")
+        return 1
+
+
+def generate_summary_report(args):
+    """Generate efficiency analysis reports."""
+    logger = get_logger(__name__)
+
+    try:
+        reporter = WeeklyReporter(DB_PATH)
+
+        analysis = reporter.get_zone_efficiency_analysis()
+        reporter.print_efficiency_analysis(analysis)
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Error generating summary report: {e}")
+        return 1
+
+
+def generate_raw_report(args):
+    """Generate raw data reports."""
+    logger = get_logger(__name__)
+
+    try:
+        reporter = WeeklyReporter(DB_PATH)
+
+        report = reporter.generate_raw_data_report(args.hours)
+        reporter.print_raw_report(report)
+
+        # Raw report output only to console
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Error generating raw report: {e}")
         return 1
 
 
