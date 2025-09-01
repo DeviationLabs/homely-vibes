@@ -4,11 +4,10 @@
 import asyncio
 import argparse
 import sys
-from pathlib import Path
 
 from collector import WaterTrackingCollector
 from reporter import WeeklyReporter
-from lib.logger import SystemLogger, get_logger
+from lib.logger import get_logger
 from lib import Constants
 
 # Create default database path using Constants.LOGGING_DIR
@@ -45,7 +44,7 @@ def main():
     )
 
     # Status command
-    status_parser = subparsers.add_parser("status", help="Show current system status")
+    subparsers.add_parser("status", help="Show current system status")
 
     # Reporting commands
     report_parser = subparsers.add_parser("report", help="Generate period reports")
@@ -60,7 +59,7 @@ def main():
     )
 
     # Summary command
-    summary_parser = subparsers.add_parser("summary", help="Generate efficiency analysis")
+    subparsers.add_parser("summary", help="Generate efficiency analysis")
 
     # Raw data command
     raw_parser = subparsers.add_parser("raw", help="Generate raw data report (5-minute intervals)")
