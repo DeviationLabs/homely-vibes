@@ -55,8 +55,6 @@ def append_gpx_files(output_filename: str = "combined_route.gpx", directory: str
     output_path = Path(directory) / output_filename
     
     with open(output_path, 'w', encoding='utf-8') as output_file:
-        gpx_header_written = False
-        
         for i, (number, filename) in enumerate(numbered_files):
             file_path = Path(directory) / filename
             print(f"Processing {filename}...")
@@ -71,7 +69,6 @@ def append_gpx_files(output_filename: str = "combined_route.gpx", directory: str
                     if content.endswith('</gpx>'):
                         content = content[:-6]
                     output_file.write(content)
-                    gpx_header_written = True
                 else:
                     # For subsequent files, extract only the track/route data
                     # Skip XML header and opening <gpx> tag, skip closing </gpx> tag
