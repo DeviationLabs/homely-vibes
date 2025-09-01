@@ -96,6 +96,114 @@ class WeeklyReporter:
 
         return self.generate_weekly_report(last_week_start)
 
+    def generate_period_report(self, end_date: str = None, lookback_days: int = 7) -> Dict[str, Any]:
+        """Generate report for a specific period.
+        
+        Args:
+            end_date: End date in YYYY-MM-DD format (defaults to today)
+            lookback_days: Number of days to look back from end date (default: 7)
+            
+        Returns:
+            Dict containing period statistics
+        """
+        if end_date:
+            try:
+                period_end = datetime.strptime(end_date, "%Y-%m-%d")
+            except ValueError:
+                self.logger.error(f"Invalid date format: {end_date}. Expected YYYY-MM-DD")
+                raise ValueError(f"Invalid date format: {end_date}. Expected YYYY-MM-DD")
+        else:
+            period_end = datetime.now()
+            
+        period_start = period_end - timedelta(days=lookback_days)
+        
+        return self.generate_period_report_with_dates(period_start, period_end)
+
+    def generate_period_report_with_dates(self, period_start: datetime, period_end: datetime) -> Dict[str, Any]:
+        """Generate a comprehensive period report.
+
+        Args:
+            period_start: Start of the period
+            period_end: End of the period
+
+        Returns:
+            Dict containing period statistics
+        """
+        self.logger.info(
+            f"Generating period report for {period_start.date()} to {period_end.date()}"
+        )
+
+        # Get zone statistics for the period
+        zone_stats = self.db.get_period_zone_stats(period_start, period_end)
+
+        # Calculate total statistics
+        total_sessions = sum(stat["session_count"] for stat in zone_stats)
+        total_duration_seconds = sum(
+            stat["total_duration_seconds"] or 0 for stat in zone_stats
+        )
+        total_water_used = sum(stat["total_water_used"] or 0 for stat in zone_stats)
+
+        # Format zone statistics for display
+        formatted_zones = []
+        for stat in zone_stats:
+            duration_hours = (stat["total_duration_seconds"] or 0) / 3600
+            avg_duration_minutes = (stat["avg_duration_seconds"] or 0) / 60
+
+            formatted_zones.append(
+                {
+                    "zone_number": stat["zone_number"],
+                    "zone_name": stat["zone_name"],
+                    "sessions": stat["session_count"],
+                    "total_duration_hours": round(duration_hours, 2),
+                    "average_duration_minutes": round(avg_duration_minutes, 1),
+                    "total_water_gallons": round(stat["total_water_used"] or 0, 1),
+                    "average_flow_rate_gpm": round(stat["avg_flow_rate"] or 0, 2),
+                }
+            )
+
+        # Sort by zone number
+        formatted_zones.sort(key=lambda x: x["zone_number"])
+
+        return {
+            "report_generated": datetime.now().isoformat(),
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "summary": {
+                "total_watering_sessions": total_sessions,
+                "total_duration_hours": round(total_duration_seconds / 3600, 2),
+                "total_water_used_gallons": round(total_water_used, 1),
+                "zones_watered": len(zone_stats),
+            },
+            "zones": formatted_zones,
+        }
+
+    def generate_raw_data_report(self, hours_back: int = 24) -> Dict[str, Any]:
+        """Generate raw data report with 5-minute increments.
+        
+        Args:
+            hours_back: Number of hours to look back from now (default: 24)
+            
+        Returns:
+            Dict containing raw data in 5-minute intervals
+        """
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours_back)
+        
+        self.logger.info(
+            f"Generating raw data report for {start_time} to {end_time}"
+        )
+        
+        # Get raw data in 5-minute intervals
+        raw_data = self.db.get_raw_data_intervals(start_time, end_time, interval_minutes=5)
+        
+        return {
+            "report_generated": datetime.now().isoformat(),
+            "period_start": start_time.isoformat(),
+            "period_end": end_time.isoformat(),
+            "interval_minutes": 5,
+            "data_points": raw_data
+        }
+
     def save_report_to_file(self, report: Dict[str, Any], filename: str) -> None:
         """Save report to JSON file.
 
@@ -164,6 +272,37 @@ class WeeklyReporter:
         # Log each line separately for proper logger formatting
         for line in report_text.split("\n"):
             self.logger.info(line)
+
+    def print_raw_report(self, report: Dict[str, Any]) -> None:
+        """Print raw data report in a readable format."""
+        self.logger.info("=" * 60)
+        self.logger.info("RAW WATER USAGE DATA REPORT")
+        self.logger.info("=" * 60)
+        self.logger.info(f"Report Generated: {report['report_generated']}")
+        self.logger.info(f"Time Period: {report['period_start']} to {report['period_end']}")
+        self.logger.info(f"Interval: {report['interval_minutes']} minutes")
+        self.logger.info(f"Total Data Points: {len(report['data_points'])}")
+        self.logger.info("")
+        
+        if not report['data_points']:
+            self.logger.info("No data available for this time period.")
+        else:
+            self.logger.info("Time Interval               | Avg GPM | Max GPM | Min GPM | Points | Active Avg")
+            self.logger.info("-" * 80)
+            
+            for data_point in report['data_points']:
+                time_str = data_point['interval_start']
+                avg_flow = data_point['avg_flow_rate'] or 0
+                max_flow = data_point['max_flow_rate'] or 0
+                min_flow = data_point['min_flow_rate'] or 0
+                points = data_point['data_points']
+                active_avg = data_point['avg_active_flow_rate'] or 0
+                
+                self.logger.info(
+                    f"{time_str[:16]:25} | {avg_flow:7.2f} | {max_flow:7.2f} | {min_flow:7.2f} | {points:6} | {active_avg:7.2f}"
+                )
+        
+        self.logger.info("=" * 60)
 
     def email_report(self, report: Dict[str, Any], alert: bool = False) -> None:
         """Email report in formatted text.
