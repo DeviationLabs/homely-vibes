@@ -2,12 +2,15 @@
 """
 Script to append GPX files that begin with numbers in numeric order.
 Reads numbered GPX files (1_*, 2_*, etc.) and combines them into a single output file.
+Uses gpxpy library for proper GPX handling.
 """
 
 import os
 import re
 from pathlib import Path
 from typing import List, Tuple
+import gpxpy
+import gpxpy.gpx
 
 
 def get_numbered_files(directory: str = ".") -> List[Tuple[int, str]]:
@@ -52,74 +55,45 @@ def append_gpx_files(output_filename: str = "combined_route.gpx", directory: str
     for number, filename in numbered_files:
         print(f"  {number}: {filename}")
     
-    output_path = Path(directory) / output_filename
+    # Create a new GPX object
+    combined_gpx = gpxpy.gpx.GPX()
     
-    # Collect all track points from all files
-    all_track_points = []
-    gpx_header = None
-    track_name = "Combined Route"
+    # Create a single track
+    track = gpxpy.gpx.GPXTrack()
+    track.name = "Combined Route"
+    combined_gpx.tracks.append(track)
     
-    for i, (number, filename) in enumerate(numbered_files):
+    # Create a single track segment
+    segment = gpxpy.gpx.GPXTrackSegment()
+    track.segments.append(segment)
+    
+    total_points = 0
+    
+    for number, filename in numbered_files:
         file_path = Path(directory) / filename
         print(f"Processing {filename}...")
         
-        with open(file_path, 'r', encoding='utf-8') as input_file:
-            content = input_file.read()
-            lines = content.split('\n')
-            
-            if i == 0:
-                # Extract GPX header from first file
-                gpx_header_lines = []
-                for line in lines:
-                    if line.strip().startswith('<?xml') or line.strip().startswith('<gpx'):
-                        gpx_header_lines.append(line)
-                    elif '<trk>' in line:
-                        break
-                gpx_header = '\n'.join(gpx_header_lines)
-            
-            # Extract track points from this file
-            in_trkseg = False
-            in_trkpt = False
-            current_trkpt = []
-            
-            for line in lines:
-                if '<trkseg>' in line:
-                    in_trkseg = True
-                    continue
-                elif '</trkseg>' in line:
-                    in_trkseg = False
-                    continue
-                elif in_trkseg:
-                    if '<trkpt' in line:
-                        in_trkpt = True
-                        current_trkpt = [line.strip()]
-                    elif in_trkpt:
-                        current_trkpt.append(line.strip())
-                        if '</trkpt>' in line:
-                            # Complete track point found, add it to collection
-                            all_track_points.extend(current_trkpt)
-                            current_trkpt = []
-                            in_trkpt = False
+        try:
+            with open(file_path, 'r', encoding='utf-8') as gpx_file:
+                gpx = gpxpy.parse(gpx_file)
+                
+                # Extract all track points from all tracks and segments
+                for track_item in gpx.tracks:
+                    for segment_item in track_item.segments:
+                        for point in segment_item.points:
+                            segment.points.append(point)
+                            total_points += 1
+                            
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
+            continue
     
-    # Write the combined GPX file with single track segment
+    # Write the combined GPX file
+    output_path = Path(directory) / output_filename
     with open(output_path, 'w', encoding='utf-8') as output_file:
-        # Write GPX header
-        output_file.write(gpx_header + '\n')
-        
-        # Write single track with all points
-        output_file.write('  <trk>\n')
-        output_file.write(f'    <name>{track_name}</name>\n')
-        output_file.write('    <trkseg>\n')
-        
-        # Write all track points
-        for point_line in all_track_points:
-            output_file.write('      ' + point_line + '\n')
-        
-        output_file.write('    </trkseg>\n')
-        output_file.write('  </trk>\n')
-        output_file.write('</gpx>\n')
+        output_file.write(combined_gpx.to_xml())
     
-    print(f"\nCombined {len(numbered_files)} files into {output_filename} with {len(all_track_points)} track points")
+    print(f"\nCombined {len(numbered_files)} files into {output_filename} with {total_points} track points")
 
 
 def main():
