@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
 
 from rachio_client import WateringEvent, Zone
@@ -80,6 +80,17 @@ class WaterTrackingDB:
                     total_water_used REAL DEFAULT 0.0,
                     average_flow_rate REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            # Collection metadata table (for tracking last collection timestamps)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS collection_metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """
@@ -316,3 +327,103 @@ class WaterTrackingDB:
             )
 
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_period_zone_stats(self, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Get period statistics by zone for a custom date range."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT 
+                    zone_name,
+                    zone_number,
+                    COUNT(*) as session_count,
+                    SUM(duration_seconds) as total_duration_seconds,
+                    AVG(duration_seconds) as avg_duration_seconds,
+                    SUM(total_water_used) as total_water_used,
+                    AVG(average_flow_rate) as avg_flow_rate
+                FROM zone_sessions
+                WHERE start_time >= ? AND start_time < ?
+                GROUP BY zone_name, zone_number
+                ORDER BY zone_number
+            """,
+                (start_date, end_date),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_raw_data_intervals(self, start_time: datetime, end_time: datetime, interval_minutes: int = 5) -> List[Dict[str, Any]]:
+        """Get raw data aggregated into time intervals."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Create intervals by rounding timestamps to the specified interval
+            cursor.execute(
+                """
+                SELECT 
+                    datetime(
+                        (strftime('%s', timestamp) / (? * 60)) * (? * 60),
+                        'unixepoch'
+                    ) as interval_start,
+                    AVG(flow_rate) as avg_flow_rate,
+                    MAX(flow_rate) as max_flow_rate,
+                    MIN(flow_rate) as min_flow_rate,
+                    COUNT(*) as data_points,
+                    AVG(CASE WHEN flow_rate > 0.1 THEN flow_rate END) as avg_active_flow_rate
+                FROM flume_readings
+                WHERE timestamp >= ? AND timestamp <= ?
+                GROUP BY interval_start
+                ORDER BY interval_start
+            """,
+                (interval_minutes, interval_minutes, start_time, end_time),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_last_collection_timestamp(self, source: str) -> Optional[datetime]:
+        """Get the last collection timestamp for a source (rachio or flume)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT value FROM collection_metadata WHERE key = ?",
+                (f"last_{source}_collection",),
+            )
+            result = cursor.fetchone()
+            if result:
+                return datetime.fromisoformat(result["value"])
+            return None
+
+    def set_last_collection_timestamp(self, source: str, timestamp: datetime) -> None:
+        """Set the last collection timestamp for a source."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO collection_metadata (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """,
+                (f"last_{source}_collection", timestamp.isoformat()),
+            )
+            conn.commit()
+
+    def get_last_data_timestamp(self, source: str) -> Optional[datetime]:
+        """Get the actual last timestamp from data tables."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if source == "rachio":
+                cursor.execute(
+                    "SELECT MAX(event_date) as last_timestamp FROM watering_events"
+                )
+            elif source == "flume":
+                cursor.execute(
+                    "SELECT MAX(timestamp) as last_timestamp FROM water_readings"
+                )
+            else:
+                raise ValueError(f"Unknown source: {source}")
+                
+            result = cursor.fetchone()
+            if result and result["last_timestamp"]:
+                return datetime.fromisoformat(result["last_timestamp"])
+            return None
