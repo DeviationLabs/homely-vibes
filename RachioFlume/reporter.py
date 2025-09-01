@@ -227,10 +227,21 @@ class WeeklyReporter:
             Formatted report as string
         """
         report_text = []
-        report_text.append("WEEKLY WATER USAGE REPORT")
-        report_text.append(
-            f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}"
-        )
+        
+        # Handle both weekly report format (week_start/week_end) and period report format (period_start/period_end)
+        if "week_start" in report:
+            report_text.append("WEEKLY WATER USAGE REPORT")
+            report_text.append(
+                f"Week: {report['week_start'][:10]} to {report['week_end'][:10]}"
+            )
+        elif "period_start" in report:
+            report_text.append("WATER USAGE REPORT")
+            report_text.append(
+                f"Period: {report['period_start'][:10]} to {report['period_end'][:10]}"
+            )
+        else:
+            report_text.append("WATER USAGE REPORT")
+            report_text.append("Period: Not specified")
         report_text.append("=" * 70)
 
         summary = report["summary"]
@@ -312,16 +323,26 @@ class WeeklyReporter:
             alert: Whether to mark as alert email
         """
         report_text = self.format_report_text(report)
-        week_start = report["week_start"][:10]
+        
+        # Handle both weekly and period report formats for the email subject
+        if "week_start" in report:
+            start_date = report["week_start"][:10]
+            subject_prefix = "Week"
+        elif "period_start" in report:
+            start_date = report["period_start"][:10]
+            subject_prefix = "Period"
+        else:
+            start_date = "Unknown"
+            subject_prefix = "Report"
 
         Mailer.sendmail(
-            topic=f"[Water Report] Week {week_start}",
+            topic=f"[Water Report] {subject_prefix} {start_date}",
             alert=alert,
             message=report_text,
             always_email=True,
         )
 
-        self.logger.info(f"Weekly report emailed for week starting {week_start}")
+        self.logger.info(f"Report emailed for {subject_prefix.lower()} starting {start_date}")
 
     def get_zone_efficiency_analysis(self, weeks_back: int = 4) -> Dict[str, Any]:
         """Analyze zone efficiency over multiple weeks.
