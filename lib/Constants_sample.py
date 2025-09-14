@@ -16,7 +16,6 @@ JSON_PUMPRATES_FILE = '{}/tuya_logs/pump_rates.json'.format(HOME)
 # Mailer.py
 EMAIL_FROM = 'user_from@gmail.com'
 EMAIL_TO = 'user_to@gmail.com'
-ALWAYS_EMAIL = False
 GMAIL_USERNAME = 'user_from'
 GMAIL_PASSWORD = 'XXX'
 
@@ -30,9 +29,9 @@ PUSHOVER_USER='user'
 PUSHOVER_DELIVERY_GROUP = 'gid'
 PUSHOVER_DEFAULT_TOKEN="token"
 PUSHOVER_TOKENS= {
-  'Foscam': "token",
-  'Powerwall': "token",
-  'NetworkCheck': "token"
+   'NetworkCheck': "token",
+   'NodeCheck': "token",
+   'Powerwall': "token",
 }
 
 # WaterMonitor: Processing
@@ -65,8 +64,7 @@ WINDOWS_PASSWORD="YYY"
 
 # Foscam file purge settings
 FOSCAM_DIR="/path/to/foscam"  # Update this to actual foscam directory path
-PURGE_AFTER_DAYS=30
-FOSCAM_PUSHOVER_RCPT='a@aa.aa'
+PURGE_AFTER_DAYS=90
 
 # Network Check
 MIN_DL_BW = 150  # Mbps
@@ -102,6 +100,19 @@ HR_EMAIL = 19
 BLACKLIST=[
   "pokemon",
   "surviv",
+  "charmeleon",
+  "dutrigo",
+  "veekun",
+  "github",
+  "soraapp",
+  "emulator",
+  "gba",
+  "garfield",
+  "shellshock",
+  "youtube",
+  "scratch",
+  "clashman2.github.io",
+  ".io/",
   "dragapult",
 ]
 
@@ -110,7 +121,7 @@ POWERWALL_IP="192.168.X.Y"
 POWERWALL_EMAIL="a@aa.aa"
 POWERWALL_PASSWORD="XYZA"
 POWERWALL_SMS_RCPT = '+18001234567'
-POWERWALL_POLL_TIME = 180
+POWERWALL_POLL_TIME = 180 # Setting this too high can result in PW dumping more than intended.
 
 TESLA_EMAIL="a@aa.aa"
 TESLA_PASSWORD="XTZA"
@@ -124,6 +135,11 @@ FLUME_CLIENT_ID="some_id"
 FLUME_CLIENT_SECRET="some_secret"
 FLUME_USER_EMAIL="some user"
 FLUME_PASSWORD="some pass"
+
+# August Smart Locks API
+AUGUST_EMAIL="your_august_email@example.com"
+AUGUST_PASSWORD="your_august_password"
+AUGUST_PHONE="+1234567890"
 
 @dataclass
 class OpModeConfig:
@@ -154,8 +170,8 @@ POWERWALL_DECISION_POINTS = [
   OpModeConfig(1300, 1455,  35,  99, False, 20,  0, "autonomous", "Solar recharge insufficient. Drawdown before shoulder..", True),
   OpModeConfig(1455, 1900,   0,   0,  True, 20,  0, "self_consumption", "In Peak. Discharge..", False),
   OpModeConfig( 000, 1500,   0,   0,  True, 30, 10, "self_consumption", "Nightly reserves rebuilt. Solar charge only..", False),
-  OpModeConfig(1900, 2359,  -8,  20, False, 20,  0, "self_consumption", "Reserve for rest of shoulder. No dump.", True),
-  OpModeConfig(1900, 2100, -35,  40,  True, 20,  0, "autonomous", "Dump surplus before end of peak.", False),
-#  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder", False),
+  OpModeConfig(1900, 2359,  -8,  20, False, 20,  0, "self_consumption", "Reserve for rest of shoulder..", False),
+  OpModeConfig(1900, 2100, -35,  40,  True, 20,  0, "autonomous", "Dump surplus before end of peak..", False),
+#  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder..", False),
 ]
 
