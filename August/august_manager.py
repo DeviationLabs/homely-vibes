@@ -108,8 +108,11 @@ async def _run_command(
     elif args.command == "status":
         logger.info("Getting current lock status...")
         monitor = AugustMonitor(email=email, password=password, phone=phone)
-        status_report = await monitor.get_status_report()
-        print(status_report)
+        try:
+            status_report = await monitor.get_status_report()
+            print(status_report)
+        finally:
+            await monitor.client.close()
 
     elif args.command == "test":
         if args.auth:
@@ -117,16 +120,22 @@ async def _run_command(
             from august_client import AugustClient
 
             client = AugustClient(email, password, phone)
-            success = await client.authenticate()
-            if success:
-                logger.info("✅ Authentication successful")
-                locks = await client.get_locks()
-                logger.info(f"Found {len(locks)} locks:")
-                for lock_id, lock in locks.items():
-                    logger.info(f"  - {lock.device_name} ({lock_id})")
-            else:
-                logger.error("❌ Authentication failed")
-                sys.exit(1)
+            try:
+                success = await client.authenticate()
+                if success:
+                    logger.info("✅ Authentication successful")
+                    locks = await client.get_locks()
+                    logger.info(f"Found {len(locks)} locks:")
+                    for lock_id, lock in locks.items():
+                        logger.info(f"  - {lock.device_name} ({lock_id})")
+                else:
+                    logger.error("❌ Authentication failed")
+                    logger.info(
+                        "💡 If 2FA is required, complete it in the August app first"
+                    )
+                    sys.exit(1)
+            finally:
+                await client.close()
 
         elif args.notification:
             logger.info("Testing pushover notification...")
@@ -144,6 +153,10 @@ async def _run_command(
             except Exception as e:
                 logger.error(f"❌ Notification failed: {e}")
                 sys.exit(1)
+
+        else:
+            logger.error("Please specify --auth or --notification for test command")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

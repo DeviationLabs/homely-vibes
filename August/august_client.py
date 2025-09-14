@@ -57,6 +57,8 @@ class AugustClient:
             self.authenticator = AuthenticatorAsync(
                 self.api, "email", self.email, self.password
             )
+            # Setup authentication - this initializes the _authentication property
+            await self.authenticator.async_setup_authentication()
 
     async def close(self) -> None:
         """Close the aiohttp session."""
@@ -70,7 +72,14 @@ class AugustClient:
         await self._ensure_session()
         try:
             assert self.authenticator is not None
+            self.logger.debug("Attempting August authentication...")
             auth_result = await self.authenticator.async_authenticate()
+
+            if auth_result is None:
+                self.logger.error("Authentication returned None - check credentials")
+                return False
+
+            self.logger.debug(f"Authentication result state: {auth_result.state}")
 
             if auth_result.state == AuthenticationState.AUTHENTICATED:
                 self.access_token = auth_result.access_token
@@ -78,6 +87,7 @@ class AugustClient:
                 return True
             elif auth_result.state == AuthenticationState.REQUIRES_VALIDATION:
                 self.logger.error("August authentication requires 2FA validation")
+                self.logger.error("Please complete 2FA in the August app and try again")
                 return False
             else:
                 self.logger.error(f"August authentication failed: {auth_result.state}")
@@ -85,6 +95,9 @@ class AugustClient:
 
         except Exception as e:
             self.logger.error(f"Error during August authentication: {e}")
+            self.logger.error(
+                "Make sure AUGUST_EMAIL and AUGUST_PASSWORD are correct in Constants.py"
+            )
             return False
 
     async def get_locks(self) -> Dict[str, Lock]:
