@@ -213,7 +213,7 @@ class AugustMonitor:
         self.low_battery_threshold = low_battery_threshold
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_DEFAULT_TOKEN
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['August']
         )
         # Tracking for different alert types
         self.unlock_start_times: Dict[str, float] = {}
