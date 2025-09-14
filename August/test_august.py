@@ -45,6 +45,20 @@ class TestLockState:
         assert restored_state.is_locked == state.is_locked
         assert restored_state.battery_level == state.battery_level
 
+    def test_lock_state_unknown_status(self):
+        state = LockState(
+            lock_id="test_lock_unknown",
+            lock_name="Bluetooth Lock", 
+            is_locked=None,
+            timestamp=time.time(),
+            battery_level=60.0,
+        )
+
+        assert state.lock_id == "test_lock_unknown"
+        assert state.lock_name == "Bluetooth Lock"
+        assert state.is_locked is None
+        assert state.battery_level == 60.0
+
 
 class TestAugustClient:
     @pytest.fixture
