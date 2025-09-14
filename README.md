@@ -48,9 +48,12 @@ uv run python RachioFlume/main.py
 
 | Component | Description | Documentation |
 |:----------|:------------|:-------------:|
+| 🔐 **August** | August Smart Lock monitoring with automated unlock alerts and pushover notifications for home security. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/August/README.md) |
 | 🤖 **Bimpop.ai** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/Bimpop.ai/README.md) |
 | 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 Read More](https://github.com/abutala/homely-vibes/blob/main/BrowserAlert/README.md) |
 | 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | - |
+| 🗺️ **GpxParser** | GPX track analysis and processing tools for GPS data visualization and route analysis. | - |
+| 🔑 **JWTs** | JWT token extraction and analysis utilities for HAR files and authentication workflows. | - |
 | 📧 **LambdaEmailFwder** | AWS Lambda function for automated email forwarding and intelligent message processing. | - |
 | 🌐 **NetworkCheck** | Network uplink testing and connectivity monitoring utilities for reliable internet connections. | - |
 | 🖥️ **NodeCheck** | System node monitoring, Foscam camera management, and automated reboot coordination. | - |

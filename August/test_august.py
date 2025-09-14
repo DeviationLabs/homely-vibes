@@ -51,10 +51,11 @@ class TestAugustClient:
     def client(self):
         return AugustClient("test@example.com", "password123", "+1234567890")
 
-    @patch("august_client.Api")
-    @patch("august_client.Authenticator")
+    @patch("august_client.aiohttp.ClientSession")
+    @patch("august_client.ApiAsync")
+    @patch("august_client.AuthenticatorAsync")
     async def test_successful_authentication(
-        self, mock_authenticator, mock_api, client
+        self, mock_authenticator, mock_api, mock_session, client
     ):
         mock_auth_result = MagicMock()
         mock_auth_result.state = "AUTHENTICATED"
@@ -68,9 +69,12 @@ class TestAugustClient:
         assert result is True
         assert client.access_token == "test_token_123"
 
-    @patch("august_client.Api")
-    @patch("august_client.Authenticator")
-    async def test_failed_authentication(self, mock_authenticator, mock_api, client):
+    @patch("august_client.aiohttp.ClientSession")
+    @patch("august_client.ApiAsync")
+    @patch("august_client.AuthenticatorAsync")
+    async def test_failed_authentication(
+        self, mock_authenticator, mock_api, mock_session, client
+    ):
         mock_auth_result = MagicMock()
         mock_auth_result.state = "BAD_PASSWORD"
         mock_authenticator.return_value.async_authenticate = AsyncMock(
