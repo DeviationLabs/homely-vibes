@@ -136,7 +136,20 @@ class AugustClient:
                 self.access_token, lock_id
             )
             lock_name = lock_detail.device_name
-            is_locked = lock_detail.lock_status.name == "LOCKED"
+
+            # Handle lock status - only treat as unlocked if explicitly UNLOCKED
+            lock_status_name = lock_detail.lock_status.name
+            if lock_status_name == "LOCKED":
+                is_locked = True
+            elif lock_status_name == "UNLOCKED":
+                is_locked = False
+            else:
+                # UNKNOWN or other status - don't treat as unlocked, skip monitoring
+                self.logger.warning(
+                    f"Lock {lock_name} has unknown status: {lock_status_name}"
+                )
+                return None
+
             battery_level = getattr(lock_detail, "battery_level", None)
             door_state = getattr(lock_detail, "door_state", None)
 
@@ -169,6 +182,19 @@ class AugustClient:
                 statuses[lock_id] = status
 
         return statuses
+
+    async def get_offline_locks(self) -> Dict[str, str]:
+        """Get locks that are offline or have unknown status."""
+        if not self.locks:
+            await self.get_locks()
+
+        offline_locks = {}
+        for lock_id, lock in self.locks.items():
+            status = await self.get_lock_status(lock_id)
+            if status is None:  # Lock is offline/unknown
+                offline_locks[lock_id] = lock.device_name
+
+        return offline_locks
 
 
 class AugustMonitor:
@@ -440,13 +466,17 @@ class AugustMonitor:
     async def get_status_report(self) -> str:
         try:
             statuses = await self.client.get_all_lock_statuses()
+            offline_locks = await self.client.get_offline_locks()
 
-            if not statuses:
+            if not statuses and not offline_locks:
                 return "No August locks found"
 
             lines = ["August Lock Status Report", "=" * 30]
 
+            # Show online locks
             for status in statuses.values():
+                if status is None:
+                    continue
                 lock_status = "🔒 LOCKED" if status.is_locked else "🔓 UNLOCKED"
                 lines.append(f"{status.lock_name}: {lock_status}")
 
@@ -476,6 +506,16 @@ class AugustMonitor:
                     )
 
                 lines.append("")
+
+            # Show offline/unknown locks
+            if offline_locks:
+                lines.append("Offline/Unknown Status Locks:")
+                for lock_name in offline_locks.values():
+                    lines.append(f"{lock_name}: ⚠️ OFFLINE/UNKNOWN")
+                    lines.append(
+                        "  Status cannot be determined (check WiFi/bridge connection)"
+                    )
+                    lines.append("")
 
             return "\n".join(lines)
 
