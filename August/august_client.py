@@ -5,12 +5,14 @@ import time
 from typing import Optional, Dict, Any
 import json
 from dataclasses import dataclass, asdict
+import aiohttp
 
 try:
-    from yalexs import Api, Authenticator, AuthenticationState
+    from yalexs.api_async import ApiAsync
+    from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
     from yalexs.lock import Lock
 except ImportError:
-    print("py-august library not found. Install with: pip install yalexs")
+    print("yalexs library not found. Install with: uv add yalexs")
     raise
 
 from lib import Constants
@@ -41,13 +43,33 @@ class AugustClient:
         self.password = password
         self.phone = phone
         self.logger = get_logger(__name__)
-        self.api = Api()
-        self.authenticator = Authenticator(self.api, "email", self.email, self.password)
+        self.session: Optional[aiohttp.ClientSession] = None
+        self.api: Optional[ApiAsync] = None
+        self.authenticator: Optional[AuthenticatorAsync] = None
         self.access_token: Optional[str] = None
         self.locks: Dict[str, Lock] = {}
 
+    async def _ensure_session(self) -> None:
+        """Ensure aiohttp session and API are initialized."""
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+            self.api = ApiAsync(self.session)
+            self.authenticator = AuthenticatorAsync(
+                self.api, "email", self.email, self.password
+            )
+
+    async def close(self) -> None:
+        """Close the aiohttp session."""
+        if self.session:
+            await self.session.close()
+            self.session = None
+            self.api = None
+            self.authenticator = None
+
     async def authenticate(self) -> bool:
+        await self._ensure_session()
         try:
+            assert self.authenticator is not None
             auth_result = await self.authenticator.async_authenticate()
 
             if auth_result.state == AuthenticationState.AUTHENTICATED:
@@ -66,11 +88,14 @@ class AugustClient:
             return False
 
     async def get_locks(self) -> Dict[str, Lock]:
+        await self._ensure_session()
         if not self.access_token:
             if not await self.authenticate():
                 raise RuntimeError("Failed to authenticate with August API")
 
         try:
+            assert self.api is not None
+            assert self.access_token is not None
             locks = await self.api.async_get_locks(self.access_token)
             self.locks = {lock.device_id: lock for lock in locks}
             self.logger.info(f"Found {len(self.locks)} August locks")
@@ -80,11 +105,14 @@ class AugustClient:
             raise
 
     async def get_lock_status(self, lock_id: str) -> Optional[LockState]:
+        await self._ensure_session()
         if not self.access_token:
             if not await self.authenticate():
                 return None
 
         try:
+            assert self.api is not None
+            assert self.access_token is not None
             lock_detail = await self.api.async_get_lock_detail(
                 self.access_token, lock_id
             )
@@ -244,16 +272,19 @@ class AugustMonitor:
             f"alert after {self.unlock_threshold / 60:.0f}min)"
         )
 
-        while True:
-            try:
-                await self.check_locks()
-                await asyncio.sleep(check_interval_seconds)
-            except KeyboardInterrupt:
-                self.logger.info("Monitoring stopped by user")
-                break
-            except Exception as e:
-                self.logger.error(f"Error in monitoring loop: {e}")
-                await asyncio.sleep(check_interval_seconds)
+        try:
+            while True:
+                try:
+                    await self.check_locks()
+                    await asyncio.sleep(check_interval_seconds)
+                except KeyboardInterrupt:
+                    self.logger.info("Monitoring stopped by user")
+                    break
+                except Exception as e:
+                    self.logger.error(f"Error in monitoring loop: {e}")
+                    await asyncio.sleep(check_interval_seconds)
+        finally:
+            await self.client.close()
 
     async def get_status_report(self) -> str:
         try:
