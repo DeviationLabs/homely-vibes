@@ -24,7 +24,7 @@ from lib.MyPushover import Pushover
 class LockState:
     lock_id: str
     lock_name: str
-    is_locked: bool
+    is_locked: Optional[bool]
     timestamp: float
     battery_level: Optional[float] = None
     door_state: Optional[str] = None
@@ -144,11 +144,11 @@ class AugustClient:
             elif lock_status_name == "UNLOCKED":
                 is_locked = False
             else:
-                # UNKNOWN or other status - don't treat as unlocked, skip monitoring
+                # UNKNOWN or other status - don't treat as unlocked, but still check battery
+                is_locked = None
                 self.logger.warning(
                     f"Lock {lock_name} has unknown status: {lock_status_name}"
                 )
-                return None
 
             battery_level = getattr(lock_detail, "battery_level", None)
             door_state = getattr(lock_detail, "door_state", None)
@@ -162,9 +162,13 @@ class AugustClient:
                 door_state=door_state.name if door_state else None,
             )
 
-            self.logger.debug(
-                f"Lock {lock_name} status: {'LOCKED' if is_locked else 'UNLOCKED'}"
-            )
+            if is_locked is None:
+                status_str = "UNKNOWN"
+            elif is_locked:
+                status_str = "LOCKED"
+            else:
+                status_str = "UNLOCKED"
+            self.logger.debug(f"Lock {lock_name} status: {status_str}")
             return lock_state
 
         except Exception as e:
@@ -213,7 +217,7 @@ class AugustMonitor:
         self.low_battery_threshold = low_battery_threshold
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_DEFAULT_TOKEN
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['August']
         )
         # Tracking for different alert types
         self.unlock_start_times: Dict[str, float] = {}
@@ -292,6 +296,11 @@ class AugustMonitor:
     async def _process_lock_status(
         self, lock_id: str, status: LockState, current_time: float
     ) -> None:
+        # Skip lock/door monitoring for unknown status locks, but still check battery
+        if status.is_locked is None:
+            self.logger.debug(f"Skipping lock monitoring for {status.lock_name} (unknown status)")
+            return
+            
         # Check for unlock alerts
         if status.is_locked:
             if lock_id in self.unlock_start_times:
@@ -477,10 +486,17 @@ class AugustMonitor:
             for status in statuses.values():
                 if status is None:
                     continue
-                lock_status = "🔒 LOCKED" if status.is_locked else "🔓 UNLOCKED"
+                    
+                if status.is_locked is None:
+                    lock_status = "⚠️ UNKNOWN"
+                elif status.is_locked:
+                    lock_status = "🔒 LOCKED"
+                else:
+                    lock_status = "🔓 UNLOCKED"
+                    
                 lines.append(f"{status.lock_name}: {lock_status}")
 
-                if not status.is_locked and status.lock_id in self.unlock_start_times:
+                if status.is_locked is False and status.lock_id in self.unlock_start_times:
                     unlock_duration = (
                         time.time() - self.unlock_start_times[status.lock_id]
                     )
