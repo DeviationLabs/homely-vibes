@@ -1,6 +1,6 @@
 # August Smart Lock Monitor
 
-Monitor August Smart Locks and send notifications when locks remain unlocked longer than expected.
+Monitor August Smart Locks with comprehensive alerting for unlock duration, door ajar detection, lock failures, and low battery warnings.
 
 ## Setup
 
@@ -31,9 +31,13 @@ Continuous monitoring (check every 60s, alert after 5min):
 uv run python August/august_manager.py monitor --continuous
 ```
 
-Custom intervals:
+Custom thresholds and intervals:
 ```bash
-uv run python August/august_manager.py monitor --continuous --interval 30 --threshold 3
+uv run python August/august_manager.py monitor --continuous \
+  --interval 30 \
+  --threshold 3 \
+  --door-ajar-threshold 15 \
+  --battery-threshold 15
 ```
 
 Status check:
@@ -48,13 +52,18 @@ uv run python August/august_manager.py test --notification  # Test notifications
 uv run python August/validate_2fa.py 123456                 # Complete 2FA with code
 ```
 
-## How It Works
+## Alert Types
 
-1. Polls lock status at intervals (default: 60s)
-2. Tracks when locks become unlocked
-3. Sends pushover alerts if unlocked beyond threshold (default: 5min)
-4. 30-minute cooldown prevents notification spam
-5. State persists across restarts
+🔓 **Unlock Alerts**: Lock remains unlocked longer than threshold (default: 5min)  
+🚪 **Door Ajar Alerts**: Door stays open longer than threshold (default: 10min)  
+🔐 **Lock Failure Alerts**: Door closed but failed to lock automatically  
+🔋 **Low Battery Alerts**: Battery below threshold (default: 20%)  
+
+## Alert Frequencies
+
+- **Lock/Door alerts**: Maximum once every 10 minutes per lock
+- **Battery alerts**: Maximum once every 24 hours per lock  
+- **State persistence**: All tracking survives application restarts
 
 ## Testing
 

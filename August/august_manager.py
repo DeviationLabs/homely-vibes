@@ -39,7 +39,19 @@ def main() -> None:
         "--threshold",
         type=int,
         default=5,
-        help="Alert threshold in minutes (default: 5)",
+        help="Unlock alert threshold in minutes (default: 5)",
+    )
+    monitor_parser.add_argument(
+        "--door-ajar-threshold",
+        type=int,
+        default=10,
+        help="Door ajar alert threshold in minutes (default: 10)",
+    )
+    monitor_parser.add_argument(
+        "--battery-threshold",
+        type=int,
+        default=20,
+        help="Low battery alert threshold percentage (default: 20)",
     )
 
     # Status command
@@ -91,6 +103,8 @@ async def _run_command(
             password=password,
             phone=phone,
             unlock_threshold_minutes=args.threshold,
+            door_ajar_threshold_minutes=args.door_ajar_threshold,
+            low_battery_threshold=args.battery_threshold,
         )
 
         if args.once:
