@@ -27,6 +27,17 @@ async def complete_2fa():
         print(f"Auth state: {result.state}")
 
         if result.state == AuthenticationState.REQUIRES_VALIDATION:
+            # First, send verification code
+            print("Sending verification code to your phone/email...")
+            send_result = await auth.async_send_verification_code()
+            
+            if not send_result:
+                print("❌ Failed to send verification code")
+                return False
+                
+            print("✅ Verification code sent!")
+            print("📱 Check your phone for SMS or email for verification code")
+            
             # Get the verification code from user
             import sys
 

@@ -29,6 +29,7 @@ PUSHOVER_USER='user'
 PUSHOVER_DELIVERY_GROUP = 'gid'
 PUSHOVER_DEFAULT_TOKEN="token"
 PUSHOVER_TOKENS= {
+   'August': "token",
    'NetworkCheck': "token",
    'NodeCheck': "token",
    'Powerwall': "token",
