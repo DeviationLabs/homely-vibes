@@ -34,10 +34,10 @@ uv run python August/august_manager.py monitor
 Custom thresholds and intervals:
 ```bash
 uv run python August/august_manager.py monitor \
-  --interval 30 \
-  --threshold 3 \
-  --door-ajar-threshold 15 \
-  --battery-threshold 15
+  --poll-secs 30 \
+  --lock-mins 3 \
+  --ajar-mins 15 \
+  --battery-pct 15
 ```
 
 Test commands:
