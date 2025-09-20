@@ -5,7 +5,7 @@ import tempfile
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from august_client import AugustClient, AugustMonitor, LockState
+from august_client import AugustClient, AugustMonitor, LockState, LockStatus, DoorState
 
 
 class TestLockState:
@@ -13,15 +13,15 @@ class TestLockState:
         state = LockState(
             lock_id="test_lock_123",
             lock_name="Front Door",
-            is_locked=True,
+            lock_status=LockStatus.LOCKED,
             timestamp=1640995200.0,
             battery_level=85.0,
-            door_state="CLOSED",
+            door_state=DoorState.CLOSED,
         )
 
         assert state.lock_id == "test_lock_123"
         assert state.lock_name == "Front Door"
-        assert state.is_locked is True
+        assert state.lock_status == LockStatus.LOCKED
         assert state.timestamp == 1640995200.0
         assert state.battery_level == 85.0
         assert state.door_state == "CLOSED"
@@ -30,7 +30,7 @@ class TestLockState:
         state = LockState(
             lock_id="test_lock",
             lock_name="Test Lock",
-            is_locked=False,
+            lock_status=LockStatus.LOCKED,
             timestamp=time.time(),
             battery_level=75.0,
         )

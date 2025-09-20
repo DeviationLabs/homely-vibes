@@ -7,7 +7,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 - **Rachio Integration**: Monitor active zones and watering events
 - **Flume Integration**: Track real-time water consumption across all devices
 - **Data Correlation**: Match watering events with water usage patterns
-- **Weekly Reports**: Generate detailed reports with:
+- **Period Reports**: Generate detailed reports with:
   - Average watering rate by zone
   - Total duration each zone was watered
   - Water efficiency analysis
@@ -58,17 +58,14 @@ For best results, run the collector continuously to gather data over time:
 
 ```bash
 # Start continuous collection in background (recommended)
-nohup uv run python rfmanager.py collect --continuous > water_tracking.log 2>&1 &
+nohup uv run python rfmanager.py collect > water_tracking.log 2>&1 &
 
 # Or run in foreground (will stop when terminal closes)
-uv run python rfmanager.py collect --continuous
-
-# Run single collection cycle (for testing)
-uv run python rfmanager.py collect --once
+uv run python rfmanager.py collect
 
 # Custom collection intervals
-uv run python rfmanager.py collect --continuous --interval 120    # Every 2 minutes
-uv run python rfmanager.py collect --continuous --interval 600    # Every 10 minutes (default: 300)
+uv run python rfmanager.py collect --interval 120    # Every 2 minutes
+uv run python rfmanager.py collect --interval 600    # Every 10 minutes (default: 300)
 ```
 
 **💡 Pro Tip**: Let the collector run for at least a week to get meaningful reports and efficiency analysis!
@@ -98,18 +95,20 @@ Last Flume Collection: 2023-07-15T10:35:00
 Generate comprehensive reports once you have collected data:
 
 ```bash
-# Current week report
-uv run python rfmanager.py report --current-week
+# Generate period report (default: last 7 days)
+uv run python rfmanager.py report
 
-# Last week report  
-uv run python rfmanager.py report --last-week
+# Custom period report with specific end date and lookback days
+uv run python rfmanager.py report --end-date 2023-07-15 --lookback 14
+
+# Send report via email
+uv run python rfmanager.py report --email
 
 # Zone efficiency analysis (requires multiple watering sessions)
-uv run python rfmanager.py report --efficiency
+uv run python rfmanager.py summary
 
-# Save reports to JSON files
-uv run python rfmanager.py report --current-week --save
-uv run python rfmanager.py report --last-week --save
+# Raw data report with 5-minute intervals
+uv run python rfmanager.py raw --hours 48
 ```
 
 ### 🛑 Stop Data Collection
@@ -150,9 +149,9 @@ kill <process_id>
    - Correlates watering events with usage data
 
 5. **WeeklyReporter** (`reporter.py`)
-   - Generates comprehensive reports
+   - Generates period-based reports with customizable date ranges
    - Calculates zone efficiency metrics
-   - Exports data in multiple formats
+   - Supports email delivery and console output
 
 ### Database Schema
 
@@ -170,12 +169,12 @@ The collector is designed to respect these limits with configurable polling inte
 
 ## Example Output
 
-### Weekly Report
+### Period Report
 ```
-=============================================================
-WEEKLY WATER USAGE REPORT
-Week: 2023-07-10 to 2023-07-17
-=============================================================
+======================================================================
+WATER USAGE REPORT
+Period: 2023-07-10 to 2023-07-17
+======================================================================
 
 SUMMARY:
   Total watering sessions: 12
@@ -184,12 +183,13 @@ SUMMARY:
   Zones watered: 4
 
 ZONE DETAILS:
-Zone Name                Sessions Duration(h) Water(gal) Avg Rate(gpm)
-----------------------------------------------------------------------
-1    Front Lawn          4        2.5         127.5       0.85
-2    Back Yard           3        2.0         98.2        0.82
-3    Side Garden         3        1.8         89.1        0.83
-4    Vegetable Garden    2        2.2         110.5       0.84
+Zone Name                Sessions Duration(h) Water(gal) Rate(gpm)
+--------------------------------------------------------------------
+1    Front Lawn          4        2.5         127.5      0.85
+2    Back Yard           3        2.0         98.2       0.82
+3    Side Garden         3        1.8         89.1       0.83
+4    Vegetable Garden    2        2.2         110.5      0.84
+======================================================================
 ```
 
 ### Status Check

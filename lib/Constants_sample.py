@@ -35,6 +35,7 @@ PUSHOVER_TOKENS = {
     "NetworkCheck": "token",
     "NodeCheck": "token",
     "Powerwall": "token",
+    "RachioFlume": "token",
 }
 
 # WaterMonitor: Processing
