@@ -25,6 +25,11 @@ class DoorState(Enum):
     CLOSED = "CLOSED"
     UNKNOWN = "UNKNOWN" 
 
+class LockStatus(Enum):
+    LOCKED = "LOCKED"
+    UNLOCKED = "UNLOCKED"
+    UNKNOWN = "UNKNOWN" 
+
 @dataclass
 class LockState:
     lock_id: str
@@ -144,20 +149,28 @@ class AugustClient:
             lock_serial = lock_detail.serial_number
 
             # Handle lock status - only treat as unlocked if explicitly UNLOCKED
-            lock_status_name = lock_detail.lock_status.name
-            if lock_status_name == "LOCKED":
+            try:
+                lock_status = LockStatus(lock_detail.lock_status.name)
+            except ValueError:
+                lock_status = LockStatus.UNKNOWN
+            
+            if lock_status == LockStatus.LOCKED:
                 is_locked = True
-            elif lock_status_name == "UNLOCKED":
+            elif lock_status == LockStatus.UNLOCKED:
                 is_locked = False
             else:
-                # UNKNOWN or other status - don't treat as unlocked, but still check battery
                 is_locked = None
                 self.logger.warning(
-                    f"Lock {lock_name} ({lock_serial}) has unknown status: {lock_status_name}"
+                    f"Lock {lock_detail.device_name} has unknown status: {lock_status}"
                 )
 
             battery_level = getattr(lock_detail, "battery_level", None)
-            door_state = getattr(lock_detail, "door_state", DoorState.UNKNOWN)
+            door_state_raw = getattr(lock_detail, "door_state", None)
+            
+            try:
+                door_state = DoorState(door_state_raw.name) if door_state_raw else DoorState.UNKNOWN
+            except (ValueError, AttributeError):
+                door_state = DoorState.UNKNOWN
 
             lock_state = LockState(
                 lock_id=lock_id,
@@ -321,7 +334,7 @@ class AugustMonitor:
                     await self._send_unlock_alert(lock_id, status, unlock_duration)
 
         # Check for door ajar alerts (door open regardless of lock status)
-        if status.door_state and status.door_state.upper() == "OPEN":
+        if status.door_state == DoorState.OPEN:
             if lock_id not in self.door_ajar_start_times:
                 self.door_ajar_start_times[lock_id] = current_time
                 self.logger.info(f"Door {status.lock_name} is ajar - starting timer")
@@ -341,8 +354,7 @@ class AugustMonitor:
 
         # Check for lock failure (door closed but not locked when it should be)
         if (
-            status.door_state
-            and status.door_state.upper() == "CLOSED"
+            status.door_state == DoorState.CLOSED
             and not status.is_locked
         ):
             await self._check_lock_failure(lock_id, status, current_time)
