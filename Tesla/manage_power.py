@@ -80,7 +80,7 @@ class PowerwallManager:
         )
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['Powerwall']
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["Powerwall"]
         )
 
     def send_pushover(self, message: str) -> None:
@@ -324,8 +324,6 @@ class PowerwallManager:
 
                     sleep_time = min(poll_time, 30)  # Quick retry
                     continue
-
-
 
 
 def main() -> None:

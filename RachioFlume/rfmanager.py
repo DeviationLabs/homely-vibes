@@ -13,13 +13,13 @@ from lib import Constants
 # Create default database path using Constants.LOGGING_DIR
 DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
 
+
 def main():
     """Main entry point with command line interface."""
     # Setup logging first
     logger = get_logger(__name__)
     logger.info("=" * 50)
     logger.info("Starting Rachio-Flume Water Tracking Integration")
-
 
     parser = argparse.ArgumentParser(
         description="Rachio-Flume Water Tracking Integration"
@@ -49,10 +49,15 @@ def main():
     # Reporting commands
     report_parser = subparsers.add_parser("report", help="Generate period reports")
     report_parser.add_argument(
-        "--end-date", type=str, help="End date for report (YYYY-MM-DD format, defaults to today)"
+        "--end-date",
+        type=str,
+        help="End date for report (YYYY-MM-DD format, defaults to today)",
     )
     report_parser.add_argument(
-        "--lookback", type=int, default=7, help="Number of days to look back from end date (default: 7)"
+        "--lookback",
+        type=int,
+        default=7,
+        help="Number of days to look back from end date (default: 7)",
     )
     report_parser.add_argument(
         "--email", action="store_true", help="Send report via email"
@@ -62,9 +67,14 @@ def main():
     subparsers.add_parser("summary", help="Generate efficiency analysis")
 
     # Raw data command
-    raw_parser = subparsers.add_parser("raw", help="Generate raw data report (5-minute intervals)")
+    raw_parser = subparsers.add_parser(
+        "raw", help="Generate raw data report (5-minute intervals)"
+    )
     raw_parser.add_argument(
-        "--hours", type=int, default=24, help="Number of hours for raw data report (default: 24)"
+        "--hours",
+        type=int,
+        default=24,
+        help="Number of hours for raw data report (default: 24)",
     )
 
     args = parser.parse_args()

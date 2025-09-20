@@ -14,7 +14,7 @@ from lib.MyPushover import Pushover
 logger = SystemLogger.get_logger(__name__)
 
 # Initialize Pushover client for NodeCheck notifications
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['NodeCheck'])
+pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
 
 system_healthy = True
 state = dict()
@@ -155,7 +155,7 @@ if __name__ == "__main__":
             log_message(">> ERROR %s: %s offline." % (args.mode, nodeName))
             pushover.send_message(
                 f"{args.mode.title()} node {nodeName} is offline",
-                title="Node Check Failed"
+                title="Node Check Failed",
             )
 
     if args.reboot:
@@ -175,7 +175,7 @@ if __name__ == "__main__":
                 log_message(">> ERROR: Oops! Node did not reboot: %s" % nodeName)
                 pushover.send_message(
                     f"{args.mode.title()} node {nodeName} failed to reboot",
-                    title="Node Reboot Failed"
+                    title="Node Reboot Failed",
                 )
         log_message("Sleep until nodes restart...")
         check_state(desired_up=True, attempts=180)
@@ -186,7 +186,7 @@ if __name__ == "__main__":
                 log_message(">> ERROR: %s: %s failed online." % (args.mode, nodeName))
                 pushover.send_message(
                     f"{args.mode.title()} node {nodeName} failed to come back online after reboot",
-                    title="Node Recovery Failed"
+                    title="Node Recovery Failed",
                 )
         time.sleep(60)  # generously wait for nodes to stabilize
 
@@ -200,7 +200,7 @@ if __name__ == "__main__":
                 if not node_healthy:
                     pushover.send_message(
                         f"Foscam node {nodeName} cannot capture image",
-                        title="Foscam Health Check Failed"
+                        title="Foscam Health Check Failed",
                     )
             else:
                 # If windows and alive, do a deep check
@@ -209,10 +209,12 @@ if __name__ == "__main__":
     # Cleanup and reporting
     if not system_healthy:
         log_message(">> ERROR: Node check failed!")
-        failed_nodes = [nodeName for nodeName, _ in nodes.items() if not state[nodeName]]
+        failed_nodes = [
+            nodeName for nodeName, _ in nodes.items() if not state[nodeName]
+        ]
         pushover.send_message(
             f"{args.mode.title()} Node check failed for {', '.join(failed_nodes)}",
-            title="Node Check"
+            title="Node Check",
         )
     else:
         log_message("All is well")

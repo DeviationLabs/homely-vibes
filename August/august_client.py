@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+from enum import Enum
 import time
 from typing import Optional, Dict, Any
 import json
@@ -19,15 +20,24 @@ from lib import Constants
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
+class DoorState(Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    UNKNOWN = "UNKNOWN" 
+
+class LockStatus(Enum):
+    LOCKED = "LOCKED"
+    UNLOCKED = "UNLOCKED"
+    UNKNOWN = "UNKNOWN" 
 
 @dataclass
 class LockState:
     lock_id: str
     lock_name: str
-    is_locked: Optional[bool]
     timestamp: float
+    lock_status: LockStatus = LockStatus.UNKNOWN
     battery_level: Optional[float] = None
-    door_state: Optional[str] = None
+    door_state: DoorState = DoorState.UNKNOWN
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -123,7 +133,7 @@ class AugustClient:
             self.logger.error(f"Error retrieving locks: {e}")
             raise
 
-    async def get_lock_status(self, lock_id: str) -> Optional[LockState]:
+    async def get_lock_status(self, lock_id: str, retry: int = 3) -> Optional[LockState]:
         await self._ensure_session()
         if not self.access_token:
             if not await self.authenticate():
@@ -136,39 +146,46 @@ class AugustClient:
                 self.access_token, lock_id
             )
             lock_name = lock_detail.device_name
+            lock_serial = lock_detail.serial_number
 
             # Handle lock status - only treat as unlocked if explicitly UNLOCKED
-            lock_status_name = lock_detail.lock_status.name
-            if lock_status_name == "LOCKED":
-                is_locked = True
-            elif lock_status_name == "UNLOCKED":
-                is_locked = False
-            else:
-                # UNKNOWN or other status - don't treat as unlocked, but still check battery
-                is_locked = None
+            try:
+                lock_status = LockStatus(lock_detail.lock_status.name)
+            except ValueError:
+                lock_status = LockStatus.UNKNOWN
+            
+            if lock_status == LockStatus.UNKNOWN and retry > 0:
                 self.logger.warning(
-                    f"Lock {lock_name} has unknown status: {lock_status_name}"
+                    f"Lock {lock_detail.device_name} has unknown status, retrying {retry} times..."
                 )
+                time.sleep(1)
+                # Retry getting lock status
+                return await self.get_lock_status(lock_id, retry=retry-1)
 
             battery_level = getattr(lock_detail, "battery_level", None)
-            door_state = getattr(lock_detail, "door_state", None)
+            door_state_raw = getattr(lock_detail, "door_state", None)
+            
+            try:
+                door_state = DoorState(door_state_raw.name) if door_state_raw else DoorState.UNKNOWN
+            except (ValueError, AttributeError):
+                door_state = DoorState.UNKNOWN
+                
+            # If we still have unknown door state, log the raw value for debugging
+            if door_state == DoorState.UNKNOWN and door_state_raw:
+                self.logger.warning(
+                    f"Lock {lock_detail.device_name} has unknown door state: {door_state_raw} (type: {type(door_state_raw)})"
+                )
 
             lock_state = LockState(
                 lock_id=lock_id,
                 lock_name=lock_name,
-                is_locked=is_locked,
                 timestamp=time.time(),
+                lock_status=lock_status,
                 battery_level=battery_level,
-                door_state=door_state.name if door_state else None,
+                door_state=door_state,
             )
 
-            if is_locked is None:
-                status_str = "UNKNOWN"
-            elif is_locked:
-                status_str = "LOCKED"
-            else:
-                status_str = "UNLOCKED"
-            self.logger.debug(f"Lock {lock_name} status: {status_str}")
+            self.logger.info(f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}")
             return lock_state
 
         except Exception as e:
@@ -187,18 +204,6 @@ class AugustClient:
 
         return statuses
 
-    async def get_offline_locks(self) -> Dict[str, str]:
-        """Get locks that are offline or have unknown status."""
-        if not self.locks:
-            await self.get_locks()
-
-        offline_locks = {}
-        for lock_id, lock in self.locks.items():
-            status = await self.get_lock_status(lock_id)
-            if status is None:  # Lock is offline/unknown
-                offline_locks[lock_id] = lock.device_name
-
-        return offline_locks
 
 
 class AugustMonitor:
@@ -217,7 +222,7 @@ class AugustMonitor:
         self.low_battery_threshold = low_battery_threshold
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['August']
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
         )
         # Tracking for different alert types
         self.unlock_start_times: Dict[str, float] = {}
@@ -261,6 +266,7 @@ class AugustMonitor:
     async def check_locks(self) -> None:
         try:
             statuses = await self.client.get_all_lock_statuses()
+
             current_time = time.time()
 
             for lock_id, status in statuses.items():
@@ -297,12 +303,14 @@ class AugustMonitor:
         self, lock_id: str, status: LockState, current_time: float
     ) -> None:
         # Skip lock/door monitoring for unknown status locks, but still check battery
-        if status.is_locked is None:
-            self.logger.debug(f"Skipping lock monitoring for {status.lock_name} (unknown status)")
+        if status.lock_status == LockStatus.UNKNOWN:
+            self.logger.debug(
+                f"Skipping lock monitoring for {status.lock_name} (unknown status)"
+            )
             return
-            
+
         # Check for unlock alerts
-        if status.is_locked:
+        if status.lock_status == LockStatus.LOCKED:
             if lock_id in self.unlock_start_times:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
                 self.logger.info(
@@ -322,7 +330,7 @@ class AugustMonitor:
                     await self._send_unlock_alert(lock_id, status, unlock_duration)
 
         # Check for door ajar alerts (door open regardless of lock status)
-        if status.door_state and status.door_state.upper() == "OPEN":
+        if status.door_state == DoorState.OPEN:
             if lock_id not in self.door_ajar_start_times:
                 self.door_ajar_start_times[lock_id] = current_time
                 self.logger.info(f"Door {status.lock_name} is ajar - starting timer")
@@ -342,9 +350,8 @@ class AugustMonitor:
 
         # Check for lock failure (door closed but not locked when it should be)
         if (
-            status.door_state
-            and status.door_state.upper() == "CLOSED"
-            and not status.is_locked
+            status.door_state == DoorState.CLOSED
+            and status.lock_status == LockStatus.UNLOCKED
         ):
             await self._check_lock_failure(lock_id, status, current_time)
 
@@ -370,7 +377,7 @@ class AugustMonitor:
             message += f"\nBattery: {status.battery_level}%"
 
         try:
-            self.pushover.send_message(message, title=title)
+            self.pushover.send_message(message, title=title, priority=1)
             self.last_alert_times[lock_id] = current_time
             self.logger.warning(f"Sent unlock alert: {message}")
         except Exception as e:
@@ -398,7 +405,7 @@ class AugustMonitor:
             message += f"\nBattery: {status.battery_level}%"
 
         try:
-            self.pushover.send_message(message, title=title)
+            self.pushover.send_message(message, title=title, priority=1)
             self.last_alert_times[lock_id] = current_time
             self.logger.warning(f"Sent door ajar alert: {message}")
         except Exception as e:
@@ -472,68 +479,3 @@ class AugustMonitor:
         finally:
             await self.client.close()
 
-    async def get_status_report(self) -> str:
-        try:
-            statuses = await self.client.get_all_lock_statuses()
-            offline_locks = await self.client.get_offline_locks()
-
-            if not statuses and not offline_locks:
-                return "No August locks found"
-
-            lines = ["August Lock Status Report", "=" * 30]
-
-            # Show online locks
-            for status in statuses.values():
-                if status is None:
-                    continue
-                    
-                if status.is_locked is None:
-                    lock_status = "⚠️ UNKNOWN"
-                elif status.is_locked:
-                    lock_status = "🔒 LOCKED"
-                else:
-                    lock_status = "🔓 UNLOCKED"
-                    
-                lines.append(f"{status.lock_name}: {lock_status}")
-
-                if status.is_locked is False and status.lock_id in self.unlock_start_times:
-                    unlock_duration = (
-                        time.time() - self.unlock_start_times[status.lock_id]
-                    )
-                    lines.append(f"  Unlocked for: {unlock_duration / 60:.1f} minutes")
-
-                if status.lock_id in self.door_ajar_start_times:
-                    ajar_duration = (
-                        time.time() - self.door_ajar_start_times[status.lock_id]
-                    )
-                    lines.append(f"  Door ajar for: {ajar_duration / 60:.1f} minutes")
-
-                if status.door_state:
-                    lines.append(f"  Door: {status.door_state}")
-
-                if status.battery_level:
-                    battery_status = (
-                        "LOW"
-                        if status.battery_level < self.low_battery_threshold
-                        else "OK"
-                    )
-                    lines.append(
-                        f"  Battery: {status.battery_level}% ({battery_status})"
-                    )
-
-                lines.append("")
-
-            # Show offline/unknown locks
-            if offline_locks:
-                lines.append("Offline/Unknown Status Locks:")
-                for lock_name in offline_locks.values():
-                    lines.append(f"{lock_name}: ⚠️ OFFLINE/UNKNOWN")
-                    lines.append(
-                        "  Status cannot be determined (check WiFi/bridge connection)"
-                    )
-                    lines.append("")
-
-            return "\n".join(lines)
-
-        except Exception as e:
-            return f"Error getting status: {e}"

@@ -328,7 +328,9 @@ class WaterTrackingDB:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_period_zone_stats(self, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+    def get_period_zone_stats(
+        self, start_date: datetime, end_date: datetime
+    ) -> List[Dict[str, Any]]:
         """Get period statistics by zone for a custom date range."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -353,7 +355,9 @@ class WaterTrackingDB:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_raw_data_intervals(self, start_time: datetime, end_time: datetime, interval_minutes: int = 5) -> List[Dict[str, Any]]:
+    def get_raw_data_intervals(
+        self, start_time: datetime, end_time: datetime, interval_minutes: int = 5
+    ) -> List[Dict[str, Any]]:
         """Get raw data aggregated into time intervals."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -411,7 +415,7 @@ class WaterTrackingDB:
         """Get the actual last timestamp from data tables."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
+
             if source == "rachio":
                 cursor.execute(
                     "SELECT MAX(event_date) as last_timestamp FROM watering_events"
@@ -422,7 +426,7 @@ class WaterTrackingDB:
                 )
             else:
                 raise ValueError(f"Unknown source: {source}")
-                
+
             result = cursor.fetchone()
             if result and result["last_timestamp"]:
                 return datetime.fromisoformat(result["last_timestamp"])

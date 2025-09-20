@@ -18,7 +18,9 @@ class Pushover:
         self.user = user
         self.token = token
 
-    def send_message(self, message: str, title: str|None = None, priority: int = 0) -> bool:
+    def send_message(
+        self, message: str, title: str | None = None, priority: int = 0
+    ) -> bool:
         """Send a message via Pushover.
 
         Args:
