@@ -63,16 +63,16 @@ async def _run_command(
             email=email,
             password=password,
             phone=phone,
-            unlock_threshold_minutes=args.threshold,
-            door_ajar_threshold_minutes=args.door_ajar_threshold,
-            low_battery_threshold=args.battery_threshold,
+            unlock_threshold_minutes=args.lock_mins,
+            door_ajar_threshold_minutes=args.ajar_mins,
+            low_battery_threshold=args.battery_pct,
         )
 
         logger.info(
-            f"Starting continuous monitoring (interval: {args.interval}s, "
-            f"threshold: {args.threshold}min)"
+            f"Starting continuous monitoring (interval: {args.poll_secs}s, "
+            f"threshold: {args.lock_mins}min)"
         )
-        await monitor.run_continuous_monitoring(args.interval)
+        await monitor.run_continuous_monitoring(args.poll_secs)
 
     elif args.command == "validate":
         logger.info("Starting 2FA validation process...")
@@ -96,25 +96,25 @@ def main() -> None:
     # Monitor commands
     monitor_parser = subparsers.add_parser("monitor", help="Continuous lock monitoring")
     monitor_parser.add_argument(
-        "--interval",
+        "--poll-secs",
         type=int,
         default=60,
         help="Check interval in seconds (default: 60)",
     )
     monitor_parser.add_argument(
-        "--threshold",
+        "--lock-mins",
         type=int,
         default=5,
         help="Unlock alert threshold in minutes (default: 5)",
     )
     monitor_parser.add_argument(
-        "--door-ajar-threshold",
+        "--ajar-mins",
         type=int,
         default=10,
         help="Door ajar alert threshold in minutes (default: 10)",
     )
     monitor_parser.add_argument(
-        "--battery-threshold",
+        "--battery-pct",
         type=int,
         default=20,
         help="Low battery alert threshold percentage (default: 20)",
