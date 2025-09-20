@@ -388,7 +388,7 @@ class AugustMonitor:
         message = f"{status.lock_name} battery is low: {status.battery_level}%"
 
         try:
-            self.pushover.send_message(message, title=title)
+            self.pushover.send_message(message, title=title, priority=1)
             self.last_battery_alerts[lock_id] = current_time
             self.logger.warning(f"Sent low battery alert: {message}")
         except Exception as e:
