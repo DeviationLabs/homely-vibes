@@ -26,23 +26,18 @@ AUGUST_PHONE = "+1234567890"  # Required for 2FA
 
 ## Usage
 
-Continuous monitoring (check every 60s, alert after 5min):
+Continuous monitoring (default check every 60s, alert after 5min):
 ```bash
-uv run python August/august_manager.py monitor --continuous
+uv run python August/august_manager.py monitor
 ```
 
 Custom thresholds and intervals:
 ```bash
-uv run python August/august_manager.py monitor --continuous \
+uv run python August/august_manager.py monitor \
   --interval 30 \
   --threshold 3 \
   --door-ajar-threshold 15 \
   --battery-threshold 15
-```
-
-Status check:
-```bash
-uv run python August/august_manager.py status
 ```
 
 Test commands:

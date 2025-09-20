@@ -72,15 +72,16 @@ class SystemLogger:
         """Get the name of the main script being executed."""
         try:
             import __main__
-            if hasattr(__main__, '__file__') and __main__.__file__:
+
+            if hasattr(__main__, "__file__") and __main__.__file__:
                 return Path(__main__.__file__).name
         except (ImportError, AttributeError):
             pass
-        
+
         # Fallback to sys.argv[0] if __main__.__file__ not available
         if sys.argv and sys.argv[0]:
             return Path(sys.argv[0]).name
-            
+
         # Last resort fallback
         return "application"
 
