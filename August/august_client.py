@@ -205,7 +205,7 @@ class AugustMonitor:
         self.client = AugustClient(email, password, phone)
         self.unlock_threshold = unlock_threshold_minutes * 60
         self.ajar_threshold = ajar_threshold_minutes * 60
-        self.battery_pct = battery_threshold_pct
+        self.battery_threshold_pct = battery_threshold_pct
         self.battery_alert_cooldown = battery_alert_cooldown_minutes * 60
         self.door_alert_cooldown = door_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
@@ -384,7 +384,7 @@ class AugustMonitor:
     ) -> None:
         if (
             not status.battery_level
-            or status.battery_level >= self.battery_pct
+            or status.battery_level >= self.battery_threshold_pct
         ):
             return
 
