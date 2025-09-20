@@ -34,8 +34,8 @@ class LockStatus(Enum):
 class LockState:
     lock_id: str
     lock_name: str
-    is_locked: Optional[bool]
     timestamp: float
+    lock_status: LockStatus = LockStatus.UNKNOWN
     battery_level: Optional[float] = None
     door_state: DoorState = DoorState.UNKNOWN
 
@@ -133,7 +133,7 @@ class AugustClient:
             self.logger.error(f"Error retrieving locks: {e}")
             raise
 
-    async def get_lock_status(self, lock_id: str) -> Optional[LockState]:
+    async def get_lock_status(self, lock_id: str, retry: int = 3) -> Optional[LockState]:
         await self._ensure_session()
         if not self.access_token:
             if not await self.authenticate():
@@ -154,15 +154,13 @@ class AugustClient:
             except ValueError:
                 lock_status = LockStatus.UNKNOWN
             
-            if lock_status == LockStatus.LOCKED:
-                is_locked = True
-            elif lock_status == LockStatus.UNLOCKED:
-                is_locked = False
-            else:
-                is_locked = None
+            if lock_status == LockStatus.UNKNOWN and retry > 0:
                 self.logger.warning(
-                    f"Lock {lock_detail.device_name} has unknown status: {lock_status}"
+                    f"Lock {lock_detail.device_name} has unknown status, retrying {retry} times..."
                 )
+                time.sleep(1)
+                # Retry getting lock status
+                return await self.get_lock_status(lock_id, retry=retry-1)
 
             battery_level = getattr(lock_detail, "battery_level", None)
             door_state_raw = getattr(lock_detail, "door_state", None)
@@ -171,25 +169,23 @@ class AugustClient:
                 door_state = DoorState(door_state_raw.name) if door_state_raw else DoorState.UNKNOWN
             except (ValueError, AttributeError):
                 door_state = DoorState.UNKNOWN
+                
+            # If we still have unknown door state, log the raw value for debugging
+            if door_state == DoorState.UNKNOWN and door_state_raw:
+                self.logger.warning(
+                    f"Lock {lock_detail.device_name} has unknown door state: {door_state_raw} (type: {type(door_state_raw)})"
+                )
 
             lock_state = LockState(
                 lock_id=lock_id,
                 lock_name=lock_name,
-                is_locked=is_locked,
                 timestamp=time.time(),
+                lock_status=lock_status,
                 battery_level=battery_level,
                 door_state=door_state,
             )
 
-            if is_locked is None or door_state == DoorState.UNKNOWN:
-                status_str = "UNKNOWN"
-            elif is_locked:
-                status_str = "LOCKED"
-            elif door_state == DoorState.OPEN:
-                status_str = "OPEN"
-            elif door_state == DoorState.CLOSED:
-                status_str = "CLOSED but UNLOCKED"
-            self.logger.info(f"Lock {lock_name} ({lock_serial}) status: {status_str} {battery_level}")
+            self.logger.info(f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}")
             return lock_state
 
         except Exception as e:
@@ -307,14 +303,14 @@ class AugustMonitor:
         self, lock_id: str, status: LockState, current_time: float
     ) -> None:
         # Skip lock/door monitoring for unknown status locks, but still check battery
-        if status.is_locked is None:
+        if status.lock_status == LockStatus.UNKNOWN:
             self.logger.debug(
                 f"Skipping lock monitoring for {status.lock_name} (unknown status)"
             )
             return
 
         # Check for unlock alerts
-        if status.is_locked:
+        if status.lock_status == LockStatus.LOCKED:
             if lock_id in self.unlock_start_times:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
                 self.logger.info(
@@ -355,7 +351,7 @@ class AugustMonitor:
         # Check for lock failure (door closed but not locked when it should be)
         if (
             status.door_state == DoorState.CLOSED
-            and not status.is_locked
+            and status.lock_status == LockStatus.UNLOCKED
         ):
             await self._check_lock_failure(lock_id, status, current_time)
 
