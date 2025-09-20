@@ -106,9 +106,6 @@ uv run python rfmanager.py report --email
 
 # Zone efficiency analysis (requires multiple watering sessions)
 uv run python rfmanager.py summary
-
-# Raw data report with 5-minute intervals
-uv run python rfmanager.py raw --hours 48
 ```
 
 ### 🛑 Stop Data Collection
