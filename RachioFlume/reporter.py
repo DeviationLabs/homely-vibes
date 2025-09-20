@@ -104,7 +104,7 @@ class WeeklyReporter:
         
         report_text.append("WATER USAGE REPORT")
         report_text.append(f"Period: {report['period_start'][:10]} to {report['period_end'][:10]}")
-        report_text.append("=" * 70)
+        report_text.append("=" * 40)
 
         summary = report["summary"]
         report_text.append("\nSUMMARY:")
@@ -120,13 +120,12 @@ class WeeklyReporter:
         if report["zones"]:
             report_text.append("\nZONE DETAILS:")
             # Use fixed-width formatting for better display
-            header = f"{'Zone':<4} {'Name':<8} {'Runs':<4} {'Hrs':<5} {'Gals':<5} {'GPM':<4}"
+            header = f"{'Name':<8} {'Runs':<4} {'Hrs':<5} {'Gals':<5} {'GPM':<4}"
             report_text.append(header)
             report_text.append("-" * len(header))
 
             for zone in report["zones"]:
                 zone_line = (
-                    f"{zone['zone_number']:<4} "
                     f"{zone['zone_name'][:8]:<8} "
                     f"{zone['sessions']:<4} "
                     f"{zone['total_duration_hours']:<5.1f} "
@@ -135,7 +134,7 @@ class WeeklyReporter:
                 )
                 report_text.append(zone_line)
 
-        report_text.append("\n" + "=" * 70)
+        report_text.append("\n" + "=" * 40)
         return "\n".join(report_text)
 
     def print_report(self, report: Dict[str, Any]) -> None:
@@ -314,48 +313,15 @@ def main():
 
     reporter = WeeklyReporter("water_tracking.db")
 
-    if "--current-week" in sys.argv:
-        report = reporter.generate_current_week_report()
-        reporter.print_report(report)
-
-        if "--save" in sys.argv:
-            filename = f"weekly_report_{report['week_start'][:10]}.json"
-            reporter.save_report_to_file(report, filename)
-            reporter.logger.info(f"Report saved to {filename}")
-
-        if "--email" in sys.argv:
-            alert = "--alert" in sys.argv
-            reporter.email_report(report, alert=alert)
-            reporter.logger.info("Report emailed")
-
-    elif "--last-week" in sys.argv:
-        report = reporter.generate_last_week_report()
-        reporter.print_report(report)
-
-        if "--save" in sys.argv:
-            filename = f"weekly_report_{report['week_start'][:10]}.json"
-            reporter.save_report_to_file(report, filename)
-            reporter.logger.info(f"Report saved to {filename}")
-
-        if "--email" in sys.argv:
-            alert = "--alert" in sys.argv
-            reporter.email_report(report, alert=alert)
-            reporter.logger.info("Report emailed")
-
-    elif "--efficiency" in sys.argv:
+    if "--efficiency" in sys.argv:
         analysis = reporter.get_zone_efficiency_analysis()
         reporter.print_efficiency_analysis(analysis)
-
     else:
         print("Usage:")
-        print("  python reporter.py --current-week [--save] [--email] [--alert]")
-        print("  python reporter.py --last-week [--save] [--email] [--alert]")
         print("  python reporter.py --efficiency")
         print("")
         print("Options:")
-        print("  --save    Save report as JSON file")
-        print("  --email   Send report via email")
-        print("  --alert   Mark email as alert (adds [ALERT] flag)")
+        print("  --efficiency  Generate zone efficiency analysis")
 
 
 if __name__ == "__main__":
