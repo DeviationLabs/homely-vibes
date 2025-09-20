@@ -123,7 +123,7 @@ def show_status(args):
         collector = WaterTrackingCollector(DB_PATH)
         status = collector.get_current_status()
 
-        logger.info("\n" + "=" * 50)
+        logger.info("=" * 50)
         logger.info("WATER TRACKING SYSTEM STATUS")
         logger.info("=" * 50)
 
