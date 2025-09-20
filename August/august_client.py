@@ -200,7 +200,7 @@ class AugustMonitor:
         ajar_threshold_minutes: int = 10,
         battery_threshold_pct: int = 20,
         battery_alert_cooldown_minutes: int = 24*60,
-        door_alert_cooldown_minutes: int = 10,
+        door_alert_cooldown_minutes: int = 2,
     ):
         self.client = AugustClient(email, password, phone)
         self.unlock_threshold = unlock_threshold_minutes * 60
