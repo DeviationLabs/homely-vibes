@@ -1,13 +1,49 @@
 """Weekly reporting system for water tracking data."""
 
 import json
+from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, List
 from pathlib import Path
 
 from data_storage import WaterTrackingDB
 from lib.logger import get_logger
 from lib import Mailer
+
+
+@dataclass
+class ZoneStats:
+    """Statistics for a single zone."""
+    zone_number: int
+    zone_name: str
+    sessions: int
+    total_duration_hours: float
+    average_duration_minutes: float
+    total_water_gallons: float
+    average_flow_rate_gpm: float
+
+
+@dataclass
+class ReportSummary:
+    """Summary statistics for the entire report."""
+    total_watering_sessions: int
+    total_duration_hours: float
+    total_water_used_gallons: float
+    zones_watered: int
+
+
+@dataclass
+class WaterUsageReport:
+    """Complete water usage report."""
+    report_generated: datetime
+    period_start: datetime
+    period_end: datetime
+    summary: ReportSummary
+    zones: List[ZoneStats]
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for compatibility."""
+        return asdict(self)
 
 
 class WeeklyReporter:
@@ -20,7 +56,7 @@ class WeeklyReporter:
 
     def generate_period_report_with_dates(
         self, period_start: datetime, period_end: datetime
-    ) -> Dict[str, Any]:
+    ) -> WaterUsageReport:
         """Generate a comprehensive period report.
 
         Args:
@@ -28,7 +64,7 @@ class WeeklyReporter:
             period_end: End of the period
 
         Returns:
-            Dict containing period statistics
+            WaterUsageReport containing period statistics
         """
         self.logger.info(
             f"Generating period report for {period_start.date()} to {period_end.date()}"
@@ -50,35 +86,38 @@ class WeeklyReporter:
             duration_hours = (stat["total_duration_seconds"] or 0) / 3600
             avg_duration_minutes = (stat["avg_duration_seconds"] or 0) / 60
 
-            formatted_zones.append(
-                {
-                    "zone_number": stat["zone_number"],
-                    "zone_name": stat["zone_name"],
-                    "sessions": stat["session_count"],
-                    "total_duration_hours": round(duration_hours, 2),
-                    "average_duration_minutes": round(avg_duration_minutes, 1),
-                    "total_water_gallons": round(stat["total_water_used"] or 0, 1),
-                    "average_flow_rate_gpm": round(stat["avg_flow_rate"] or 0, 2),
-                }
+            zone_stats_obj = ZoneStats(
+                zone_number=stat["zone_number"],
+                zone_name=stat["zone_name"],
+                sessions=stat["session_count"],
+                total_duration_hours=round(duration_hours, 2),
+                average_duration_minutes=round(avg_duration_minutes, 1),
+                total_water_gallons=round(stat["total_water_used"] or 0, 1),
+                average_flow_rate_gpm=round(stat["avg_flow_rate"] or 0, 2),
             )
+            formatted_zones.append(zone_stats_obj)
 
         # Sort by zone number
-        formatted_zones.sort(key=lambda x: x["zone_number"])
+        formatted_zones.sort(key=lambda x: x.zone_number)
 
-        return {
-            "report_generated": datetime.now().isoformat(),
-            "period_start": period_start.isoformat(),
-            "period_end": period_end.isoformat(),
-            "summary": {
-                "total_watering_sessions": total_sessions,
-                "total_duration_hours": round(total_duration_seconds / 3600, 2),
-                "total_water_used_gallons": round(total_water_used, 1),
-                "zones_watered": len(zone_stats),
-            },
-            "zones": formatted_zones,
-        }
+        # Create summary
+        summary = ReportSummary(
+            total_watering_sessions=total_sessions,
+            total_duration_hours=round(total_duration_seconds / 3600, 2),
+            total_water_used_gallons=round(total_water_used, 1),
+            zones_watered=len(zone_stats),
+        )
 
-    def save_report_to_file(self, report: Dict[str, Any], filename: str) -> None:
+        # Create and return the report
+        return WaterUsageReport(
+            report_generated=datetime.now(),
+            period_start=period_start,
+            period_end=period_end,
+            summary=summary,
+            zones=formatted_zones,
+        )
+
+    def save_report_to_file(self, report: WaterUsageReport, filename: str) -> None:
         """Save report to JSON file.
 
         Args:
@@ -89,9 +128,9 @@ class WeeklyReporter:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w") as f:
-            json.dump(report, f, indent=2, default=str)
+            json.dump(report.to_dict(), f, indent=2, default=str)
 
-    def format_report_text(self, report: Dict[str, Any]) -> str:
+    def format_report_text(self, report: WaterUsageReport) -> str:
         """Generate formatted text version of the report.
 
         Args:
@@ -103,41 +142,40 @@ class WeeklyReporter:
         report_text = []
         
         report_text.append("WATER USAGE REPORT")
-        report_text.append(f"Period: {report['period_start'][:10]} to {report['period_end'][:10]}")
+        report_text.append(f"Period: {report.period_start.date()} to {report.period_end.date()}")
         report_text.append("=" * 40)
 
-        summary = report["summary"]
         report_text.append("\nSUMMARY:")
         report_text.append(
-            f"  Total watering sessions: {summary['total_watering_sessions']}"
+            f"  Total watering sessions: {report.summary.total_watering_sessions}"
         )
-        report_text.append(f"  Total duration: {summary['total_duration_hours']} hours")
+        report_text.append(f"  Total duration: {report.summary.total_duration_hours} hours")
         report_text.append(
-            f"  Total water used: {summary['total_water_used_gallons']} gallons"
+            f"  Total water used: {report.summary.total_water_used_gallons} gallons"
         )
-        report_text.append(f"  Zones watered: {summary['zones_watered']}")
+        report_text.append(f"  Zones watered: {report.summary.zones_watered}")
 
-        if report["zones"]:
+        if report.zones:
             report_text.append("\nZONE DETAILS:")
             # Use fixed-width formatting for better display
             header = f"{'Name':<8} {'Runs':<4} {'Hrs':<5} {'Gals':<5} {'GPM':<4}"
             report_text.append(header)
             report_text.append("-" * len(header))
 
-            for zone in report["zones"]:
+            for zone in report.zones:
                 zone_line = (
-                    f"{zone['zone_name'][:8]:<8} "
-                    f"{zone['sessions']:<4} "
-                    f"{zone['total_duration_hours']:<5.1f} "
-                    f"{zone['total_water_gallons']:<5.1f} "
-                    f"{zone['average_flow_rate_gpm']:<4.1f}"
+                    f"{zone.zone_name[:8]:<8} "
+                    f"{zone.sessions:<4} "
+                    f"{zone.total_duration_hours:<5.1f} "
+                    f"{zone.total_water_gallons:<5.1f} "
+                    f"{zone.average_flow_rate_gpm:<4.1f}"
                 )
                 report_text.append(zone_line)
 
         report_text.append("\n" + "=" * 40)
         return "\n".join(report_text)
 
-    def print_report(self, report: Dict[str, Any]) -> None:
+    def print_report(self, report: WaterUsageReport) -> None:
         """Print report in a readable format."""
         report_text = self.format_report_text(report)
 
@@ -180,7 +218,7 @@ class WeeklyReporter:
 
         self.logger.info("=" * 60)
 
-    def email_report(self, report: Dict[str, Any], alert: bool = False) -> None:
+    def email_report(self, report: WaterUsageReport, alert: bool = False) -> None:
         """Email report in formatted text.
 
         Args:
@@ -189,16 +227,8 @@ class WeeklyReporter:
         """
         report_text = self.format_report_text(report)
         
-        # Handle both weekly and period report formats for the email subject
-        if "week_start" in report:
-            start_date = report["week_start"][:10]
-            subject_prefix = "Week"
-        elif "period_start" in report:
-            start_date = report["period_start"][:10]
-            subject_prefix = "Period"
-        else:
-            start_date = "Unknown"
-            subject_prefix = "Report"
+        start_date = report.period_start.date()
+        subject_prefix = "Period"
 
         Mailer.sendmail(
             topic=f"[Water Report] {subject_prefix} {start_date}",
