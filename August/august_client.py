@@ -198,14 +198,14 @@ class AugustMonitor:
         phone: Optional[str] = None,
         unlock_threshold_minutes: int = 5,
         ajar_threshold_minutes: int = 10,
-        battery_threshold: int = 20,
+        battery_threshold_pct: int = 20,
         battery_alert_cooldown_minutes: int = 24*60,
         door_alert_cooldown_minutes: int = 10,
     ):
         self.client = AugustClient(email, password, phone)
         self.unlock_threshold = unlock_threshold_minutes * 60
         self.ajar_threshold = ajar_threshold_minutes * 60
-        self.battery_threshold = battery_threshold
+        self.battery_threshold = battery_threshold_pct
         self.battery_alert_cooldown = battery_alert_cooldown_minutes * 60
         self.door_alert_cooldown = door_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
