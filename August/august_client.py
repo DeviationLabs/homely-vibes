@@ -405,12 +405,11 @@ class AugustMonitor:
             while True:
                 try:
                     await self.check_locks()
-                    await asyncio.sleep(check_interval_seconds)
                 except KeyboardInterrupt:
                     self.logger.info("Monitoring stopped by user")
                     break
                 except Exception as e:
                     self.logger.error(f"Error in monitoring loop: {e}")
-                    await asyncio.sleep(check_interval_seconds)
+                await asyncio.sleep(check_interval_seconds)
         finally:
             await self.client.close()
