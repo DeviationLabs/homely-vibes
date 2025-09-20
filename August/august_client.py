@@ -8,13 +8,9 @@ import json
 from dataclasses import dataclass, asdict
 import aiohttp
 
-try:
-    from yalexs.api_async import ApiAsync
-    from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
-    from yalexs.lock import Lock
-except ImportError:
-    print("yalexs library not found. Install with: uv add yalexs")
-    raise
+from yalexs.api_async import ApiAsync
+from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
+from yalexs.lock import Lock
 
 from lib import Constants
 from lib.logger import get_logger
@@ -134,11 +130,6 @@ class AugustClient:
             raise
 
     async def get_lock_status(self, lock_id: str, retry: int = 3) -> Optional[LockState]:
-        await self._ensure_session()
-        if not self.access_token:
-            if not await self.authenticate():
-                return None
-
         try:
             assert self.api is not None
             assert self.access_token is not None

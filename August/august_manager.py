@@ -12,7 +12,6 @@ from lib.MyPushover import Pushover
 from validate_2fa import complete_2fa
 
 
-
 def main() -> None:
     logger = get_logger(__name__)
     logger.info("=" * 50)
@@ -50,7 +49,6 @@ def main() -> None:
         default=20,
         help="Low battery alert threshold percentage (default: 20)",
     )
-
 
     # Validate command
     validate_parser = subparsers.add_parser("validate", help="Complete 2FA validation")
@@ -114,7 +112,7 @@ async def _run_command(
 
     elif args.command == "validate":
         logger.info("Starting 2FA validation process...")
-        
+
         await complete_2fa()
 
     elif args.command == "test":
