@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 # Create default database path using Constants.LOGGING_DIR
 DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["RachioFlume"])
+pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS.get("RachioFlume", Constants.PUSHOVER_DEFAULT_TOKEN))
 
 
 def main():

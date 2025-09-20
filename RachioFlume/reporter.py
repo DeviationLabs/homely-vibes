@@ -120,18 +120,18 @@ class WeeklyReporter:
         if report["zones"]:
             report_text.append("\nZONE DETAILS:")
             # Use fixed-width formatting for better display
-            header = f"{'Zone':<5}{'Name':<15}{'Sessions':<7}{'Duration(h)':<5}{'Water(gal)':<7}{'Rate(gpm)':<5}"
+            header = f"{'Zone':<4} {'Name':<8} {'Runs':<4} {'Hrs':<5} {'Gals':<5} {'GPM':<4}"
             report_text.append(header)
             report_text.append("-" * len(header))
 
             for zone in report["zones"]:
                 zone_line = (
-                    f"{zone['zone_number']:<5}"
-                    f"{zone['zone_name'][:15]:<15}"
-                    f"{zone['sessions']:<5}"
-                    f"{zone['total_duration_hours']:<3.1f}"
-                    f"{zone['total_water_gallons']:<5.1f}"
-                    f"{zone['average_flow_rate_gpm']:<2.1f}"
+                    f"{zone['zone_number']:<4} "
+                    f"{zone['zone_name'][:8]:<8} "
+                    f"{zone['sessions']:<4} "
+                    f"{zone['total_duration_hours']:<5.1f} "
+                    f"{zone['total_water_gallons']:<5.1f} "
+                    f"{zone['average_flow_rate_gpm']:<4.1f}"
                 )
                 report_text.append(zone_line)
 
