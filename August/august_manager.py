@@ -2,12 +2,15 @@
 import asyncio
 import argparse
 import sys
+from typing import Optional
 
 from august_client import AugustMonitor
 from lib.logger import get_logger
 from lib import Constants
 from august_client import AugustClient
 from lib.MyPushover import Pushover
+from validate_2fa import complete_2fa
+
 
 
 def main() -> None:
@@ -22,14 +25,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Monitor commands
-    monitor_parser = subparsers.add_parser("monitor", help="Lock monitoring commands")
-    monitor_group = monitor_parser.add_mutually_exclusive_group(required=True)
-    monitor_group.add_argument(
-        "--once", action="store_true", help="Check locks once and exit"
-    )
-    monitor_group.add_argument(
-        "--continuous", action="store_true", help="Run continuous monitoring"
-    )
+    monitor_parser = subparsers.add_parser("monitor", help="Continuous lock monitoring")
     monitor_parser.add_argument(
         "--interval",
         type=int,
@@ -55,8 +51,10 @@ def main() -> None:
         help="Low battery alert threshold percentage (default: 20)",
     )
 
-    # Status command
-    subparsers.add_parser("status", help="Show current lock status")
+
+    # Validate command
+    validate_parser = subparsers.add_parser("validate", help="Complete 2FA validation")
+    validate_parser.add_argument("code", nargs="?", help="6-digit verification code")
 
     # Test command
     test_parser = subparsers.add_parser("test", help="Test commands")
@@ -96,7 +94,7 @@ def main() -> None:
 
 
 async def _run_command(
-    args: argparse.Namespace, email: str, password: str, phone: str, logger
+    args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger
 ) -> None:
     if args.command == "monitor":
         monitor = AugustMonitor(
@@ -108,26 +106,16 @@ async def _run_command(
             low_battery_threshold=args.battery_threshold,
         )
 
-        if args.once:
-            logger.info("Running single lock check...")
-            await monitor.check_locks()
-            logger.info("Lock check completed")
+        logger.info(
+            f"Starting continuous monitoring (interval: {args.interval}s, "
+            f"threshold: {args.threshold}min)"
+        )
+        await monitor.run_continuous_monitoring(args.interval)
 
-        elif args.continuous:
-            logger.info(
-                f"Starting continuous monitoring (interval: {args.interval}s, "
-                f"threshold: {args.threshold}min)"
-            )
-            await monitor.run_continuous_monitoring(args.interval)
-
-    elif args.command == "status":
-        logger.info("Getting current lock status...")
-        monitor = AugustMonitor(email=email, password=password, phone=phone)
-        try:
-            status_report = await monitor.get_status_report()
-            print(status_report)
-        finally:
-            await monitor.client.close()
+    elif args.command == "validate":
+        logger.info("Starting 2FA validation process...")
+        
+        await complete_2fa()
 
     elif args.command == "test":
         if args.auth:

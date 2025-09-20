@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+from enum import Enum
 import time
 from typing import Optional, Dict, Any
 import json
@@ -19,6 +20,10 @@ from lib import Constants
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
+class DoorState(Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    UNKNOWN = "UNKNOWN" 
 
 @dataclass
 class LockState:
@@ -27,7 +32,7 @@ class LockState:
     is_locked: Optional[bool]
     timestamp: float
     battery_level: Optional[float] = None
-    door_state: Optional[str] = None
+    door_state: DoorState = DoorState.UNKNOWN
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -152,7 +157,7 @@ class AugustClient:
                 )
 
             battery_level = getattr(lock_detail, "battery_level", None)
-            door_state = getattr(lock_detail, "door_state", None)
+            door_state = getattr(lock_detail, "door_state", DoorState.UNKNOWN)
 
             lock_state = LockState(
                 lock_id=lock_id,
@@ -160,16 +165,18 @@ class AugustClient:
                 is_locked=is_locked,
                 timestamp=time.time(),
                 battery_level=battery_level,
-                door_state=door_state.name if door_state else None,
+                door_state=door_state,
             )
 
-            if is_locked is None:
+            if is_locked is None or door_state == DoorState.UNKNOWN:
                 status_str = "UNKNOWN"
             elif is_locked:
                 status_str = "LOCKED"
-            else:
-                status_str = "UNLOCKED"
-            self.logger.debug(f"Lock {lock_name} status: {status_str}")
+            elif door_state == DoorState.OPEN:
+                status_str = "OPEN"
+            elif door_state == DoorState.CLOSED:
+                status_str = "CLOSED but UNLOCKED"
+            self.logger.info(f"Lock {lock_name} ({lock_serial}) status: {status_str} {battery_level}")
             return lock_state
 
         except Exception as e:
@@ -188,18 +195,6 @@ class AugustClient:
 
         return statuses
 
-    async def get_offline_locks(self) -> Dict[str, str]:
-        """Get locks that are offline or have unknown status."""
-        if not self.locks:
-            await self.get_locks()
-
-        offline_locks = {}
-        for lock_id, lock in self.locks.items():
-            status = await self.get_lock_status(lock_id)
-            if status is None:  # Lock is offline/unknown
-                offline_locks[lock_id] = lock.device_name
-
-        return offline_locks
 
 
 class AugustMonitor:
@@ -262,10 +257,6 @@ class AugustMonitor:
     async def check_locks(self) -> None:
         try:
             statuses = await self.client.get_all_lock_statuses()
-            breakpoint()
-            if any(status is None for status in statuses.values()):
-                self.logger.error("Some locks are offline or have unknown status")
-                return
 
             current_time = time.time()
 
@@ -480,71 +471,3 @@ class AugustMonitor:
         finally:
             await self.client.close()
 
-    async def get_status_report(self) -> str:
-        try:
-            statuses = await self.client.get_all_lock_statuses()
-            offline_locks = await self.client.get_offline_locks()
-
-            if not statuses and not offline_locks:
-                return "No August locks found"
-
-            lines = ["August Lock Status Report", "=" * 30]
-
-            # Show online locks
-            for status in statuses.values():
-                if status is None:
-                    continue
-
-                if status.is_locked is None:
-                    lock_status = "⚠️ UNKNOWN"
-                elif status.is_locked:
-                    lock_status = "🔒 LOCKED"
-                else:
-                    lock_status = "🔓 UNLOCKED"
-
-                lines.append(f"{status.lock_name}: {lock_status}")
-
-                if (
-                    status.is_locked is False
-                    and status.lock_id in self.unlock_start_times
-                ):
-                    unlock_duration = (
-                        time.time() - self.unlock_start_times[status.lock_id]
-                    )
-                    lines.append(f"  Unlocked for: {unlock_duration / 60:.1f} minutes")
-
-                if status.lock_id in self.door_ajar_start_times:
-                    ajar_duration = (
-                        time.time() - self.door_ajar_start_times[status.lock_id]
-                    )
-                    lines.append(f"  Door ajar for: {ajar_duration / 60:.1f} minutes")
-
-                if status.door_state:
-                    lines.append(f"  Door: {status.door_state}")
-
-                if status.battery_level:
-                    battery_status = (
-                        "LOW"
-                        if status.battery_level < self.low_battery_threshold
-                        else "OK"
-                    )
-                    lines.append(
-                        f"  Battery: {status.battery_level}% ({battery_status})"
-                    )
-
-                lines.append("")
-
-            # Show offline/unknown locks
-            if offline_locks:
-                lines.append("Offline/Unknown Status Locks:")
-                for lock_name in offline_locks.values():
-                    lines.append(f"{lock_name}: ⚠️ OFFLINE/UNKNOWN")
-                    lines.append(
-                        "  Status cannot be determined (check WiFi/bridge connection)"
-                    )
-                    lines.append("")
-
-            return "\n".join(lines)
-
-        except Exception as e:
-            return f"Error getting status: {e}"
