@@ -2,46 +2,54 @@
 import os
 from dataclasses import dataclass
 
-MY_EXTERNAL_IP="1234"
+MY_EXTERNAL_IP = "1234"
 SECONDS_IN_DAY = 86400
 
 # Directories
-HOME = os.environ['HOME']
+HOME = os.environ["HOME"]
 LOGGING_DIR = "{}/logs".format(HOME)
-TUYA_LOG_BASE = '{}/tuya_logs/tuya_logs.csv'.format(HOME)
-JSON_SUMMARY_FILE = '{}/tuya_logs/summary.json'.format(HOME)
-JSON_SUMMARY_PATCH_FILE = '{}/tuya_logs/summary.json'.format(HOME) # When debugging, use a different name
-JSON_PUMPRATES_FILE = '{}/tuya_logs/pump_rates.json'.format(HOME)
+TUYA_LOG_BASE = "{}/tuya_logs/tuya_logs.csv".format(HOME)
+JSON_SUMMARY_FILE = "{}/tuya_logs/summary.json".format(HOME)
+JSON_SUMMARY_PATCH_FILE = "{}/tuya_logs/summary.json".format(
+    HOME
+)  # When debugging, use a different name
+JSON_PUMPRATES_FILE = "{}/tuya_logs/pump_rates.json".format(HOME)
 
 # Mailer.py
-EMAIL_FROM = 'user_from@gmail.com'
-EMAIL_TO = 'user_to@gmail.com'
-ALWAYS_EMAIL = False
-GMAIL_USERNAME = 'user_from'
-GMAIL_PASSWORD = 'XXX'
+EMAIL_FROM = "user_from@gmail.com"
+EMAIL_TO = "user_to@gmail.com"
+GMAIL_USERNAME = "user_from"
+GMAIL_PASSWORD = "XXX"
 
 # Twilio SMS
-TWILIO_SID = 'sid'
-AUTH_TOKEN = 'token'
-SMS_FROM = '+18001234567'
+TWILIO_SID = "sid"
+AUTH_TOKEN = "token"
+SMS_FROM = "+18001234567"
 
 # Pushover Notifications Account
-PUSHOVER_USER='user'
-PUSHOVER_DELIVERY_GROUP = 'gid'
-PUSHOVER_DEFAULT_TOKEN="token"
-PUSHOVER_TOKENS= {
-  'Foscam': "token",
-  'Powerwall': "token",
-  'NetworkCheck': "token"
+PUSHOVER_USER = "user"
+PUSHOVER_DELIVERY_GROUP = "gid"
+PUSHOVER_DEFAULT_TOKEN = "token"
+PUSHOVER_TOKENS = {
+    "August": "token",
+    "NetworkCheck": "token",
+    "NodeCheck": "token",
+    "Powerwall": "token",
 }
 
 # WaterMonitor: Processing
 MAX_ZONES = 16
-MAX_NEW_FILES = 2 # Number of recent raw log files that are reprocessed into summary json
+MAX_NEW_FILES = (
+    2  # Number of recent raw log files that are reprocessed into summary json
+)
 LOGROTATE_PER_DAY = 4
-DAYS_LOOKBACK = 90 # Days of data to store in the pumprates file. Perf penalty if too large
-START_FROM_EPOCH = 1539161991 # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
-RACHIO_EVENTS_CMD = '{}/bin/WaterLogging/get_rachio_events.js'.format(HOME)
+DAYS_LOOKBACK = (
+    90  # Days of data to store in the pumprates file. Perf penalty if too large
+)
+START_FROM_EPOCH = (
+    1539161991  # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
+)
+RACHIO_EVENTS_CMD = "{}/bin/WaterLogging/get_rachio_events.js".format(HOME)
 
 # WaterMonitor: Alerting
 DAYS_EMAIL_REPORT = 14
@@ -49,94 +57,116 @@ MIN_DRIP_ZONE_ALERT_TIME = 1800
 MIN_DRIP_PLOT_TIME = 189
 MIN_MISC_ZONE_ALERT_TIME = SECONDS_IN_DAY
 MIN_SPRINKLER_ZONE_ALERT_TIME = 600
-ALERT_THRESH = 1.18 # ie: 18% higher than average
-PUMP_ALERT = 22 # If pump cycles off faster than this in seconds, then alert.
+ALERT_THRESH = 1.18  # ie: 18% higher than average
+PUMP_ALERT = 22  # If pump cycles off faster than this in seconds, then alert.
 PUMP_TOGGLES_COUNT = 25
 
 # Nodes
-FOSCAM_NODES={'Frontyard':    "192.168.1.A",
-              'Garage' :      "192.168.1.B"}
-FOSCAM_USERNAME="user_from"
-FOSCAM_PASSWORD="YYY"
+FOSCAM_NODES = {"Frontyard": "192.168.1.A", "Garage": "192.168.1.B"}
+FOSCAM_USERNAME = "user_from"
+FOSCAM_PASSWORD = "YYY"
 
-WINDOWS_NODES={'Alpha': "192.168.1.C", 'OtterBox': "192.168.1.D"}
-WINDOWS_USERNAME="user_from"
-WINDOWS_PASSWORD="YYY"
+WINDOWS_NODES = {"Alpha": "192.168.1.C", "OtterBox": "192.168.1.D"}
+WINDOWS_USERNAME = "user_from"
+WINDOWS_PASSWORD = "YYY"
 
 # Foscam file purge settings
-FOSCAM_DIR="/path/to/foscam"  # Update this to actual foscam directory path
-PURGE_AFTER_DAYS=30
-FOSCAM_PUSHOVER_RCPT='a@aa.aa'
+FOSCAM_DIR = "/path/to/foscam"  # Update this to actual foscam directory path
+PURGE_AFTER_DAYS = 90
 
 # Network Check
 MIN_DL_BW = 150  # Mbps
-MIN_UL_BW = 4    # Mbps
+MIN_UL_BW = 4  # Mbps
 
 # Info on all nodes.
 # Note: sms_inform and histfile is only used by BrowserAlert
 # TODO: Still need to move all other nodes to this new canonical config
-NODES={
-  "node1": {
-     "ip": "192.168.1.D",
-     "username": "XYZA",
-     "password": None,
-     "histfile": r'/Users/user1/Library/Application\ Support/Google/Chrome/Default/History',
-     "sms_inform": ['+1408-------'],
-     "whitelist": "kahoot", # Full python regex
-   },
-   "node2": {
-     "ip": "192.168.1.E",
-     "username": "XYZA",
-     "password": None,
-     "histfile": r'/Users/user2/Library/Application\ Support/Google/Chrome/Default/History',
-     "sms_inform": ['+1408-------'],
-   },
+NODES = {
+    "node1": {
+        "ip": "192.168.1.D",
+        "username": "XYZA",
+        "password": None,
+        "histfile": r"/Users/user1/Library/Application\ Support/Google/Chrome/Default/History",
+        "sms_inform": ["+1408-------"],
+        "whitelist": "kahoot",  # Full python regex
+    },
+    "node2": {
+        "ip": "192.168.1.E",
+        "username": "XYZA",
+        "password": None,
+        "histfile": r"/Users/user2/Library/Application\ Support/Google/Chrome/Default/History",
+        "sms_inform": ["+1408-------"],
+    },
 }
 
 # Browser Alert
-REFRESH_DELAY = 30     # In seconds, how soon should we check?
-MIN_REPORTING_GAP = 6  # If we already got an alert, then don't need a followup right away
-HR_START_MONITORING = 2 # When do the SMSs start firing
-HR_STOP_MONITORING = 23 # 13
+REFRESH_DELAY = 30  # In seconds, how soon should we check?
+MIN_REPORTING_GAP = (
+    6  # If we already got an alert, then don't need a followup right away
+)
+HR_START_MONITORING = 2  # When do the SMSs start firing
+HR_STOP_MONITORING = 23  # 13
 HR_EMAIL = 19
-BLACKLIST=[
-  "pokemon",
-  "surviv",
-  "dragapult",
+BLACKLIST = [
+    "pokemon",
+    "surviv",
+    "charmeleon",
+    "dutrigo",
+    "veekun",
+    "github",
+    "soraapp",
+    "emulator",
+    "gba",
+    "garfield",
+    "shellshock",
+    "youtube",
+    "scratch",
+    "clashman2.github.io",
+    ".io/",
+    "dragapult",
 ]
 
 # Tesla Powerwall
-POWERWALL_IP="192.168.X.Y"
-POWERWALL_EMAIL="a@aa.aa"
-POWERWALL_PASSWORD="XYZA"
-POWERWALL_SMS_RCPT = '+18001234567'
-POWERWALL_POLL_TIME = 180
+POWERWALL_IP = "192.168.X.Y"
+POWERWALL_EMAIL = "a@aa.aa"
+POWERWALL_PASSWORD = "XYZA"
+POWERWALL_SMS_RCPT = "+18001234567"
+POWERWALL_POLL_TIME = (
+    180  # Setting this too high can result in PW dumping more than intended.
+)
 
-TESLA_EMAIL="a@aa.aa"
-TESLA_PASSWORD="XTZA"
+TESLA_EMAIL = "a@aa.aa"
+TESLA_PASSWORD = "XTZA"
 
 # Rachio API
-RACHIO_API_KEY="some_key"
-RACHIO_ID="some_id"
+RACHIO_API_KEY = "some_key"
+RACHIO_ID = "some_id"
 
 # Flume API
-FLUME_CLIENT_ID="some_id"
-FLUME_CLIENT_SECRET="some_secret"
-FLUME_USER_EMAIL="some user"
-FLUME_PASSWORD="some pass"
+FLUME_CLIENT_ID = "some_id"
+FLUME_CLIENT_SECRET = "some_secret"
+FLUME_USER_EMAIL = "some user"
+FLUME_PASSWORD = "some pass"
+
+# August Smart Locks API
+AUGUST_EMAIL = "your_august_email@example.com"
+AUGUST_PASSWORD = "your_august_password"
+AUGUST_PHONE = "+1234567890"
+
 
 @dataclass
 class OpModeConfig:
-  time_start: int
-  time_end: int
-  pct_gradient_per_hr: int
-  pct_thresh: int
-  iff_higher: bool
-  pct_min: int
-  pct_min_trail_stop: int
-  op_mode: str
-  reason: str
-  always_notify: bool
+    time_start: int
+    time_end: int
+    pct_gradient_per_hr: int
+    pct_thresh: int
+    iff_higher: bool
+    pct_min: int
+    pct_min_trail_stop: int
+    op_mode: str
+    reason: str
+    always_notify: bool
+
 
 # How this works: Tesla interprets both flags "customer_preferred_export_rule",
 # "allow_charge_from_grid_with_solar_installed" as False in "self_consumption" mode,
@@ -150,12 +180,68 @@ class OpModeConfig:
 # then everything left before end of shoulder.
 # Recall: 1% is 0.135kWh ==> base drain rate of 0.5kWh is 3.5%/hr
 POWERWALL_DECISION_POINTS = [
-  OpModeConfig( 000,  100,   0,  28, False, 30,  0, "autonomous", "Prep for midnight recharge..", True),
-  OpModeConfig(1300, 1455,  35,  99, False, 20,  0, "autonomous", "Solar recharge insufficient. Drawdown before shoulder..", True),
-  OpModeConfig(1455, 1900,   0,   0,  True, 20,  0, "self_consumption", "In Peak. Discharge..", False),
-  OpModeConfig( 000, 1500,   0,   0,  True, 30, 10, "self_consumption", "Nightly reserves rebuilt. Solar charge only..", False),
-  OpModeConfig(1900, 2359,  -8,  20, False, 20,  0, "self_consumption", "Reserve for rest of shoulder. No dump.", True),
-  OpModeConfig(1900, 2100, -35,  40,  True, 20,  0, "autonomous", "Dump surplus before end of peak.", False),
-#  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder", False),
+    OpModeConfig(
+        000,
+        100,
+        0,
+        28,
+        False,
+        30,
+        0,
+        "autonomous",
+        "Prep for midnight recharge..",
+        True,
+    ),
+    OpModeConfig(
+        1300,
+        1455,
+        35,
+        99,
+        False,
+        20,
+        0,
+        "autonomous",
+        "Solar recharge insufficient. Drawdown before shoulder..",
+        True,
+    ),
+    OpModeConfig(
+        1455, 1900, 0, 0, True, 20, 0, "self_consumption", "In Peak. Discharge..", False
+    ),
+    OpModeConfig(
+        000,
+        1500,
+        0,
+        0,
+        True,
+        30,
+        10,
+        "self_consumption",
+        "Nightly reserves rebuilt. Solar charge only..",
+        False,
+    ),
+    OpModeConfig(
+        1900,
+        2359,
+        -8,
+        20,
+        False,
+        20,
+        0,
+        "self_consumption",
+        "Reserve for rest of shoulder..",
+        False,
+    ),
+    OpModeConfig(
+        1900,
+        2100,
+        -35,
+        40,
+        True,
+        20,
+        0,
+        "autonomous",
+        "Dump surplus before end of peak..",
+        False,
+    ),
+    #  OpModeConfig(2345, 2359, -35,  20,  True, 20,  0, "autonomous", "Dump residuals before end of shoulder..", False),
 ]
-

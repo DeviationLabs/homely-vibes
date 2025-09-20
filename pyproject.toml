@@ -37,6 +37,8 @@ dependencies = [
     "oauthlib>=3.3.1",
     "setuptools>=80.9.0",
     "asyncio-mqtt (>=0.16.2,<0.17.0)",
+    "yalexs>=8.0.0",
+    "aiohttp>=3.12.15",
 ]
 
 [project.optional-dependencies]
@@ -62,7 +64,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["lib", "Tesla", "WaterParser", "Bimpop.ai"]
+packages = ["lib", "Tesla", "WaterParser", "Bimpop.ai", "August"]
 
 [tool.deptry]
 known_first_party = [
@@ -140,7 +142,7 @@ DEP002 = [
 DEP003 = ["google", "TeslaPy"]
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "WaterParser", "Bimpop.ai"]
+testpaths = ["Tesla", "WaterParser", "Bimpop.ai", "August"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -203,3 +205,8 @@ module = [
     "tesla_powerwall.*",
 ]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.0",
+]

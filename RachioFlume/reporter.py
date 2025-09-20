@@ -96,13 +96,15 @@ class WeeklyReporter:
 
         return self.generate_weekly_report(last_week_start)
 
-    def generate_period_report(self, end_date: str = None, lookback_days: int = 7) -> Dict[str, Any]:
+    def generate_period_report(
+        self, end_date: str = None, lookback_days: int = 7
+    ) -> Dict[str, Any]:
         """Generate report for a specific period.
-        
+
         Args:
             end_date: End date in YYYY-MM-DD format (defaults to today)
             lookback_days: Number of days to look back from end date (default: 7)
-            
+
         Returns:
             Dict containing period statistics
         """
@@ -110,16 +112,22 @@ class WeeklyReporter:
             try:
                 period_end = datetime.strptime(end_date, "%Y-%m-%d")
             except ValueError:
-                self.logger.error(f"Invalid date format: {end_date}. Expected YYYY-MM-DD")
-                raise ValueError(f"Invalid date format: {end_date}. Expected YYYY-MM-DD")
+                self.logger.error(
+                    f"Invalid date format: {end_date}. Expected YYYY-MM-DD"
+                )
+                raise ValueError(
+                    f"Invalid date format: {end_date}. Expected YYYY-MM-DD"
+                )
         else:
             period_end = datetime.now()
-            
+
         period_start = period_end - timedelta(days=lookback_days)
-        
+
         return self.generate_period_report_with_dates(period_start, period_end)
 
-    def generate_period_report_with_dates(self, period_start: datetime, period_end: datetime) -> Dict[str, Any]:
+    def generate_period_report_with_dates(
+        self, period_start: datetime, period_end: datetime
+    ) -> Dict[str, Any]:
         """Generate a comprehensive period report.
 
         Args:
@@ -179,29 +187,29 @@ class WeeklyReporter:
 
     def generate_raw_data_report(self, hours_back: int = 24) -> Dict[str, Any]:
         """Generate raw data report with 5-minute increments.
-        
+
         Args:
             hours_back: Number of hours to look back from now (default: 24)
-            
+
         Returns:
             Dict containing raw data in 5-minute intervals
         """
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=hours_back)
-        
-        self.logger.info(
-            f"Generating raw data report for {start_time} to {end_time}"
-        )
-        
+
+        self.logger.info(f"Generating raw data report for {start_time} to {end_time}")
+
         # Get raw data in 5-minute intervals
-        raw_data = self.db.get_raw_data_intervals(start_time, end_time, interval_minutes=5)
-        
+        raw_data = self.db.get_raw_data_intervals(
+            start_time, end_time, interval_minutes=5
+        )
+
         return {
             "report_generated": datetime.now().isoformat(),
             "period_start": start_time.isoformat(),
             "period_end": end_time.isoformat(),
             "interval_minutes": 5,
-            "data_points": raw_data
+            "data_points": raw_data,
         }
 
     def save_report_to_file(self, report: Dict[str, Any], filename: str) -> None:
@@ -290,29 +298,33 @@ class WeeklyReporter:
         self.logger.info("RAW WATER USAGE DATA REPORT")
         self.logger.info("=" * 60)
         self.logger.info(f"Report Generated: {report['report_generated']}")
-        self.logger.info(f"Time Period: {report['period_start']} to {report['period_end']}")
+        self.logger.info(
+            f"Time Period: {report['period_start']} to {report['period_end']}"
+        )
         self.logger.info(f"Interval: {report['interval_minutes']} minutes")
         self.logger.info(f"Total Data Points: {len(report['data_points'])}")
         self.logger.info("")
-        
-        if not report['data_points']:
+
+        if not report["data_points"]:
             self.logger.info("No data available for this time period.")
         else:
-            self.logger.info("Time Interval               | Avg GPM | Max GPM | Min GPM | Points | Active Avg")
+            self.logger.info(
+                "Time Interval               | Avg GPM | Max GPM | Min GPM | Points | Active Avg"
+            )
             self.logger.info("-" * 80)
-            
-            for data_point in report['data_points']:
-                time_str = data_point['interval_start']
-                avg_flow = data_point['avg_flow_rate'] or 0
-                max_flow = data_point['max_flow_rate'] or 0
-                min_flow = data_point['min_flow_rate'] or 0
-                points = data_point['data_points']
-                active_avg = data_point['avg_active_flow_rate'] or 0
-                
+
+            for data_point in report["data_points"]:
+                time_str = data_point["interval_start"]
+                avg_flow = data_point["avg_flow_rate"] or 0
+                max_flow = data_point["max_flow_rate"] or 0
+                min_flow = data_point["min_flow_rate"] or 0
+                points = data_point["data_points"]
+                active_avg = data_point["avg_active_flow_rate"] or 0
+
                 self.logger.info(
                     f"{time_str[:16]:25} | {avg_flow:7.2f} | {max_flow:7.2f} | {min_flow:7.2f} | {points:6} | {active_avg:7.2f}"
                 )
-        
+
         self.logger.info("=" * 60)
 
     def email_report(self, report: Dict[str, Any], alert: bool = False) -> None:

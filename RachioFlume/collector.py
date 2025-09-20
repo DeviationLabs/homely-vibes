@@ -24,13 +24,21 @@ class WaterTrackingCollector:
         self.poll_interval = poll_interval_seconds
 
         # Initialize last collection times from database to avoid duplicates
-        self.last_rachio_collection: Optional[datetime] = self.db.get_last_collection_timestamp("rachio")
-        self.last_flume_collection: Optional[datetime] = self.db.get_last_collection_timestamp("flume")
-        
+        self.last_rachio_collection: Optional[datetime] = (
+            self.db.get_last_collection_timestamp("rachio")
+        )
+        self.last_flume_collection: Optional[datetime] = (
+            self.db.get_last_collection_timestamp("flume")
+        )
+
         if self.last_rachio_collection:
-            self.logger.info(f"Initialized with last Rachio collection: {self.last_rachio_collection}")
+            self.logger.info(
+                f"Initialized with last Rachio collection: {self.last_rachio_collection}"
+            )
         if self.last_flume_collection:
-            self.logger.info(f"Initialized with last Flume collection: {self.last_flume_collection}")
+            self.logger.info(
+                f"Initialized with last Flume collection: {self.last_flume_collection}"
+            )
 
     async def collect_rachio_data(self) -> None:
         """Collect data from Rachio API."""
@@ -55,9 +63,13 @@ class WaterTrackingCollector:
                 filtered_events = self._filter_duplicate_events(events)
                 if filtered_events:
                     self.db.save_watering_events(filtered_events)
-                    self.logger.info(f"Collected {len(filtered_events)} new watering events from Rachio ({len(events) - len(filtered_events)} duplicates filtered)")
+                    self.logger.info(
+                        f"Collected {len(filtered_events)} new watering events from Rachio ({len(events) - len(filtered_events)} duplicates filtered)"
+                    )
                 else:
-                    self.logger.info(f"No new events after filtering {len(events)} duplicates from Rachio")
+                    self.logger.info(
+                        f"No new events after filtering {len(events)} duplicates from Rachio"
+                    )
 
             collection_time = datetime.now()
             self.last_rachio_collection = collection_time
@@ -88,9 +100,13 @@ class WaterTrackingCollector:
                 filtered_readings = self._filter_duplicate_readings(readings)
                 if filtered_readings:
                     self.db.save_water_readings(filtered_readings)
-                    self.logger.info(f"Collected {len(filtered_readings)} new water readings from Flume ({len(readings) - len(filtered_readings)} duplicates filtered)")
+                    self.logger.info(
+                        f"Collected {len(filtered_readings)} new water readings from Flume ({len(readings) - len(filtered_readings)} duplicates filtered)"
+                    )
                 else:
-                    self.logger.info(f"No new readings after filtering {len(readings)} duplicates from Flume")
+                    self.logger.info(
+                        f"No new readings after filtering {len(readings)} duplicates from Flume"
+                    )
 
             self.last_flume_collection = end_time
             # Save collection timestamp to database for persistence
@@ -187,40 +203,43 @@ class WaterTrackingCollector:
         """Filter out watering events that already exist in the database."""
         if not events:
             return events
-            
+
         # Get the last data timestamp from the database
         last_data_timestamp = self.db.get_last_data_timestamp("rachio")
-        
+
         if not last_data_timestamp:
             # No existing data, return all events
             return events
-            
+
         # Filter out events that are at or before the last timestamp
         filtered_events = []
         for event in events:
             # Assuming the event has an event_date attribute
-            if hasattr(event, 'event_date') and event.event_date > last_data_timestamp:
+            if hasattr(event, "event_date") and event.event_date > last_data_timestamp:
                 filtered_events.append(event)
-                
+
         return filtered_events
 
     def _filter_duplicate_readings(self, readings: list) -> list:
         """Filter out water readings that already exist in the database."""
         if not readings:
             return readings
-            
+
         # Get the last data timestamp from the database
         last_data_timestamp = self.db.get_last_data_timestamp("flume")
-        
+
         if not last_data_timestamp:
             # No existing data, return all readings
             return readings
-            
+
         # Filter out readings that are at or before the last timestamp
         filtered_readings = []
         for reading in readings:
             # Assuming the reading has a timestamp attribute
-            if hasattr(reading, 'timestamp') and reading.timestamp > last_data_timestamp:
+            if (
+                hasattr(reading, "timestamp")
+                and reading.timestamp > last_data_timestamp
+            ):
                 filtered_readings.append(reading)
-                
+
         return filtered_readings
