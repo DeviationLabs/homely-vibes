@@ -4,14 +4,17 @@
 import asyncio
 import argparse
 import sys
-
+from time import sleep
 from collector import WaterTrackingCollector
+from lib.MyPushover import Pushover
 from reporter import WeeklyReporter
 from lib.logger import get_logger
 from lib import Constants
+from datetime import datetime, timedelta
 
 # Create default database path using Constants.LOGGING_DIR
 DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
+pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["RachioFlume"])
 
 
 def main():
@@ -29,13 +32,6 @@ def main():
 
     # Collector commands
     collect_parser = subparsers.add_parser("collect", help="Data collection commands")
-    collect_group = collect_parser.add_mutually_exclusive_group(required=True)
-    collect_group.add_argument(
-        "--once", action="store_true", help="Run data collection once"
-    )
-    collect_group.add_argument(
-        "--continuous", action="store_true", help="Run continuous data collection"
-    )
     collect_parser.add_argument(
         "--interval",
         type=int,
@@ -51,6 +47,7 @@ def main():
     report_parser.add_argument(
         "--end-date",
         type=str,
+        default=datetime.now().strftime("%Y-%m-%d"),
         help="End date for report (YYYY-MM-DD format, defaults to today)",
     )
     report_parser.add_argument(
@@ -104,21 +101,17 @@ def run_collection(args):
     try:
         collector = WaterTrackingCollector(DB_PATH, args.interval)
 
-        if args.once:
-            asyncio.run(collector.collect_once())
-        elif args.continuous:
-            logger.info(f"Starting continuous collection every {args.interval} seconds")
-            logger.info("Press Ctrl+C to stop")
-            asyncio.run(collector.run_continuous())
-
-        return 0
+        logger.info(f"Starting continuous collection every {args.interval} seconds")
+        logger.info("Press Ctrl+C to stop")
+        asyncio.run(collector.run_continuous())
 
     except KeyboardInterrupt:
         logger.info("Collection stopped by user")
         return 0
     except Exception as e:
         logger.error(f"Error during collection: {e}")
-        return 1
+        pushover.send_message(f"Error during collection: {e}", title="RachioFlume Error", priority=2)
+        sleep(3600)  ## cooldown for an hour. 
 
 
 def show_status(args):
@@ -179,7 +172,9 @@ def generate_report(args):
     try:
         reporter = WeeklyReporter(DB_PATH)
 
-        report = reporter.generate_period_report(args.end_date, args.lookback)
+        end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
+        start_date = end_date - timedelta(days=args.lookback)
+        report = reporter.generate_period_report_with_dates(start_date, end_date)
         reporter.print_report(report)
 
         if args.email:
