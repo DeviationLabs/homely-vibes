@@ -197,17 +197,17 @@ class AugustMonitor:
         password: str,
         phone: Optional[str] = None,
         unlock_threshold_minutes: int = 5,
-        door_ajar_threshold_minutes: int = 10,
+        ajar_threshold_minutes: int = 10,
         low_battery_threshold: int = 20,
         battery_alert_cooldown_minutes: int = 24*60,
-        alert_cooldown_minutes: int = 10,
+        lock_alert_cooldown_minutes: int = 10,
     ):
         self.client = AugustClient(email, password, phone)
         self.unlock_threshold = unlock_threshold_minutes * 60
-        self.door_ajar_threshold = door_ajar_threshold_minutes * 60
+        self.ajar_threshold = ajar_threshold_minutes * 60
         self.low_battery_threshold = low_battery_threshold
         self.battery_alert_cooldown = battery_alert_cooldown_minutes * 60
-        self.alert_cooldown = alert_cooldown_minutes * 60
+        self.alert_cooldown = lock_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
             Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
@@ -215,7 +215,8 @@ class AugustMonitor:
         # Tracking for different alert types
         self.unlock_start_times: Dict[str, float] = {}
         self.door_ajar_start_times: Dict[str, float] = {}
-        self.last_alert_times: Dict[str, float] = {}
+        self.last_alert_times: Dict[str, float] = {}  # For unlock alerts
+        self.last_door_ajar_alerts: Dict[str, float] = {}  # For door ajar alerts
         self.last_battery_alerts: Dict[str, float] = {}
         self.last_lock_failure_alerts: Dict[str, float] = {}
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
@@ -228,6 +229,7 @@ class AugustMonitor:
                 self.unlock_start_times = state.get("unlock_start_times", {})
                 self.door_ajar_start_times = state.get("door_ajar_start_times", {})
                 self.last_alert_times = state.get("last_alert_times", {})
+                self.last_door_ajar_alerts = state.get("last_door_ajar_alerts", {})
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
                 self.last_lock_failure_alerts = state.get(
                     "last_lock_failure_alerts", {}
@@ -242,6 +244,7 @@ class AugustMonitor:
                 "unlock_start_times": self.unlock_start_times,
                 "door_ajar_start_times": self.door_ajar_start_times,
                 "last_alert_times": self.last_alert_times,
+                "last_door_ajar_alerts": self.last_door_ajar_alerts,
                 "last_battery_alerts": self.last_battery_alerts,
                 "last_lock_failure_alerts": self.last_lock_failure_alerts,
             }
@@ -272,6 +275,9 @@ class AugustMonitor:
             }
             self.last_alert_times = {
                 k: v for k, v in self.last_alert_times.items() if k in existing_locks
+            }
+            self.last_door_ajar_alerts = {
+                k: v for k, v in self.last_door_ajar_alerts.items() if k in existing_locks
             }
             self.last_battery_alerts = {
                 k: v for k, v in self.last_battery_alerts.items() if k in existing_locks
@@ -313,8 +319,11 @@ class AugustMonitor:
             else:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
                 if unlock_duration >= self.unlock_threshold:
-                    await self._send_unlock_alert(lock_id, status, unlock_duration)
-                    self.last_alert_times[lock_id] = current_time
+                    # Check cooldown before sending alert
+                    last_alert = self.last_alert_times.get(lock_id, 0)
+                    if current_time - last_alert >= self.alert_cooldown:
+                        await self._send_unlock_alert(lock_id, status, unlock_duration)
+                        self.last_alert_times[lock_id] = current_time
 
         
         if status.door_state == DoorState.CLOSED:
@@ -331,9 +340,12 @@ class AugustMonitor:
                 self.logger.info(f"Door {status.lock_name} is ajar - starting timer")
             else:
                 ajar_duration = current_time - self.door_ajar_start_times[lock_id]
-                if ajar_duration >= self.door_ajar_threshold:
-                    await self._send_door_ajar_alert(lock_id, status, ajar_duration)
-                    self.door_ajar_start_times[lock_id] = current_time
+                if ajar_duration >= self.ajar_threshold:
+                    # Check cooldown before sending alert
+                    last_alert = self.last_door_ajar_alerts.get(lock_id, 0)
+                    if current_time - last_alert >= self.alert_cooldown:
+                        await self._send_door_ajar_alert(lock_id, status, ajar_duration)
+                        self.last_door_ajar_alerts[lock_id] = current_time
 
 
     async def _send_unlock_alert(
@@ -361,9 +373,6 @@ class AugustMonitor:
         message = (
             f"{status.lock_name} door has been ajar for {minutes_ajar:.0f} minutes"
         )
-
-        if status.battery_level:
-            message += f"\nBattery: {status.battery_level}%"
 
         try:
             self.pushover.send_message(message, title=title, priority=1)
