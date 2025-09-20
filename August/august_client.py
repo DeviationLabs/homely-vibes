@@ -136,6 +136,7 @@ class AugustClient:
                 self.access_token, lock_id
             )
             lock_name = lock_detail.device_name
+            lock_serial = lock_detail.serial_number
 
             # Handle lock status - only treat as unlocked if explicitly UNLOCKED
             lock_status_name = lock_detail.lock_status.name
@@ -147,7 +148,7 @@ class AugustClient:
                 # UNKNOWN or other status - don't treat as unlocked, but still check battery
                 is_locked = None
                 self.logger.warning(
-                    f"Lock {lock_name} has unknown status: {lock_status_name}"
+                    f"Lock {lock_name} ({lock_serial}) has unknown status: {lock_status_name}"
                 )
 
             battery_level = getattr(lock_detail, "battery_level", None)
@@ -217,7 +218,7 @@ class AugustMonitor:
         self.low_battery_threshold = low_battery_threshold
         self.logger = get_logger(__name__)
         self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS['August']
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
         )
         # Tracking for different alert types
         self.unlock_start_times: Dict[str, float] = {}
@@ -261,6 +262,11 @@ class AugustMonitor:
     async def check_locks(self) -> None:
         try:
             statuses = await self.client.get_all_lock_statuses()
+            breakpoint()
+            if any(status is None for status in statuses.values()):
+                self.logger.error("Some locks are offline or have unknown status")
+                return
+
             current_time = time.time()
 
             for lock_id, status in statuses.items():
@@ -298,9 +304,11 @@ class AugustMonitor:
     ) -> None:
         # Skip lock/door monitoring for unknown status locks, but still check battery
         if status.is_locked is None:
-            self.logger.debug(f"Skipping lock monitoring for {status.lock_name} (unknown status)")
+            self.logger.debug(
+                f"Skipping lock monitoring for {status.lock_name} (unknown status)"
+            )
             return
-            
+
         # Check for unlock alerts
         if status.is_locked:
             if lock_id in self.unlock_start_times:
@@ -370,7 +378,7 @@ class AugustMonitor:
             message += f"\nBattery: {status.battery_level}%"
 
         try:
-            self.pushover.send_message(message, title=title)
+            self.pushover.send_message(message, title=title, priority=1)
             self.last_alert_times[lock_id] = current_time
             self.logger.warning(f"Sent unlock alert: {message}")
         except Exception as e:
@@ -398,7 +406,7 @@ class AugustMonitor:
             message += f"\nBattery: {status.battery_level}%"
 
         try:
-            self.pushover.send_message(message, title=title)
+            self.pushover.send_message(message, title=title, priority=1)
             self.last_alert_times[lock_id] = current_time
             self.logger.warning(f"Sent door ajar alert: {message}")
         except Exception as e:
@@ -486,17 +494,20 @@ class AugustMonitor:
             for status in statuses.values():
                 if status is None:
                     continue
-                    
+
                 if status.is_locked is None:
                     lock_status = "⚠️ UNKNOWN"
                 elif status.is_locked:
                     lock_status = "🔒 LOCKED"
                 else:
                     lock_status = "🔓 UNLOCKED"
-                    
+
                 lines.append(f"{status.lock_name}: {lock_status}")
 
-                if status.is_locked is False and status.lock_id in self.unlock_start_times:
+                if (
+                    status.is_locked is False
+                    and status.lock_id in self.unlock_start_times
+                ):
                     unlock_duration = (
                         time.time() - self.unlock_start_times[status.lock_id]
                     )

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import asyncio
 import argparse
 import sys
@@ -7,6 +6,8 @@ import sys
 from august_client import AugustMonitor
 from lib.logger import get_logger
 from lib import Constants
+from august_client import AugustClient
+from lib.MyPushover import Pushover
 
 
 def main() -> None:
@@ -131,7 +132,6 @@ async def _run_command(
     elif args.command == "test":
         if args.auth:
             logger.info("Testing August authentication...")
-            from august_client import AugustClient
 
             client = AugustClient(email, password, phone)
             try:
@@ -153,7 +153,6 @@ async def _run_command(
 
         elif args.notification:
             logger.info("Testing pushover notification...")
-            from lib.MyPushover import Pushover
 
             pushover = Pushover(
                 Constants.PUSHOVER_USER, Constants.PUSHOVER_DEFAULT_TOKEN
