@@ -63,6 +63,16 @@ def main():
     # Summary command
     subparsers.add_parser("summary", help="Generate efficiency analysis")
 
+    # Raw data command
+    raw_parser = subparsers.add_parser(
+        "raw", help="Generate raw data report (5-minute intervals)"
+    )
+    raw_parser.add_argument(
+        "--hours",
+        type=int,
+        default=24,
+        help="Number of hours for raw data report (default: 24)",
+    )
 
     args = parser.parse_args()
 
@@ -78,6 +88,8 @@ def main():
         return generate_report(args)
     elif args.command == "summary":
         return generate_summary_report(args)
+    elif args.command == "raw":
+        return generate_raw_report(args)
 
     return 0
 
@@ -194,6 +206,21 @@ def generate_summary_report(args):
         return 1
 
 
+def generate_raw_report(args):
+    """Generate raw data reports."""
+    logger = get_logger(__name__)
+
+    try:
+        reporter = WeeklyReporter(DB_PATH)
+
+        report = reporter.generate_raw_data_report(args.hours)
+        reporter.print_raw_report(report)
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Error generating raw report: {e}")
+        return 1
 
 
 if __name__ == "__main__":

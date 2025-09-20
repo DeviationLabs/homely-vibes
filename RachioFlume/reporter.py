@@ -143,7 +143,7 @@ class WeeklyReporter:
         
         report_text.append("WATER USAGE REPORT")
         report_text.append(f"Period: {report.period_start.date()} to {report.period_end.date()}")
-        report_text.append("=" * 40)
+        report_text.append("=" * 35)
 
         report_text.append("\nSUMMARY:")
         report_text.append(
@@ -172,7 +172,7 @@ class WeeklyReporter:
                 )
                 report_text.append(zone_line)
 
-        report_text.append("\n" + "=" * 40)
+        report_text.append("\n" + "=" * 35)
         return "\n".join(report_text)
 
     def print_report(self, report: WaterUsageReport) -> None:
@@ -185,9 +185,9 @@ class WeeklyReporter:
 
     def print_raw_report(self, report: Dict[str, Any]) -> None:
         """Print raw data report in a readable format."""
-        self.logger.info("=" * 60)
+        self.logger.info("=" * 35)
         self.logger.info("RAW WATER USAGE DATA REPORT")
-        self.logger.info("=" * 60)
+        self.logger.info("=" * 35)
         self.logger.info(f"Report Generated: {report['report_generated']}")
         self.logger.info(
             f"Time Period: {report['period_start']} to {report['period_end']}"
@@ -202,7 +202,7 @@ class WeeklyReporter:
             self.logger.info(
                 "Time Interval               | Avg GPM | Max GPM | Min GPM | Points | Active Avg"
             )
-            self.logger.info("-" * 80)
+            self.logger.info("-" * 35)
 
             for data_point in report["data_points"]:
                 time_str = data_point["interval_start"]
@@ -216,7 +216,7 @@ class WeeklyReporter:
                     f"{time_str[:16]:25} | {avg_flow:7.2f} | {max_flow:7.2f} | {min_flow:7.2f} | {points:6} | {active_avg:7.2f}"
                 )
 
-        self.logger.info("=" * 60)
+        self.logger.info("=" * 35)
 
     def email_report(self, report: WaterUsageReport, alert: bool = False) -> None:
         """Email report in formatted text.
@@ -238,6 +238,33 @@ class WeeklyReporter:
         )
 
         self.logger.info(f"Report emailed for {subject_prefix.lower()} starting {start_date}")
+
+    def generate_raw_data_report(self, hours_back: int = 24) -> Dict[str, Any]:
+        """Generate raw data report with 5-minute increments.
+
+        Args:
+            hours_back: Number of hours to look back from now (default: 24)
+
+        Returns:
+            Dict containing raw data in 5-minute intervals
+        """
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=hours_back)
+
+        self.logger.info(f"Generating raw data report for {start_time} to {end_time}")
+
+        # Get raw data in 5-minute intervals
+        raw_data = self.db.get_raw_data_intervals(
+            start_time, end_time, interval_minutes=5
+        )
+
+        return {
+            "report_generated": datetime.now().isoformat(),
+            "period_start": start_time.isoformat(),
+            "period_end": end_time.isoformat(),
+            "interval_minutes": 5,
+            "data_points": raw_data,
+        }
 
     def get_zone_efficiency_analysis(self, weeks_back: int = 4) -> Dict[str, Any]:
         """Analyze zone efficiency over multiple weeks.
