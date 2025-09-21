@@ -38,7 +38,7 @@ async def _test(args: argparse.Namespace, email: str, password: str, phone: Opti
         logger.info("Testing pushover notification...")
 
         pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_DEFAULT_TOKEN
+            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
         )
         try:
             pushover.send_message(
