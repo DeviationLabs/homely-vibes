@@ -64,8 +64,8 @@ async def _run_command(
             password=password,
             phone=phone,
             unlock_threshold_minutes=args.lock_mins,
-            door_ajar_threshold_minutes=args.ajar_mins,
-            low_battery_threshold=args.battery_pct,
+            ajar_threshold_minutes=args.ajar_mins,
+            battery_threshold_pct=args.battery_pct,
         )
 
         logger.info(
