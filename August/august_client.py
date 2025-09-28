@@ -199,7 +199,7 @@ class AugustMonitor:
         unlock_threshold_minutes: int = 5,
         ajar_threshold_minutes: int = 10,
         battery_threshold_pct: int = 20,
-        battery_alert_cooldown_minutes: int = 24*60,
+        battery_alert_cooldown_minutes: int = 42*60, # 1.75 days
         door_alert_cooldown_minutes: int = 2,
     ):
         self.client = AugustClient(email, password, phone)
@@ -396,7 +396,7 @@ class AugustMonitor:
         message = f"{status.lock_name} battery is low: {status.battery_level}%"
 
         try:
-            self.pushover.send_message(message, title=title, priority=1)
+            self.pushover.send_message(message, title=title, priority=2)
             self.last_battery_alerts[lock_id] = current_time
             self.logger.warning(f"Sent low battery alert: {message}")
         except Exception as e:
