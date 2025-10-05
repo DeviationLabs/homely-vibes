@@ -19,7 +19,7 @@ AUGUST_PHONE = "+1234567890"  # Required for 2FA
 **Important**: Use your actual August account credentials. The phone number is required for 2FA verification.
 
 **2FA Setup**: August accounts require 2FA for security. The system handles this automatically:
-1. Run authentication test: `uv run python August/august_manager.py test --auth`
+1. Run battery status test: `uv run python August/august_manager.py test`
 2. If 2FA is needed, verification code will be sent to your phone/email
 3. Use the validation script: `uv run python August/validate_2fa.py YOUR_CODE`
 4. Once successful, tokens are cached for ~7 days (no more 2FA needed)
@@ -42,9 +42,8 @@ uv run python August/august_manager.py monitor \
 
 Test commands:
 ```bash
-uv run python August/august_manager.py test --auth          # Test authentication
-uv run python August/august_manager.py test --notification  # Test notifications
-uv run python August/validate_2fa.py 123456                 # Complete 2FA with code
+uv run python August/august_manager.py test                 # Test battery status monitoring
+uv run python August/validate_2fa.py 123456                # Complete 2FA with code
 ```
 
 ## Alert Types
@@ -62,6 +61,7 @@ uv run python August/validate_2fa.py 123456                 # Complete 2FA with 
 
 ## Testing
 
+Battery status monitoring can be tested with:
 ```bash
-uv run python -m pytest August/test_august.py -v
+uv run python August/august_manager.py test
 ```
