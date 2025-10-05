@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
 import asyncio
-from enum import Enum
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 import aiohttp
 from datetime import datetime
 
