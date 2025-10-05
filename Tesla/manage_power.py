@@ -367,7 +367,7 @@ def main() -> None:
         logger = get_logger(__name__)
         logger.error(f"Unexpected error: {e}\nTraceback:\n{tb_str}")
         if "manager" in locals():
-            manager.send_pushover(f"Powerwall monitoring error: {e}")
+            manager.send_pushover(f"Powerwall monitoring error: {e}", priority=1)
 
     finally:
         logger = get_logger(__name__)
