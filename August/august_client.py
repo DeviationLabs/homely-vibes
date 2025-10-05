@@ -10,37 +10,20 @@ import aiohttp
 
 from yalexs.api_async import ApiAsync
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
-from yalexs.lock import Lock
+from yalexs.lock import Lock, LockStatus, LockDoorStatus
 
 from lib import Constants
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
-
-class DoorState(Enum):
-    OPEN = "OPEN"
-    CLOSED = "CLOSED"
-    UNKNOWN = "UNKNOWN" 
-
-class LockStatus(Enum):
-    LOCKED = "LOCKED"
-    UNLOCKED = "UNLOCKED"
-    UNKNOWN = "UNKNOWN" 
 
 @dataclass
 class LockState:
     lock_id: str
     lock_name: str
     timestamp: float
-    lock_status: LockStatus = LockStatus.UNKNOWN
-    battery_level: Optional[float] = None
-    door_state: DoorState = DoorState.UNKNOWN
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LockState":
-        return cls(**data)
+    lock_status: LockStatus
+    battery_level: float
+    door_state: LockDoorStatus
 
 
 class AugustClient:
@@ -138,19 +121,6 @@ class AugustClient:
             )
             lock_name = lock_detail.device_name
             lock_serial = lock_detail.serial_number
-
-            try:
-                lock_status = LockStatus(lock_detail.lock_status.name)
-            except ValueError:
-                lock_status = LockStatus.UNKNOWN
-            
-            if lock_status == LockStatus.UNKNOWN and retry > 0:
-                self.logger.warning(
-                    f"Lock {lock_detail.device_name} has unknown status, retrying {retry} times..."
-                )
-                time.sleep(1)
-                # Retry getting lock status
-                return await self.get_lock_status(lock_id, retry=retry-1)
 
             battery_level = getattr(lock_detail, "battery_level", None)
             door_state_raw = getattr(lock_detail, "door_state", None)
