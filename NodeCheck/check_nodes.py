@@ -214,7 +214,7 @@ if __name__ == "__main__":
         ]
         pushover.send_message(
             f"{args.mode.title()} Node check failed for {', '.join(failed_nodes)}",
-            title="Node Check",
+            title="Node Check", priority=1,
         )
     else:
         log_message("All is well")

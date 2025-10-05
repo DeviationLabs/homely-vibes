@@ -83,17 +83,6 @@ class PowerwallManager:
             Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["Powerwall"]
         )
 
-    def send_pushover(self, message: str) -> None:
-        """Send notification via configured channels."""
-        try:
-            success = self.pushover.send_message(message, title="Powerwall Alert")
-            if success:
-                self.logger.info(f"Notification sent: {message}")
-            else:
-                self.logger.error(f"Failed to send notification: {message}")
-        except Exception as e:
-            self.logger.error(f"Failed to send notification: {e}")
-
     def sanitize_battery_percentage(self, pct: float, time_sampling: float) -> float:
         """Sanitize battery percentage using history and extrapolation."""
         pct = round(pct, 2)
@@ -218,7 +207,7 @@ class PowerwallManager:
             self.logger.warning(message)
 
             if self.send_notifications or decision_point.always_notify:
-                self.send_pushover(message)
+                self.pushover.send_message(message, title="Powerwall Alert", priority=0)
 
         return changes_made
 
@@ -279,7 +268,7 @@ class PowerwallManager:
             product = client.battery_list()[0]
             site_name = product["site_name"]
             self.logger.info(f"Connected to site: {site_name}")
-            self.send_pushover(f"Powerwall monitoring started for: {site_name}")
+            self.pushover.send_message(f"Powerwall monitoring started for: {site_name}", title="Powerwall Alert", priority=0)
 
             sleep_time = 0
 
@@ -358,7 +347,7 @@ def main() -> None:
         error_msg = f"Tesla token expired? Run TeslaPy gui.py. Error: {e}"
         logger = get_logger(__name__)
         logger.error(error_msg)
-        manager.send_pushover("Tesla token expired - run TeslaPy gui.py")
+        manager.pushover.send_message("Tesla token expired - run TeslaPy gui.py", title="Powerwall Alert", priority=2)
 
     except Exception as e:
         import traceback
@@ -367,7 +356,7 @@ def main() -> None:
         logger = get_logger(__name__)
         logger.error(f"Unexpected error: {e}\nTraceback:\n{tb_str}")
         if "manager" in locals():
-            manager.send_pushover(f"Powerwall monitoring error: {e}")
+            manager.pushover.send_message(f"Powerwall monitoring error: {e}", title="Powerwall Alert", priority=1)
 
     finally:
         logger = get_logger(__name__)

@@ -11,49 +11,20 @@ from august_client import AugustClient
 from lib.MyPushover import Pushover
 from validate_2fa import complete_2fa
 
+pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
 
 async def _test(args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger) -> None:
-    if args.auth:
-        logger.info("Testing August authentication...")
-
-        client = AugustClient(email, password, phone)
-        try:
-            success = await client.authenticate()
-            if success:
-                logger.info("✅ Authentication successful")
-                locks = await client.get_locks()
-                logger.info(f"Found {len(locks)} locks:")
-                for lock_id, lock in locks.items():
-                    logger.info(f"  - {lock.device_name} ({lock_id})")
-            else:
-                logger.error("❌ Authentication failed")
-                logger.info(
-                    "💡 If 2FA is required, complete it in the August app first"
-                )
-                sys.exit(1)
-        finally:
-            await client.close()
-
-    elif args.notification:
-        logger.info("Testing pushover notification...")
-
-        pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
-        )
-        try:
-            pushover.send_message(
-                "This is a test notification from August Lock Monitor",
-                title="🔓 August Test Alert",
-            )
-            logger.info("✅ Notification sent successfully")
-        except Exception as e:
-            logger.error(f"❌ Notification failed: {e}")
-            sys.exit(1)
-
-    else:
-        logger.error("Please specify --auth or --notification for test command")
-        sys.exit(1)
-
+    client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
+    message = ""
+    try:
+        statuses = await client.get_all_lock_statuses()
+        for _, status in statuses.items():
+            message += f"{status.lock_name}: {status.battery_level}%\n"
+        pushover.send_message(message, title="August Battery Status", priority=0)
+    except Exception as e:
+        pushover.send_message(f"Error initializing August client: {e}", title="August Battery Status", priority=2)
+    finally:
+        await client.close()
 
 async def _run_command(
     args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger
@@ -121,17 +92,10 @@ def main() -> None:
     )
 
     # Validate command
-    validate_parser = subparsers.add_parser("validate", help="Complete 2FA validation")
-    validate_parser.add_argument("code", nargs="?", help="6-digit verification code")
+    _ = subparsers.add_parser("validate", help="Complete 2FA validation")
 
     # Test command
-    test_parser = subparsers.add_parser("test", help="Test commands")
-    test_parser.add_argument(
-        "--auth", action="store_true", help="Test authentication only"
-    )
-    test_parser.add_argument(
-        "--notification", action="store_true", help="Test pushover notification"
-    )
+    _ = subparsers.add_parser("test", help="Test commands")
 
     args = parser.parse_args()
 

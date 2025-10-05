@@ -92,23 +92,17 @@ def purge_old_foscam_files():
                     error_count > deleted_count * 0.1
                 ):  # If errors > 10% of deletions, flag as failure
                     success = False
-
-            pushover.send_message(pushover_msg, title="Foscam Cleanup")
-
         except Exception as e:
             error_msg = f"Error during file deletion: {str(e)}"
             messages.append(error_msg)
             logger.error(error_msg)
             success = False
+            pushover_msg = f"Error during file deletion: {str(e)}"
 
     finally:
         # Restore original working directory
+        pushover.send_message(pushover_msg, title="Foscam Cleanup")
         os.chdir(original_cwd)
-
-    if success:
-        messages.append("Foscam file purge completed successfully")
-    else:
-        messages.append("Foscam file purge encountered errors")
 
     return success, "\n".join(messages)
 
