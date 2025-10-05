@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 import json
 from dataclasses import dataclass, asdict
 import aiohttp
+from datetime import datetime
 
 from yalexs.api_async import ApiAsync
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
@@ -122,19 +123,15 @@ class AugustClient:
             lock_name = lock_detail.device_name
             lock_serial = lock_detail.serial_number
 
-            battery_level = getattr(lock_detail, "battery_level", None)
-            door_state_raw = getattr(lock_detail, "door_state", None)
-            
-            try:
-                door_state = DoorState(door_state_raw.name) if door_state_raw else DoorState.UNKNOWN
-            except (ValueError, AttributeError):
-                door_state = DoorState.UNKNOWN
-                
+            battery_level = getattr(lock_detail, "battery_level", -1)
+            door_state = getattr(lock_detail, "door_state", LockDoorStatus.UNKNOWN)
+            lock_status = getattr(lock_detail, "lock_status", LockStatus.UNKNOWN)
+
             lock_state = LockState(
                 lock_id=lock_id,
                 lock_name=lock_name,
                 timestamp=time.time(),
-                lock_status=lock_status,
+                lock_status=lock_detail.lock_status,
                 battery_level=battery_level,
                 door_state=door_state,
             )
@@ -265,12 +262,6 @@ class AugustMonitor:
     async def _process_lock_status(
         self, lock_id: str, status: LockState, current_time: float
     ) -> None:
-        if status.lock_status == LockStatus.UNKNOWN:
-            self.logger.debug(
-                f"Skipping lock monitoring for {status.lock_name} (unknown status)"
-            )
-            return
-
         if status.lock_status == LockStatus.LOCKED:
             if lock_id in self.unlock_start_times:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
@@ -295,7 +286,7 @@ class AugustMonitor:
                         self.last_unlock_alerts[lock_id] = current_time
 
         
-        if status.door_state == DoorState.CLOSED:
+        if status.door_state == LockDoorStatus.CLOSED:
             if lock_id in self.ajar_start_times:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
                 self.logger.info(
@@ -360,6 +351,7 @@ class AugustMonitor:
 
         last_alert = self.last_battery_alerts.get(lock_id, 0)
         if current_time - last_alert < self.battery_alert_cooldown:
+            self.logger.info(f"Skipping battery alert for {status.lock_name} (cooldown) last_alert: {datetime.fromtimestamp(last_alert)}")
             return
 
         title = "🔋 August Low Battery"
@@ -383,11 +375,11 @@ class AugustMonitor:
             while True:
                 try:
                     await self.check_locks()
+                    await asyncio.sleep(check_interval_seconds)
                 except KeyboardInterrupt:
                     self.logger.info("Monitoring stopped by user")
                     break
                 except Exception as e:
                     self.logger.error(f"Error in monitoring loop: {e}")
-                await asyncio.sleep(check_interval_seconds)
         finally:
             await self.client.close()
