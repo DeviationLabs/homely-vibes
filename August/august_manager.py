@@ -92,8 +92,7 @@ def main() -> None:
     )
 
     # Validate command
-    validate_parser = subparsers.add_parser("validate", help="Complete 2FA validation")
-    validate_parser.add_argument("code", nargs="?", help="6-digit verification code")
+    _ = subparsers.add_parser("validate", help="Complete 2FA validation")
 
     # Test command
     _ = subparsers.add_parser("test", help="Test commands")
