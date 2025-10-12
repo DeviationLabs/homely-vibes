@@ -225,7 +225,7 @@ class WeeklyReporter:
         start_date = report.period_start.date()
         subject_prefix = "Period"
 
-        Mailer.sendmail(  # type: ignore[no-untyped-call]
+        Mailer.sendmail(
             topic=f"[Water Report] {subject_prefix} {start_date}",
             alert=alert,
             message=report_text,
