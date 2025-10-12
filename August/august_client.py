@@ -184,6 +184,7 @@ class AugustMonitor:
         self.last_unlock_alerts: Dict[str, float] = {}  # For unlock alerts
         self.last_ajar_alerts: Dict[str, float] = {}  # For door ajar alerts
         self.last_battery_alerts: Dict[str, float] = {}
+        self.last_lock_failure_alerts: Dict[str, float] = {}  # Initialize missing state
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
 
@@ -192,9 +193,9 @@ class AugustMonitor:
             with open(self.state_file, "r") as f:
                 state = json.load(f)
                 self.unlock_start_times = state.get("unlock_start_times", {})
-                self.ajar_start_times = state.get("door_ajar_start_times", {})
+                self.ajar_start_times = state.get("ajar_start_times", {})  # Fix inconsistent key
                 self.last_unlock_alerts = state.get("last_unlock_alerts", {})
-                self.last_ajar_alerts = state.get("last_door_ajar_alerts", {})
+                self.last_ajar_alerts = state.get("last_ajar_alerts", {})  # Fix inconsistent key
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
                 self.last_lock_failure_alerts = state.get(
                     "last_lock_failure_alerts", {}
@@ -207,9 +208,9 @@ class AugustMonitor:
         try:
             state = {
                 "unlock_start_times": self.unlock_start_times,
-                "door_ajar_start_times": self.ajar_start_times,
+                "ajar_start_times": self.ajar_start_times,  # Fix inconsistent key
                 "last_unlock_alerts": self.last_unlock_alerts,
-                "last_door_ajar_alerts": self.last_ajar_alerts,
+                "last_ajar_alerts": self.last_ajar_alerts,  # Fix inconsistent key
                 "last_battery_alerts": self.last_battery_alerts,
                 "last_lock_failure_alerts": self.last_lock_failure_alerts,
             }
