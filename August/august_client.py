@@ -176,13 +176,12 @@ class AugustMonitor:
         self.door_alert_cooldown = door_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
         self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
-        # Tracking for different alert types
         self.unlock_start_times: Dict[str, float] = {}
         self.ajar_start_times: Dict[str, float] = {}
-        self.last_unlock_alerts: Dict[str, float] = {}  # For unlock alerts
-        self.last_ajar_alerts: Dict[str, float] = {}  # For door ajar alerts
+        self.last_unlock_alerts: Dict[str, float] = {}
+        self.last_ajar_alerts: Dict[str, float] = {}
         self.last_battery_alerts: Dict[str, float] = {}
-        self.last_lock_failure_alerts: Dict[str, float] = {}  # Initialize missing state
+        self.last_lock_failure_alerts: Dict[str, float] = {}
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
 
@@ -191,9 +190,9 @@ class AugustMonitor:
             with open(self.state_file, "r") as f:
                 state = json.load(f)
                 self.unlock_start_times = state.get("unlock_start_times", {})
-                self.ajar_start_times = state.get("ajar_start_times", {})  # Fix inconsistent key
+                self.ajar_start_times = state.get("ajar_start_times", {})
                 self.last_unlock_alerts = state.get("last_unlock_alerts", {})
-                self.last_ajar_alerts = state.get("last_ajar_alerts", {})  # Fix inconsistent key
+                self.last_ajar_alerts = state.get("last_ajar_alerts", {})
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
                 self.last_lock_failure_alerts = state.get("last_lock_failure_alerts", {})
             self.logger.debug("Loaded monitor state from file")
@@ -204,9 +203,9 @@ class AugustMonitor:
         try:
             state = {
                 "unlock_start_times": self.unlock_start_times,
-                "ajar_start_times": self.ajar_start_times,  # Fix inconsistent key
+                "ajar_start_times": self.ajar_start_times,
                 "last_unlock_alerts": self.last_unlock_alerts,
-                "last_ajar_alerts": self.last_ajar_alerts,  # Fix inconsistent key
+                "last_ajar_alerts": self.last_ajar_alerts,
                 "last_battery_alerts": self.last_battery_alerts,
                 "last_lock_failure_alerts": self.last_lock_failure_alerts,
             }
@@ -268,7 +267,6 @@ class AugustMonitor:
             else:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
                 if unlock_duration >= self.unlock_threshold:
-                    # Check cooldown before sending alert
                     last_alert = self.last_unlock_alerts.get(lock_id, 0)
                     if current_time - last_alert >= self.door_alert_cooldown:
                         await self._send_unlock_alert(lock_id, status, unlock_duration)
@@ -288,7 +286,6 @@ class AugustMonitor:
             else:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
                 if ajar_duration >= self.ajar_threshold:
-                    # Check cooldown before sending alert
                     last_alert = self.last_ajar_alerts.get(lock_id, 0)
                     if current_time - last_alert >= self.door_alert_cooldown:
                         await self._send_door_ajar_alert(lock_id, status, ajar_duration)
