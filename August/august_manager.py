@@ -15,11 +15,11 @@ pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
 
 
 async def _test(
-    args: argparse.Namespace,
-    email: str,
-    password: str,
-    phone: Optional[str],
-    logger: logging.Logger,
+    args: argparse.Namespace,  # noqa: ARG001
+    email: str,  # noqa: ARG001
+    password: str,  # noqa: ARG001
+    phone: Optional[str],  # noqa: ARG001
+    logger: logging.Logger,  # noqa: ARG001
 ) -> None:
     client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
     message = ""
