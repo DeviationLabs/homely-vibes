@@ -1,5 +1,6 @@
 """Tests for the Rachio-Flume water tracking integration."""
 
+from typing import Any
 import pytest
 import tempfile
 from datetime import datetime
@@ -16,7 +17,7 @@ from reporter import WeeklyReporter
 class TestRachioClient:
     """Test Rachio API client."""
 
-    def test_init_with_env_vars(self):
+    def test_init_with_env_vars(self) -> None:
         """Test initialization with environment variables."""
         with patch.dict(
             os.environ,
@@ -26,14 +27,14 @@ class TestRachioClient:
             assert client.api_key == "test_key"
             assert client.device_id == "test_device"
 
-    def test_init_missing_credentials(self):
+    def test_init_missing_credentials(self) -> None:
         """Test initialization fails without credentials."""
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError, match="Rachio API key required"):
                 RachioClient()
 
     @patch("rachio_client.requests.get")
-    def test_get_zones(self, mock_get):
+    def test_get_zones(self, mock_get: Any) -> None:
         """Test getting zones from device."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -73,7 +74,7 @@ class TestRachioClient:
 class TestFlumeClient:
     """Test Flume API client."""
 
-    def test_init_with_env_vars(self):
+    def test_init_with_env_vars(self) -> None:
         """Test initialization with environment variables."""
         with patch.dict(
             os.environ,
@@ -91,7 +92,7 @@ class TestFlumeClient:
                 assert client.username == "test@example.com"
                 assert client.password == "password789"
 
-    def test_init_missing_credentials(self):
+    def test_init_missing_credentials(self) -> None:
         """Test initialization fails without credentials."""
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(Exception):  # Will fail on missing OAuth credentials
@@ -99,7 +100,7 @@ class TestFlumeClient:
 
     @patch("flume_client.requests.get")
     @patch("flume_client.requests.post")
-    def test_get_usage(self, mock_post, mock_get):
+    def test_get_usage(self, mock_post, mock_get: Any) -> None:
         """Test getting water usage data."""
         # Mock device list response
         mock_devices_response = Mock()
@@ -141,7 +142,7 @@ class TestFlumeClient:
             assert readings[1].value == 2.0
 
     @patch("flume_client.requests.get")
-    def test_get_devices(self, mock_get):
+    def test_get_devices(self, mock_get: Any) -> None:
         """Test getting user devices."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -170,7 +171,7 @@ class TestFlumeClient:
             assert devices[1].location == "Pool"
 
     @patch("flume_client.requests.get")
-    def test_get_device_id_auto_selection(self, mock_get):
+    def test_get_device_id_auto_selection(self, mock_get: Any) -> None:
         """Test automatic device ID selection."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -190,7 +191,7 @@ class TestFlumeClient:
 class TestWaterTrackingDB:
     """Test database operations."""
 
-    def test_init_creates_tables(self):
+    def test_init_creates_tables(self) -> None:
         """Test database initialization creates required tables."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db = WaterTrackingDB(tmp.name)
@@ -213,7 +214,7 @@ class TestWaterTrackingDB:
 
             os.unlink(tmp.name)
 
-    def test_save_and_retrieve_zones(self):
+    def test_save_and_retrieve_zones(self) -> None:
         """Test saving and retrieving zones."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db = WaterTrackingDB(tmp.name)
@@ -239,7 +240,7 @@ class TestWaterTrackingDB:
 
             os.unlink(tmp.name)
 
-    def test_compute_zone_sessions(self):
+    def test_compute_zone_sessions(self) -> None:
         """Test computing zone sessions from events."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db = WaterTrackingDB(tmp.name)
@@ -280,7 +281,7 @@ class TestWaterTrackingDB:
 class TestWeeklyReporter:
     """Test weekly reporting functionality."""
 
-    def test_generate_weekly_report(self):
+    def test_generate_weekly_report(self) -> None:
         """Test generating a weekly report."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db = WaterTrackingDB(tmp.name)
@@ -325,7 +326,7 @@ class TestWaterTrackingCollector:
 
     @patch("collector.RachioClient")
     @patch("collector.FlumeClient")
-    def test_collector_initialization(self, mock_flume, mock_rachio):
+    def test_collector_initialization(self, mock_flume, mock_rachio: Any) -> None:
         """Test collector initializes correctly."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             collector = WaterTrackingCollector(tmp.name)
@@ -337,7 +338,7 @@ class TestWaterTrackingCollector:
 
     @patch("collector.RachioClient")
     @patch("collector.FlumeClient")
-    async def test_collect_once(self, mock_flume_class, mock_rachio_class):
+    async def test_collect_once(self, mock_flume_class, mock_rachio_class: Any) -> None:
         """Test single collection cycle."""
         # Setup mocks
         mock_rachio = Mock()

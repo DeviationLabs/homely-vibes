@@ -275,7 +275,7 @@ class WeeklyReporter:
         sessions = self.db.get_zone_sessions(start_date, end_date)
 
         # Group by zone
-        zone_data = {}
+        zone_data: Dict[str, Dict[str, Any]] = {}
         for session in sessions:
             zone_name = session["zone_name"]
             if zone_name not in zone_data:
@@ -290,7 +290,7 @@ class WeeklyReporter:
             zone_data[zone_name]["total_duration"] += session.get("duration_seconds", 0)
 
         # Calculate efficiency metrics
-        efficiency_analysis = {}
+        efficiency_analysis: Dict[str, Dict[str, Any]] = {}
         for zone_name, data in zone_data.items():
             if data["total_duration"] > 0:
                 avg_flow_rate = data["total_water"] / (data["total_duration"] / 60)  # GPM
@@ -353,7 +353,7 @@ class WeeklyReporter:
             self.logger.info(line)
 
 
-def main():
+def main() -> None:
     """Main entry point for generating reports."""
     import sys
 

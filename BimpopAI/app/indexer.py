@@ -19,7 +19,7 @@ print(f"This is the payload to send to /index : {IndexerRequest(text='Hello').di
 
 
 @router.post("/index", status_code=status.HTTP_200_OK)
-def index(request: IndexerRequest):
+def index(request: IndexerRequest) -> JSONResponse:
     logger.warning(f"Inside Indexer::{request}")
     try:
         print(f"Initiating indexing with data {request}")

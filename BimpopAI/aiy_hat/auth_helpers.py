@@ -15,6 +15,7 @@
 
 """Authentication helper for the Google Assistant API."""
 
+from typing import Optional
 import json
 import logging
 import os
@@ -42,7 +43,7 @@ _ASSISTANT_CREDENTIALS = os.path.join(_VR_CACHE_DIR, "assistant_credentials.json
 _ASSISTANT_CREDENTIALS_FILE = os.path.expanduser("~/assistant.json")
 
 
-def _load_credentials(credentials_path):
+def _load_credentials(credentials_path: str) -> google.oauth2.credentials.Credentials:
     migrate = False
     with open(credentials_path, "r") as f:
         credentials_data = json.load(f)
@@ -59,7 +60,7 @@ def _load_credentials(credentials_path):
     return credentials
 
 
-def _credentials_flow_interactive(client_secrets_path):
+def _credentials_flow_interactive(client_secrets_path: str) -> google.oauth2.credentials.Credentials:
     logging.info("Validating creds now ...")
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
         client_secrets_path, scopes=[_ASSISTANT_OAUTH_SCOPE]
@@ -75,14 +76,14 @@ def _credentials_flow_interactive(client_secrets_path):
             webbrowser.Chrome("chromium-browser"),
             preferred=True,
         )
-        credentials = flow.run_local_server()
+        credentials = flow.run_local_server()  # pragma: no cover
     else:
         logging.info("Console based validation")
         credentials = flow.run_console()
     return credentials
 
 
-def _save_credentials(credentials_path, credentials):
+def _save_credentials(credentials_path: str, credentials: google.oauth2.credentials.Credentials) -> None:
     config_path = os.path.dirname(credentials_path)
     if not os.path.isdir(config_path):
         os.makedirs(config_path)
@@ -99,7 +100,7 @@ def _save_credentials(credentials_path, credentials):
         )
 
 
-def _try_to_get_credentials(client_secrets):
+def _try_to_get_credentials(client_secrets: str) -> google.oauth2.credentials.Credentials:
     """Try to get credentials, or print an error and quit on failure."""
 
     if os.path.exists(_ASSISTANT_CREDENTIALS):
@@ -134,7 +135,7 @@ User's Guide for more info.""")
     return credentials
 
 
-def get_assistant_credentials(credentials_file=None):
+def get_assistant_credentials(credentials_file: Optional[str] = None) -> google.oauth2.credentials.Credentials:
     """
     Retrieves the OAuth credentials required to access the Google Assistant API.
 

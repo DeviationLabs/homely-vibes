@@ -46,10 +46,10 @@ if __name__ == "__main__":
     send_email = args.always_email
     model = None
     msg = ""
-    mycam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES["Garage"], args.display_image)
+    mycam = FoscamImager(Constants.FOSCAM_NODES["Garage"], args.display_image)
 
     if args.model_file and os.path.isfile(args.model_file):
-        import TFOneShot
+        from . import TFOneShot
 
         (model, model_labels) = TFOneShot.load_my_model(args.model_file)
     while True:

@@ -28,6 +28,8 @@ dependencies = [
     "gpxpy>=1.5.0",
     "click>=8.0.0",
     "streamlit>=1.20.0",
+    "types-requests>=2.25.0",
+    "pandas-stubs>=1.5.0",
 ]
 
 [project.optional-dependencies]
@@ -193,18 +195,11 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Less strict checking for legacy modules  
+# Less strict checking for remaining legacy modules  
 [[tool.mypy.overrides]]
 module = [
     "lib.*",
     "WaterParser.*", 
-    "Tesla.*",
-    "RachioFlume.*",
-    "BrowserAlert.*",
-    "BimpopAI.*",
-    "GarageCheck.*",
-    "NodeCheck.*",
-    "NetworkCheck.*",
     "JWTs.*",
     "GPXParser.*",
     "WaterLogging.*",
@@ -217,4 +212,5 @@ disallow_untyped_decorators = false
 warn_return_any = false
 warn_unreachable = false
 ignore_errors = true
+
 

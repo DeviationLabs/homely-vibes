@@ -11,7 +11,7 @@ import json
 import subprocess
 import sys
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 from lib import Constants
 from lib import Mailer
@@ -38,7 +38,7 @@ class SpeedTestResult:
     message: str
 
 
-def parse_speedtest_output(output: str) -> Dict:
+def parse_speedtest_output(output: str) -> Dict[str, Any]:
     """
     Parse speedtest JSON output to extract result data.
 
@@ -57,7 +57,7 @@ def parse_speedtest_output(output: str) -> Dict:
     if not result_lines:
         raise ValueError("No result found in speedtest output")
 
-    return json.loads(result_lines[0])
+    return dict(json.loads(result_lines[0]))
 
 
 def run_speedtest() -> Tuple[Optional[SpeedTestResult], str]:

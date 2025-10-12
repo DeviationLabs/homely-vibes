@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from typing import Dict, Any, Optional
 import argparse
 import re
 import sys
@@ -17,13 +18,13 @@ logger = SystemLogger.get_logger(__name__)
 pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
 
 system_healthy = True
-state = dict()
+state: Dict[str, bool] = dict()
 message = ""
 
 #### Helper Functions ####
 
 
-def reboot_foscam(nodeName):
+def reboot_foscam(nodeName: str) -> str:
     node = Constants.FOSCAM_NODES[nodeName]
     cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" % (
         node,
@@ -42,14 +43,14 @@ def reboot_foscam(nodeName):
     return msg
 
 
-def reboot_windows(node):
+def reboot_windows(node: str) -> str:
     # Ping to keep child proc alive for long enough
     winCmd = "shutdown /r /f ; ping localhost -n 3 > nul"
     return NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
 
 
 # Note: For windows nodes only
-def print_deep_state(nodeName):
+def print_deep_state(nodeName: str) -> str:
     node = Constants.WINDOWS_NODES[nodeName]
     winCmd = "net statistics workstation"
     output = NetHelpers.ssh_cmd(
@@ -64,7 +65,7 @@ def print_deep_state(nodeName):
 
 
 # Note: For Foscam nodes only
-def check_if_can_image(nodeName, display_image):
+def check_if_can_image(nodeName: str, display_image: bool) -> bool:
     MAX_COUNT = 2
     count = 0
     while count < MAX_COUNT:
@@ -85,13 +86,13 @@ def check_if_can_image(nodeName, display_image):
     return False
 
 
-def log_message(msg):
+def log_message(msg: str) -> None:
     global message
     logger.info(msg)
     message += msg + "\n"
 
 
-def check_state(desired_up, attempts):
+def check_state(desired_up: bool, attempts: int) -> None:
     global state
     global system_healthy  # We do something strange here with global state. Do not touch
     for nodeName, nodeIP in nodes.items():
