@@ -73,21 +73,21 @@ def purge_old_foscam_files():
             # Report cleaning results prominently
             if deleted_count == 0:
                 messages.append("No old files found to clean")
-                pushover_msg = f"Foscam cleanup: No old files to clean (older than {purge_after_days} days)"
+                pushover_msg = (
+                    f"Foscam cleanup: No old files to clean (older than {purge_after_days} days)"
+                )
             elif error_count == 0:
                 messages.append(f"✓ Successfully cleaned {deleted_count} old files")
                 logger.info(f"Foscam cleanup: {deleted_count} files removed, 0 errors")
-                pushover_msg = (
-                    f"✓ Foscam cleanup: Successfully removed {deleted_count} old files"
-                )
+                pushover_msg = f"✓ Foscam cleanup: Successfully removed {deleted_count} old files"
             else:
-                messages.append(
-                    f"⚠ Cleaned {deleted_count} old files with {error_count} errors"
-                )
+                messages.append(f"⚠ Cleaned {deleted_count} old files with {error_count} errors")
                 logger.warning(
                     f"Foscam cleanup: {deleted_count} files removed, {error_count} errors"
                 )
-                pushover_msg = f"⚠ Foscam cleanup: Removed {deleted_count} files with {error_count} errors"
+                pushover_msg = (
+                    f"⚠ Foscam cleanup: Removed {deleted_count} files with {error_count} errors"
+                )
                 if (
                     error_count > deleted_count * 0.1
                 ):  # If errors > 10% of deletions, flag as failure
@@ -111,7 +111,10 @@ def purge_old_foscam_files():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Purge Foscam videos from NAS")
     parser.add_argument(
-        "--always_email", help="Send email report", action="store_true", default=False
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 
@@ -131,6 +134,9 @@ if __name__ == "__main__":
         logger.info(msg)
 
     Mailer.sendmail(
-        topic="[PurgeFoscam]", alert=alert, message=msg, always_email=args.always_email
+        topic="[PurgeFoscam]",
+        alert=alert,
+        message=msg,
+        always_email=args.always_email,
     )
     print("Done!")

@@ -92,7 +92,9 @@ def insert_db(text, embedding):
                 "id": id,
                 "values": embedding,
                 "metadata": dict(
-                    created_at=datetime.now().isoformat(), title="aiy", text=text
+                    created_at=datetime.now().isoformat(),
+                    title="aiy",
+                    text=text,
                 ),
             }
         ],

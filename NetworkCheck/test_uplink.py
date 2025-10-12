@@ -52,9 +52,7 @@ def parse_speedtest_output(output: str) -> Dict:
         ValueError: If no valid result found in output
     """
     lines = output.strip().split("\n")
-    result_lines = [
-        line for line in lines if line and json.loads(line).get("type") == "result"
-    ]
+    result_lines = [line for line in lines if line and json.loads(line).get("type") == "result"]
 
     if not result_lines:
         raise ValueError("No result found in speedtest output")
@@ -86,12 +84,9 @@ def run_speedtest() -> Tuple[Optional[SpeedTestResult], str]:
         external_ip = payload.get("interface", {}).get("externalIp", "UNK")
 
         # Determine connection quality
-        is_good = (
-            download_mbps > Constants.MIN_DL_BW and upload_mbps > Constants.MIN_UL_BW
-        )
+        is_good = download_mbps > Constants.MIN_DL_BW and upload_mbps > Constants.MIN_UL_BW
         is_degraded = (
-            download_mbps > Constants.MIN_DL_BW * 0.8
-            and upload_mbps > Constants.MIN_UL_BW * 0.8
+            download_mbps > Constants.MIN_DL_BW * 0.8 and upload_mbps > Constants.MIN_UL_BW * 0.8
         )
 
         if is_good:
@@ -101,7 +96,9 @@ def run_speedtest() -> Tuple[Optional[SpeedTestResult], str]:
         else:
             status = "Link bad (<80%)"
 
-        message = f"{status}: [{external_ip}] DL: {download_mbps:.1f} Mbps UL: {upload_mbps:.1f} Mbps"
+        message = (
+            f"{status}: [{external_ip}] DL: {download_mbps:.1f} Mbps UL: {upload_mbps:.1f} Mbps"
+        )
 
         result = SpeedTestResult(
             download_mbps=download_mbps,
@@ -126,10 +123,16 @@ def main() -> None:
         description="Network Speed Test and External IP detection utility"
     )
     parser.add_argument(
-        "--always_email", help="Send email report", action="store_true", default=False
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
-        "--max_retries", help="Retry if low score on first try", type=int, default=1
+        "--max_retries",
+        help="Retry if low score on first try",
+        type=int,
+        default=1,
     )
     args = parser.parse_args()
 

@@ -8,7 +8,7 @@ from yalexs.api_async import ApiAsync
 from lib import Constants
 
 
-async def complete_2fa():
+async def complete_2fa() -> bool:
     session = aiohttp.ClientSession()
     try:
         api = ApiAsync(session)
@@ -38,21 +38,13 @@ async def complete_2fa():
             print("✅ Verification code sent!")
             print("📱 Check your phone for SMS or email for verification code")
 
-            # Get the verification code from user
             import sys
 
-            if len(sys.argv) > 1:
-                verification_code = sys.argv[1].strip()
-                print(f"Using verification code: {verification_code}")
-            else:
-                verification_code = input(
-                    "Enter the 6-digit verification code: "
-                ).strip()
+            print("Enter the 6-digit verification code: ", end="", flush=True)
+            verification_code = sys.stdin.readline().strip()
 
             print(f"Validating code: {verification_code}")
-            validation_result = await auth.async_validate_verification_code(
-                verification_code
-            )
+            validation_result = await auth.async_validate_verification_code(verification_code)
 
             print(f"Validation result: {validation_result}")
 

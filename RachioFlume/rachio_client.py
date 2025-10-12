@@ -63,9 +63,7 @@ class RachioClient:
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         device_info = response.json()
-        self.logger.info(
-            f"Retrieved device info for {device_info.get('name', 'Unknown Device')}"
-        )
+        self.logger.info(f"Retrieved device info for {device_info.get('name', 'Unknown Device')}")
         return device_info
 
     def get_zones(self) -> List[Zone]:
@@ -119,9 +117,7 @@ class RachioClient:
 
         return None
 
-    def get_events(
-        self, start_time: datetime, end_time: datetime
-    ) -> List[WateringEvent]:
+    def get_events(self, start_time: datetime, end_time: datetime) -> List[WateringEvent]:
         """Get watering events for a time range.
 
         Args:

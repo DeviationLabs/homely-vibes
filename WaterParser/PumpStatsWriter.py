@@ -18,9 +18,7 @@ def patchWithRachioEvents():
     for line in returnedOutput.decode("utf-8").splitlines():
         row = line.split(",")
         rachioEvents.append(row)
-    rachioEvents.append(
-        [0, False, "Dummy"]
-    )  # A dummy row to flush out the calculations
+    rachioEvents.append([0, False, "Dummy"])  # A dummy row to flush out the calculations
 
     summary = TuyaLogParser.readSummaryFile(Constants.JSON_SUMMARY_FILE)
     eventNum = 0
@@ -59,12 +57,8 @@ def patchWithRachioEvents():
                         ## Ahha. Found a new zone that needs fixing. Reset key stats.
                         thisZoneModified["touched"] = True
                         # Fallback stats are tricky, we use the available data and fallback only if required.
-                        thisZoneModified["fallbackStartEpoch"][0:0] = zoneStats[
-                            "startEpochs"
-                        ]
-                        thisZoneModified["fallbackEndEpoch"][0:0] = zoneStats[
-                            "endEpochs"
-                        ]
+                        thisZoneModified["fallbackStartEpoch"][0:0] = zoneStats["startEpochs"]
+                        thisZoneModified["fallbackEndEpoch"][0:0] = zoneStats["endEpochs"]
                         zoneStats["startEpochs"] = []
                         zoneStats["endEpochs"] = []
                         zoneStats["runTime"] = 0
@@ -75,9 +69,7 @@ def patchWithRachioEvents():
                             thisZoneModified["fallbackStartEpoch"].pop(0)
                     else:
                         if zoneStats["startEpochs"] is None:
-                            zoneStats["startEpochs"] = thisZoneModified[
-                                "fallbackStartEpoch"
-                            ][0]
+                            zoneStats["startEpochs"] = thisZoneModified["fallbackStartEpoch"][0]
                         zoneStats["endEpochs"].append(eventEpoch)
                         if len(thisZoneModified["fallbackEndEpoch"]) > 1:
                             # Never pop out the last one.
@@ -101,8 +93,7 @@ def patchWithRachioEvents():
                                     thisZoneModified["fallbackEndEpoch"][0]
                                 )
                             zoneStats["runTime"] += (
-                                zoneStats["endEpochs"][idx]
-                                - zoneStats["startEpochs"][idx]
+                                zoneStats["endEpochs"][idx] - zoneStats["startEpochs"][idx]
                             )
                             zoneStats["pumpRate"] = float(
                                 "%.04f" % (zoneStats["pumpTime"] / zoneStats["runTime"])
@@ -122,8 +113,7 @@ def writeFromSummary():
 
     summary = TuyaLogParser.readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
     logging.info(
-        "Found %s records, looking back %s days..."
-        % (len(summary), Constants.DAYS_LOOKBACK)
+        "Found %s records, looking back %s days..." % (len(summary), Constants.DAYS_LOOKBACK)
     )
 
     for ts, record in sorted(summary.items(), reverse=False):
@@ -135,9 +125,7 @@ def writeFromSummary():
             continue
 
         zonesStats = record["zonesStats"]
-        for zoneNum in range(
-            -1, Constants.MAX_ZONES
-        ):  # Don't care about UNK and RateLimited
+        for zoneNum in range(-1, Constants.MAX_ZONES):  # Don't care about UNK and RateLimited
             zoneNumStr = str(zoneNum)
             zone = {}
             if zonesStats.get(zoneNumStr, None) is not None:

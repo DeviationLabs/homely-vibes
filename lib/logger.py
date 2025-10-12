@@ -39,9 +39,7 @@ class SystemLogger:
 
         # Default format
         if format_string is None:
-            format_string = (
-                "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
-            )
+            format_string = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
 
         # Clear any existing handlers
         root_logger = logging.getLogger()

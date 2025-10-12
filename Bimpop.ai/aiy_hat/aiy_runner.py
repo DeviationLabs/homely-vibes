@@ -95,8 +95,7 @@ class MyAssistant:
             self._can_start_conversation = True
             # Start the voicehat button trigger.
             logging.info(
-                'Say "OK, Google" or press the button, then speak. '
-                "Press Ctrl+C to quit..."
+                'Say "OK, Google" or press the button, then speak. Press Ctrl+C to quit...'
             )
 
         elif event.type == EventType.ON_CONVERSATION_TURN_STARTED:
@@ -131,11 +130,7 @@ class MyAssistant:
             else:
                 self._summarize(text)
 
-        elif (
-            event.type == EventType.ON_ASSISTANT_ERROR
-            and event.args
-            and event.args["is_fatal"]
-        ):
+        elif event.type == EventType.ON_ASSISTANT_ERROR and event.args and event.args["is_fatal"]:
             sys.exit(1)
 
     def _on_button_pressed(self):

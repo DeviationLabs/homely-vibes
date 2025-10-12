@@ -3,17 +3,24 @@ import asyncio
 import argparse
 import sys
 from typing import Optional
+import logging
 
-from august_client import AugustMonitor
+from .august_client import AugustMonitor, AugustClient
 from lib.logger import get_logger
 from lib import Constants
-from august_client import AugustClient
 from lib.MyPushover import Pushover
-from validate_2fa import complete_2fa
+from .validate_2fa import complete_2fa
 
 pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
 
-async def _test(args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger) -> None:
+
+async def _test(
+    args: argparse.Namespace,
+    email: str,
+    password: str,
+    phone: Optional[str],
+    logger: logging.Logger,
+) -> None:
     client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
     message = ""
     try:
@@ -22,12 +29,21 @@ async def _test(args: argparse.Namespace, email: str, password: str, phone: Opti
             message += f"{status.lock_name}: {status.battery_level}%\n"
         pushover.send_message(message, title="August Battery Status", priority=0)
     except Exception as e:
-        pushover.send_message(f"Error initializing August client: {e}", title="August Battery Status", priority=2)
+        pushover.send_message(
+            f"Error initializing August client: {e}",
+            title="August Battery Status",
+            priority=2,
+        )
     finally:
         await client.close()
 
+
 async def _run_command(
-    args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger
+    args: argparse.Namespace,
+    email: str,
+    password: str,
+    phone: Optional[str],
+    logger: logging.Logger,
 ) -> None:
     if args.command == "monitor":
         monitor = AugustMonitor(
@@ -53,14 +69,13 @@ async def _run_command(
     elif args.command == "test":
         await _test(args, email, password, phone, logger)
 
+
 def main() -> None:
     logger = get_logger(__name__)
     logger.info("=" * 50)
     logger.info("Starting August Smart Lock Monitoring")
 
-    parser = argparse.ArgumentParser(
-        description="August Smart Lock monitoring and alerting"
-    )
+    parser = argparse.ArgumentParser(description="August Smart Lock monitoring and alerting")
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -104,9 +119,7 @@ def main() -> None:
         sys.exit(1)
 
     # Get August credentials from Constants
-    if not hasattr(Constants, "AUGUST_EMAIL") or not hasattr(
-        Constants, "AUGUST_PASSWORD"
-    ):
+    if not hasattr(Constants, "AUGUST_EMAIL") or not hasattr(Constants, "AUGUST_PASSWORD"):
         logger.error("August credentials not found in Constants.py")
         logger.error("Please add AUGUST_EMAIL and AUGUST_PASSWORD to Constants.py")
         sys.exit(1)

@@ -8,9 +8,7 @@ import os
 import re
 
 parser = argparse.ArgumentParser(description="Transfer learning on imagenet model")
-parser.add_argument(
-    "--train_dir", help="Folder with training images", default="./train"
-)
+parser.add_argument("--train_dir", help="Folder with training images", default="./train")
 parser.add_argument(
     "--training_epochs",
     help="Epochs to use for training mode. Recommend: 5, Default: 1",
@@ -55,9 +53,7 @@ x = Dense(
 )  # we add dense layers so that the model can learn more complex functions and classify for better results.
 x = Dense(1024, activation="relu")(x)  # dense layer 2
 x = Dense(512, activation="relu")(x)  # dense layer 3
-preds = Dense(
-    num_preds, activation="softmax"
-)(
+preds = Dense(num_preds, activation="softmax")(
     x
 )  # final layer with softmax activation # soft max predictions over the number of outcomes.
 

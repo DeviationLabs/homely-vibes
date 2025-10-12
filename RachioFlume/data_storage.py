@@ -195,9 +195,7 @@ class WaterTrackingDB:
 
             conn.commit()
 
-    def get_zone_sessions(
-        self, start_date: datetime, end_date: datetime
-    ) -> List[Dict[str, Any]]:
+    def get_zone_sessions(self, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
         """Get zone watering sessions for a date range."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -258,9 +256,7 @@ class WaterTrackingDB:
                     water_used = self._get_water_usage_for_period(start_time, end_time)
 
                     # Calculate average flow rate
-                    avg_flow_rate = (
-                        (water_used / (duration / 60)) if duration > 0 else 0.0
-                    )
+                    avg_flow_rate = (water_used / (duration / 60)) if duration > 0 else 0.0
 
                     # Insert session
                     cursor.execute(
@@ -283,9 +279,7 @@ class WaterTrackingDB:
 
             conn.commit()
 
-    def _get_water_usage_for_period(
-        self, start_time: datetime, end_time: datetime
-    ) -> float:
+    def _get_water_usage_for_period(self, start_time: datetime, end_time: datetime) -> float:
         """Get total water usage for a time period."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -356,7 +350,10 @@ class WaterTrackingDB:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_raw_data_intervals(
-        self, start_time: datetime, end_time: datetime, interval_minutes: int = 5
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        interval_minutes: int = 5,
     ) -> List[Dict[str, Any]]:
         """Get raw data aggregated into time intervals."""
         with self.get_connection() as conn:
@@ -417,13 +414,9 @@ class WaterTrackingDB:
             cursor = conn.cursor()
 
             if source == "rachio":
-                cursor.execute(
-                    "SELECT MAX(event_date) as last_timestamp FROM watering_events"
-                )
+                cursor.execute("SELECT MAX(event_date) as last_timestamp FROM watering_events")
             elif source == "flume":
-                cursor.execute(
-                    "SELECT MAX(timestamp) as last_timestamp FROM water_readings"
-                )
+                cursor.execute("SELECT MAX(timestamp) as last_timestamp FROM water_readings")
             else:
                 raise ValueError(f"Unknown source: {source}")
 
