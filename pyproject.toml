@@ -56,7 +56,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["lib", "Tesla", "WaterParser", "Bimpop.ai", "August"]
+packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August"]
 
 [tool.deptry]
 known_first_party = [
@@ -117,7 +117,7 @@ DEP002 = [
 DEP003 = ["google", "TeslaPy", "foscam"]
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "WaterParser", "Bimpop.ai", "August"]
+testpaths = ["Tesla", "WaterParser", "BimpopAI", "August"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -155,7 +155,6 @@ namespace_packages = true
 explicit_package_bases = true
 exclude = [
     "lib/TeslaPy/",  # Third-party submodule
-    "Bimpop.ai/",  # Legacy AI module
 ]
 
 [[tool.mypy.overrides]]
@@ -202,7 +201,7 @@ module = [
     "Tesla.*",
     "RachioFlume.*",
     "BrowserAlert.*",
-    "Bimpop.*",
+    "BimpopAI.*",
     "GarageCheck.*",
     "NodeCheck.*",
     "NetworkCheck.*",
