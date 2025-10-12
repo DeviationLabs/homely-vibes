@@ -36,7 +36,6 @@ streamlit = [
     "streamlit>=1.20.0",
 ]
 iot = [
-    "asyncio-mqtt>=0.11.0",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -51,21 +50,6 @@ dev = [
     "semgrep>=1.0.0",
     "codespell>=2.0.0",
     "deptry>=0.23.1",
-    # Move unused dependencies here as dev dependencies
-    "teslapy>=2.6.0",
-    "Pillow>=10.0.0",
-    "python-dotenv>=0.19.0",
-    "openpyxl>=3.1.0",
-    "cffi>=1.17.1",
-    "asyncio-mqtt>=0.16.2,<0.17.0",
-    "geopy>=2.4.1",
-    "requests-oauthlib>=2.0.0",
-    "websocket-client>=1.8.0",
-    "selenium>=4.35.0",
-    "pywebview>=6.0",
-    "oauthlib>=3.3.1",
-    "setuptools>=80.9.0",
-    "pyfoscam>=1.2,<2.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -127,21 +111,6 @@ DEP002 = [
     "semgrep",
     "codespell",
     "deptry",
-    # Dependencies moved to dev optional dependencies
-    "teslapy",
-    "Pillow",
-    "python-dotenv",
-    "openpyxl", 
-    "cffi",
-    "asyncio-mqtt",
-    "geopy",
-    "requests-oauthlib",
-    "websocket-client", 
-    "selenium",
-    "pywebview",
-    "oauthlib",
-    "setuptools",
-    "pyfoscam",
     # Core dependencies not used in all modules
     "requests",
     "openai", 
@@ -160,7 +129,7 @@ DEP002 = [
     "aiohttp",
     "urllib3"
 ]
-DEP003 = ["google", "TeslaPy"]
+DEP003 = ["google", "TeslaPy", "foscam"]
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "WaterParser", "Bimpop.ai", "August"]
