@@ -41,10 +41,8 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.10.0",
-    "black>=24.3.0",
     "flake8>=5.0.0",
     "mypy>=1.0.0",
-    "isort>=5.10.0",
     "vulture>=2.0.0",
     "semgrep>=1.0.0",
     "codespell>=2.0.0",
@@ -102,10 +100,8 @@ DEP002 = [
     "pytest-cov",
     "pytest-asyncio", 
     "pytest-mock",
-    "black",
     "flake8",
     "mypy",
-    "isort",
     "vulture",
     "semgrep",
     "codespell",
@@ -120,28 +116,6 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 
-[tool.black]
-line-length = 88
-target-version = ['py313']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
 
 [tool.ruff]
 exclude = [
