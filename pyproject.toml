@@ -148,6 +148,21 @@ warn_unreachable = true
 strict_equality = true
 namespace_packages = true
 explicit_package_bases = true
+exclude = [
+    "lib/",
+    "WaterParser/",
+    "GarageCheck/",
+    "Tesla/",
+    "Bimpop.ai/",
+    "RachioFlume/",
+    "OpenAIAdmin/",
+    "BrowserAlert/",
+    "NodeCheck/",
+    "NetworkCheck/",
+    "JWTs/",
+    "GPXParser/",
+    "WaterLogging/",
+]
 
 [[tool.mypy.overrides]]
 module = [
