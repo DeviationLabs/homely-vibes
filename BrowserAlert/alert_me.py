@@ -26,7 +26,9 @@ def refresh_dns_cache(client: Any) -> str:
     return NetHelpers.ssh_cmd_v2(client, cmd)
 
 
-def run_monitor_one_shot(client: Any, origin_file: str, ignore_patterns: str) -> Tuple[bool, str, Optional[str]]:
+def run_monitor_one_shot(
+    client: Any, origin_file: str, ignore_patterns: str
+) -> Tuple[bool, str, Optional[str]]:
     global records
     global parse_start_time
     temp_dest = "~/.gc_history"
@@ -59,7 +61,7 @@ def run_monitor_one_shot(client: Any, origin_file: str, ignore_patterns: str) ->
             alert = True
             msg += "ALERT!! "
             res = get_tld(data[2], as_object=True)  # Get the root as an object
-            matched = res.fld if hasattr(res, 'fld') else None
+            matched = res.fld if hasattr(res, "fld") else None
         msg += f"[{data[1]}] {data[2]})\n"
 
         if data[0] > parse_start_time:
@@ -150,7 +152,7 @@ if __name__ == "__main__":
                         pass  # Will be handled below
                 elif isinstance(sms_inform, str):
                     sms_inform = [sms_inform]
-                for rcpt in (sms_inform or []):
+                for rcpt in sms_inform or []:
                     MyTwilio.sendsms(
                         rcpt,
                         f"[Success][{args.machine}] Ssh failure has self healed",
@@ -180,7 +182,7 @@ if __name__ == "__main__":
                                 pass  # Will be handled below
                         elif isinstance(sms_inform, str):
                             sms_inform = [sms_inform]
-                        for rcpt in (sms_inform or []):
+                        for rcpt in sms_inform or []:
                             MyTwilio.sendsms(
                                 rcpt,
                                 f"[Error][{args.machine}] Ping up but ssh failing. Needs manual debug",
@@ -206,7 +208,7 @@ if __name__ == "__main__":
                         pass  # Will be handled below
                 elif isinstance(sms_inform, str):
                     sms_inform = [sms_inform]
-                for rcpt in (sms_inform or []):
+                for rcpt in sms_inform or []:
                     MyTwilio.sendsms(rcpt, f"[BLACKLIST][{args.machine}] : {matched}")
             else:
                 logger.info(f"Badness No SMS: {temp}")

@@ -137,7 +137,9 @@ class PowerwallManager:
             "can_grid_charge": can_grid_charge,
         }
 
-    def calculate_trigger_percentages(self, decision_point: DecisionPoint, current_time: Any, sleep_time: int) -> Tuple[float, float]:
+    def calculate_trigger_percentages(
+        self, decision_point: DecisionPoint, current_time: Any, sleep_time: int
+    ) -> Tuple[float, float]:
         """Calculate trigger percentages for current and next polling cycle."""
         hours_to_end = (
             (int(decision_point.time_end / 100) - current_time.tm_hour)
@@ -157,7 +159,11 @@ class PowerwallManager:
         return trigger_now, trigger_next
 
     def apply_decision_point(
-        self, product: Any, data: Dict[str, Any], decision_point: DecisionPoint, trigger_percentage: float
+        self,
+        product: Any,
+        data: Dict[str, Any],
+        decision_point: DecisionPoint,
+        trigger_percentage: float,
     ) -> bool:
         """Apply a decision point configuration to the powerwall."""
         status_messages = []
@@ -198,7 +204,9 @@ class PowerwallManager:
 
         return changes_made
 
-    def process_decision_points(self, product: Any, data: Dict[str, Any], current_time: Any, sleep_time: int) -> int:
+    def process_decision_points(
+        self, product: Any, data: Dict[str, Any], current_time: Any, sleep_time: int
+    ) -> int:
         """Process all decision points and return updated sleep time."""
         decision_points = Constants.POWERWALL_DECISION_POINTS
         current_time_val = current_time.tm_hour * 100 + current_time.tm_min
