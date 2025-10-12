@@ -62,7 +62,7 @@ class RachioClient:
         url = f"{self.BASE_URL}/device/{self.device_id}"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
-        device_info = response.json()
+        device_info: Dict[str, Any] = response.json()
         self.logger.info(f"Retrieved device info for {device_info.get('name', 'Unknown Device')}")
         return device_info
 
@@ -134,7 +134,7 @@ class RachioClient:
         start_ms = int(start_time.timestamp() * 1000)
         end_ms = int(end_time.timestamp() * 1000)
 
-        params = {
+        params: Dict[str, Any] = {
             "startTime": start_ms,
             "endTime": end_ms,
             "type": "ZONE_STATUS",

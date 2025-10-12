@@ -15,7 +15,7 @@ logger = SystemLogger.get_logger(__name__)
 pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
 
 
-def purge_old_foscam_files():
+def purge_old_foscam_files() -> tuple[bool, str]:
     """Purge old foscam files with integrated functionality from shell script."""
     success = True
     messages = []

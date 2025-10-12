@@ -31,16 +31,16 @@ print("Also see swagger docs at http://localhost:8080/docs")
 
 
 @router.post("/priors", status_code=status.HTTP_200_OK)
-def fetch_matches(request: MatchRequest):
+def fetch_matches(request: MatchRequest) -> JSONResponse:
     return JSONResponse(content={"success": True, "message": ["All matched data"]})
 
 
 @router.post("/summarize", status_code=status.HTTP_200_OK)
-def summarize(request: SummarizeRequest):
+def summarize(request: SummarizeRequest) -> JSONResponse:
     docs = utils.get_similar_texts(request.summary_question)
     answer = utils.get_llm_response(docs)
 
     return JSONResponse(content={"success": True, "message": answer})
 
 
-def dud(): ...
+def dud() -> None: ...

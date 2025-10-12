@@ -94,12 +94,12 @@ class FlumeClient:
                 raise ValueError("No token data returned from Flume API")
 
             token_info = data_array[0]
-            access_token = token_info.get("access_token")
+            access_token: Optional[str] = token_info.get("access_token")
             if not access_token:
                 raise ValueError("No access_token found in Flume API response")
 
             self.logger.info("Successfully obtained access token from Flume API")
-            return access_token
+            return str(access_token)
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
             if hasattr(e, "response") and e.response is not None:

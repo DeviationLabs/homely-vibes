@@ -3,11 +3,11 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Generator
 from contextlib import contextmanager
 
-from rachio_client import WateringEvent, Zone
-from flume_client import WaterReading
+from .rachio_client import WateringEvent, Zone
+from .flume_client import WaterReading
 from lib.logger import get_logger
 
 
@@ -113,7 +113,7 @@ class WaterTrackingDB:
             conn.commit()
 
     @contextmanager
-    def get_connection(self):
+    def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Get database connection with automatic cleanup."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row  # Enable dict-like access to rows

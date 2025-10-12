@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from typing import Any, Tuple, Optional
 import argparse
 from importlib import reload
 import os
@@ -19,13 +20,15 @@ records = {}
 parse_start_time = 0
 
 
-def refresh_dns_cache(client):
+def refresh_dns_cache(client: Any) -> str:
     # Purge DNS cache before start of tailer...
     cmd = "sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder && date"
-    return NetHelpers.ssh_cmd_v2(client, cmd)
+    return str(NetHelpers.ssh_cmd_v2(client, cmd))
 
 
-def run_monitor_one_shot(client, origin_file, ignore_patterns):
+def run_monitor_one_shot(
+    client: Any, origin_file: str, ignore_patterns: str
+) -> Tuple[bool, str, Optional[str]]:
     global records
     global parse_start_time
     temp_dest = "~/.gc_history"
@@ -48,8 +51,8 @@ def run_monitor_one_shot(client, origin_file, ignore_patterns):
             # Malformed. Ignore.
             continue
 
-        data[0] = int(data[0])
-        if data[0] <= parse_start_time:
+        timestamp = int(data[0])
+        if timestamp <= parse_start_time:
             # We've already digested this record
             continue
         elif re.search(ignore_patterns, data[2]):
@@ -58,11 +61,11 @@ def run_monitor_one_shot(client, origin_file, ignore_patterns):
             alert = True
             msg += "ALERT!! "
             res = get_tld(data[2], as_object=True)  # Get the root as an object
-            matched = res.fld
+            matched = res.fld if hasattr(res, "fld") else None
         msg += f"[{data[1]}] {data[2]})\n"
 
-        if data[0] > parse_start_time:
-            parse_start_time = data[0]
+        if timestamp > parse_start_time:
+            parse_start_time = timestamp
             records[data[1]] = data[2]
 
     return (alert, msg, matched)
@@ -115,6 +118,7 @@ if __name__ == "__main__":
     time.sleep(args.start_after_seconds)
 
     host = Constants.NODES[args.machine]
+    client: Optional[Any] = None
     try:
         client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
         msg = refresh_dns_cache(client)
@@ -140,10 +144,16 @@ if __name__ == "__main__":
             Constants = reload(Constants)
             host = Constants.NODES[args.machine]
             (alert, msg, matched) = run_monitor_one_shot(
-                client, host["histfile"], host.get("whitelist", "")
+                client, str(host["histfile"]), str(host.get("whitelist", ""))
             )
             if only_ssh_fails_count > SSH_ALERT_DELAY_COUNT:
-                for rcpt in host["sms_inform"]:
+                sms_inform = host.get("sms_inform", [])
+                if isinstance(sms_inform, list):
+                    for rcpt in sms_inform:
+                        pass  # Will be handled below
+                elif isinstance(sms_inform, str):
+                    sms_inform = [sms_inform]
+                for rcpt in sms_inform or []:
                     MyTwilio.sendsms(
                         rcpt,
                         f"[Success][{args.machine}] Ssh failure has self healed",
@@ -155,7 +165,7 @@ if __name__ == "__main__":
                 # Most probable explanation is ssh has failed, so reconnect and retry
                 client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
                 (alert, msg, matched) = run_monitor_one_shot(
-                    client, host["histfile"], host.get("whitelist", "")
+                    client, str(host["histfile"]), str(host.get("whitelist", ""))
                 )
             except Exception as e:
                 # Take a cooling off period.
@@ -167,7 +177,13 @@ if __name__ == "__main__":
                     only_ssh_fails_count += 1
                     if only_ssh_fails_count == SSH_ALERT_DELAY_COUNT:
                         # ping succeeds but ssh failing for a while
-                        for rcpt in host["sms_inform"]:
+                        sms_inform = host.get("sms_inform", [])
+                        if isinstance(sms_inform, list):
+                            for rcpt in sms_inform:
+                                pass  # Will be handled below
+                        elif isinstance(sms_inform, str):
+                            sms_inform = [sms_inform]
+                        for rcpt in sms_inform or []:
                             MyTwilio.sendsms(
                                 rcpt,
                                 f"[Error][{args.machine}] Ping up but ssh failing. Needs manual debug",
@@ -187,7 +203,13 @@ if __name__ == "__main__":
             ):
                 logger.info(f"Badness Sending SMS: {temp}")
                 cool_down_attempts = Constants.MIN_REPORTING_GAP
-                for rcpt in host["sms_inform"]:
+                sms_inform = host.get("sms_inform", [])
+                if isinstance(sms_inform, list):
+                    for rcpt in sms_inform:
+                        pass  # Will be handled below
+                elif isinstance(sms_inform, str):
+                    sms_inform = [sms_inform]
+                for rcpt in sms_inform or []:
                     MyTwilio.sendsms(rcpt, f"[BLACKLIST][{args.machine}] : {matched}")
             else:
                 logger.info(f"Badness No SMS: {temp}")

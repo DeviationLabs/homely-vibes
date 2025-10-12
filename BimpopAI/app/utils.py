@@ -1,3 +1,4 @@
+from typing import List, Optional, Dict
 from fastapi import HTTPException, Header
 from openai import OpenAI
 import logging
@@ -10,7 +11,6 @@ import random
 import string
 from datetime import datetime
 import tiktoken
-from typing import List
 
 TEXT_EMBEDDING_MODEL = "text-embedding-3-small"
 LLM_MODEL = "gpt-3.5-turbo"
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def auth_user(auth: str = Header()):
+def auth_user(auth: str = Header()) -> bool:
     #    print("Authorization: ", auth)
     if auth == "validated_user":
         return True
@@ -31,7 +31,7 @@ def auth_user(auth: str = Header()):
 
 embed = OpenAIEmbeddings(
     model=TEXT_EMBEDDING_MODEL,
-    openai_api_key=os.environ["OPENAI_API_KEY"],
+    api_key=os.environ["OPENAI_API_KEY"],
 )
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -53,7 +53,7 @@ def get_embedding(text: str, model: str = TEXT_EMBEDDING_MODEL) -> List[float]:
     return result[0]
 
 
-def get_chunks(text):
+def get_chunks(text: str) -> List[str]:
     """
     # LLaMA-2 LLM Context is 4096 tokens so split document into chunks
     # Chunks are 1000 tokens with 200 token overlap
@@ -77,12 +77,12 @@ tokenizer = tiktoken.get_encoding("cl100k_base")
 
 
 # create the length function
-def tiktoken_len(text):
+def tiktoken_len(text: str) -> int:
     tokens = tokenizer.encode(text, disallowed_special=())
     return len(tokens)
 
 
-def insert_db(text, embedding):
+def insert_db(text: str, embedding: List[float]) -> None:
     id = "".join(random.choices(string.ascii_uppercase, k=RANDOM_STR_LEN))
     logger.warning(f"inside insert_db with id {id}")
 
@@ -102,7 +102,7 @@ def insert_db(text, embedding):
     )
 
 
-def get_similar_texts(query):
+def get_similar_texts(query: Optional[str]) -> List[str]:
     query = query or "the glass is half full"
     embedding = get_embedding(query)
     records = index.query(
@@ -116,7 +116,7 @@ def get_similar_texts(query):
     return documents
 
 
-def get_llm_response(query):
+def get_llm_response(query: List[str]) -> Optional[str]:
     messages = build_query_prompt(query)
     try:
         response = client.chat.completions.create(
@@ -133,7 +133,7 @@ def get_llm_response(query):
         return None
 
 
-def build_query_prompt(input_texts):
+def build_query_prompt(input_texts: List[str]) -> List[Dict[str, str]]:
     input_text = "\n".join(input_texts)
     messages = [
         {
