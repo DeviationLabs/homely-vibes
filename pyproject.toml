@@ -28,6 +28,7 @@ dependencies = [
     "gpxpy>=1.5.0",
     "click>=8.0.0",
     "streamlit>=1.20.0",
+    "paramiko"
 ]
 
 [project.optional-dependencies]
