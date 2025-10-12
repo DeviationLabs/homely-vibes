@@ -42,6 +42,7 @@ dependencies = [
     "pytest>=8.4.1",
     "gpxpy>=1.5.0",
     "click>=8.0.0",
+    "streamlit>=1.20.0",
 ]
 
 [project.optional-dependencies]
@@ -93,10 +94,6 @@ known_first_party = [
     "utils",  # for Bimpop.ai/fe/utils.py
 ]
 exclude = ["tests", ".venv", "backups", "lib/TeslaPy"]
-
-[tool.deptry.package_module_name_map]
-streamlit = "streamlit"
-gpxpy = "gpxpy"
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
@@ -104,7 +101,6 @@ DEP001 = [
     "google_auth_oauthlib", 
     "pinecone",
     "langchain_pinecone",
-    "streamlit",
     "tld",
     "tensorflow", 
     "keras",
@@ -138,7 +134,6 @@ DEP002 = [
     "urllib3",
     "cffi",
     "asyncio-mqtt",
-    "streamlit",
     # Tesla/GUI dependencies used in specific modules
     "geopy",
     "requests-oauthlib",
