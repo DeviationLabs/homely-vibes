@@ -59,9 +59,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="TF packages validator and one shot image prediction"
     )
-    parser.add_argument(
-        "--predict_file", help="image to run prediction", default="dummy.jpg"
-    )
+    parser.add_argument("--predict_file", help="image to run prediction", default="dummy.jpg")
     parser.add_argument(
         "--display_image",
         help="Show image to be predicted",

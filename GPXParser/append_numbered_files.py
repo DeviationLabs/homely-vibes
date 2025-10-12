@@ -170,9 +170,7 @@ def main():
     """Main function to run the script."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Append numbered GPX files in numeric order"
-    )
+    parser = argparse.ArgumentParser(description="Append numbered GPX files in numeric order")
     parser.add_argument(
         "-o",
         "--output",

@@ -34,7 +34,10 @@ def reboot_foscam(nodeName):
         msg = NetHelpers.http_req(cmd)
     except OSError as e:
         err_msg = getattr(e, "message", repr(e))
-        msg = ">> ERROR: When rebooting %s. Got %s..." % (nodeName, err_msg[:100])
+        msg = ">> ERROR: When rebooting %s. Got %s..." % (
+            nodeName,
+            err_msg[:100],
+        )
         log_message(msg)
     return msg
 
@@ -42,9 +45,7 @@ def reboot_foscam(nodeName):
 def reboot_windows(node):
     # Ping to keep child proc alive for long enough
     winCmd = "shutdown /r /f ; ping localhost -n 3 > nul"
-    return NetHelpers.ssh_cmd(
-        node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd
-    )
+    return NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
 
 
 # Note: For windows nodes only
@@ -103,9 +104,7 @@ def check_state(desired_up, attempts):
         for nodeName, nodeIP in nodes.items():
             # if state is false, then ping again to check if state is now true
             if not state[nodeName]:
-                state[nodeName] = NetHelpers.ping_output(
-                    node=nodeIP, desired_up=desired_up
-                )
+                state[nodeName] = NetHelpers.ping_output(node=nodeIP, desired_up=desired_up)
                 logger.debug(
                     f"{attempt=} for {nodeName}, {desired_up=} In desired state: {state[nodeName]}"
                 )
@@ -123,7 +122,10 @@ if __name__ == "__main__":
         default="foscam",
     )
     parser.add_argument(
-        "--reboot", help="Reboot or check only", action="store_true", default=False
+        "--reboot",
+        help="Reboot or check only",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
         "--display_image",
@@ -132,11 +134,12 @@ if __name__ == "__main__":
         default=False,
     )
     parser.add_argument(
-        "--always_email", help="Send email report", action="store_true", default=False
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
-    parser.add_argument(
-        "-d", "--debug", action="store_true", help="set logging level to debug"
-    )
+    parser.add_argument("-d", "--debug", action="store_true", help="set logging level to debug")
     args = parser.parse_args()
 
     logger.info("============")
@@ -145,9 +148,7 @@ if __name__ == "__main__":
     nodes = Constants.FOSCAM_NODES if args.mode == "foscam" else Constants.WINDOWS_NODES
 
     log_message("Checking connectivity...")
-    check_state(
-        desired_up=True, attempts=5
-    )  ## Seeing intermittent nwk failures. Let's mask these
+    check_state(desired_up=True, attempts=5)  ## Seeing intermittent nwk failures. Let's mask these
     for nodeName, nodeIP in nodes.items():
         if state[nodeName]:
             log_message("   %s: %s online." % (args.mode, nodeName))
@@ -209,9 +210,7 @@ if __name__ == "__main__":
     # Cleanup and reporting
     if not system_healthy:
         log_message(">> ERROR: Node check failed!")
-        failed_nodes = [
-            nodeName for nodeName, _ in nodes.items() if not state[nodeName]
-        ]
+        failed_nodes = [nodeName for nodeName, _ in nodes.items() if not state[nodeName]]
         pushover.send_message(
             f"{args.mode.title()} Node check failed for {', '.join(failed_nodes)}",
             title="Node Check",

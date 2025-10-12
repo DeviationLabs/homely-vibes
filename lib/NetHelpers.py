@@ -12,9 +12,7 @@ def ping_output(node, count=1, desired_up=True) -> bool:
     node_state = False
     cmd = "ping -c%d %s" % (count, node)
     try:
-        output = (
-            subprocess.check_output(cmd.split(), timeout=5).decode("utf-8").splitlines()
-        )
+        output = subprocess.check_output(cmd.split(), timeout=5).decode("utf-8").splitlines()
         if not output:
             raise AssertionError(f"No data returned for {cmd=}. Needs debug")
         for line in output:

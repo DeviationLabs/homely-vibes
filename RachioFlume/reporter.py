@@ -78,9 +78,7 @@ class WeeklyReporter:
 
         # Calculate total statistics
         total_sessions = sum(stat["session_count"] for stat in zone_stats)
-        total_duration_seconds = sum(
-            stat["total_duration_seconds"] or 0 for stat in zone_stats
-        )
+        total_duration_seconds = sum(stat["total_duration_seconds"] or 0 for stat in zone_stats)
         total_water_used = sum(stat["total_water_used"] or 0 for stat in zone_stats)
 
         # Format zone statistics for display
@@ -145,21 +143,13 @@ class WeeklyReporter:
         report_text = []
 
         report_text.append("WATER USAGE REPORT")
-        report_text.append(
-            f"Period: {report.period_start.date()} to {report.period_end.date()}"
-        )
+        report_text.append(f"Period: {report.period_start.date()} to {report.period_end.date()}")
         report_text.append("=" * 35)
 
         report_text.append("\nSUMMARY:")
-        report_text.append(
-            f"  Total watering sessions: {report.summary.total_watering_sessions}"
-        )
-        report_text.append(
-            f"  Total duration: {report.summary.total_duration_hours} hours"
-        )
-        report_text.append(
-            f"  Total water used: {report.summary.total_water_used_gallons} gallons"
-        )
+        report_text.append(f"  Total watering sessions: {report.summary.total_watering_sessions}")
+        report_text.append(f"  Total duration: {report.summary.total_duration_hours} hours")
+        report_text.append(f"  Total water used: {report.summary.total_water_used_gallons} gallons")
         report_text.append(f"  Zones watered: {report.summary.zones_watered}")
 
         if report.zones:
@@ -196,9 +186,7 @@ class WeeklyReporter:
         self.logger.info("RAW WATER USAGE DATA REPORT")
         self.logger.info("=" * 35)
         self.logger.info(f"Report Generated: {report['report_generated']}")
-        self.logger.info(
-            f"Time Period: {report['period_start']} to {report['period_end']}"
-        )
+        self.logger.info(f"Time Period: {report['period_start']} to {report['period_end']}")
         self.logger.info(f"Interval: {report['interval_minutes']} minutes")
         self.logger.info(f"Total Data Points: {len(report['data_points'])}")
         self.logger.info("")
@@ -244,9 +232,7 @@ class WeeklyReporter:
             always_email=True,
         )
 
-        self.logger.info(
-            f"Report emailed for {subject_prefix.lower()} starting {start_date}"
-        )
+        self.logger.info(f"Report emailed for {subject_prefix.lower()} starting {start_date}")
 
     def generate_raw_data_report(self, hours_back: int = 24) -> Dict[str, Any]:
         """Generate raw data report with 5-minute increments.
@@ -263,9 +249,7 @@ class WeeklyReporter:
         self.logger.info(f"Generating raw data report for {start_time} to {end_time}")
 
         # Get raw data in 5-minute intervals
-        raw_data = self.db.get_raw_data_intervals(
-            start_time, end_time, interval_minutes=5
-        )
+        raw_data = self.db.get_raw_data_intervals(start_time, end_time, interval_minutes=5)
 
         return {
             "report_generated": datetime.now().isoformat(),
@@ -309,9 +293,7 @@ class WeeklyReporter:
         efficiency_analysis = {}
         for zone_name, data in zone_data.items():
             if data["total_duration"] > 0:
-                avg_flow_rate = data["total_water"] / (
-                    data["total_duration"] / 60
-                )  # GPM
+                avg_flow_rate = data["total_water"] / (data["total_duration"] / 60)  # GPM
                 water_per_session = data["total_water"] / len(data["sessions"])
                 duration_per_session = (
                     data["total_duration"] / len(data["sessions"]) / 60
@@ -354,9 +336,7 @@ class WeeklyReporter:
             report_text.append(f"\n{zone_name}:")
             report_text.append(f"  Sessions: {data['total_sessions']}")
             report_text.append(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-            report_text.append(
-                f"  Water per session: {data['water_per_session_gallons']} gallons"
-            )
+            report_text.append(f"  Water per session: {data['water_per_session_gallons']} gallons")
             report_text.append(
                 f"  Duration per session: {data['duration_per_session_minutes']} minutes"
             )

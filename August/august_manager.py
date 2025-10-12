@@ -3,6 +3,7 @@ import asyncio
 import argparse
 import sys
 from typing import Optional
+import logging
 
 from .august_client import AugustMonitor, AugustClient
 from lib.logger import get_logger
@@ -14,7 +15,11 @@ pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
 
 
 async def _test(
-    args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger
+    args: argparse.Namespace,
+    email: str,
+    password: str,
+    phone: Optional[str],
+    logger: logging.Logger,
 ) -> None:
     client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
     message = ""
@@ -25,14 +30,20 @@ async def _test(
         pushover.send_message(message, title="August Battery Status", priority=0)
     except Exception as e:
         pushover.send_message(
-            f"Error initializing August client: {e}", title="August Battery Status", priority=2
+            f"Error initializing August client: {e}",
+            title="August Battery Status",
+            priority=2,
         )
     finally:
         await client.close()
 
 
 async def _run_command(
-    args: argparse.Namespace, email: str, password: str, phone: Optional[str], logger
+    args: argparse.Namespace,
+    email: str,
+    password: str,
+    phone: Optional[str],
+    logger: logging.Logger,
 ) -> None:
     if args.command == "monitor":
         monitor = AugustMonitor(

@@ -19,7 +19,8 @@ class TestRachioClient:
     def test_init_with_env_vars(self):
         """Test initialization with environment variables."""
         with patch.dict(
-            os.environ, {"RACHIO_API_KEY": "test_key", "RACHIO_ID": "test_device"}
+            os.environ,
+            {"RACHIO_API_KEY": "test_key", "RACHIO_ID": "test_device"},
         ):
             client = RachioClient()
             assert client.api_key == "test_key"
@@ -37,15 +38,26 @@ class TestRachioClient:
         mock_response = Mock()
         mock_response.json.return_value = {
             "zones": [
-                {"id": "zone1", "zoneNumber": 1, "name": "Front Yard", "enabled": True},
-                {"id": "zone2", "zoneNumber": 2, "name": "Back Yard", "enabled": False},
+                {
+                    "id": "zone1",
+                    "zoneNumber": 1,
+                    "name": "Front Yard",
+                    "enabled": True,
+                },
+                {
+                    "id": "zone2",
+                    "zoneNumber": 2,
+                    "name": "Back Yard",
+                    "enabled": False,
+                },
             ]
         }
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
         with patch.dict(
-            os.environ, {"RACHIO_API_KEY": "test_key", "RACHIO_ID": "test_device"}
+            os.environ,
+            {"RACHIO_API_KEY": "test_key", "RACHIO_ID": "test_device"},
         ):
             client = RachioClient()
             zones = client.get_zones()
@@ -72,9 +84,7 @@ class TestFlumeClient:
                 "FLUME_PASSWORD": "password789",
             },
         ):
-            with patch.object(
-                FlumeClient, "_get_access_token", return_value="token123"
-            ):
+            with patch.object(FlumeClient, "_get_access_token", return_value="token123"):
                 client = FlumeClient()
                 assert client.client_id == "client123"
                 assert client.client_secret == "secret456"
@@ -338,9 +348,7 @@ class TestWaterTrackingCollector:
         mock_rachio_class.return_value = mock_rachio
 
         mock_flume = Mock()
-        mock_flume.get_usage.return_value = [
-            WaterReading(timestamp=datetime.now(), value=1.0)
-        ]
+        mock_flume.get_usage.return_value = [WaterReading(timestamp=datetime.now(), value=1.0)]
         mock_flume_class.return_value = mock_flume
 
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:

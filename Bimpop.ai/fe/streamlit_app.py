@@ -15,7 +15,10 @@ with st.sidebar:
 
 with st.form("summaries_form"):
     input_txt = st.text_area(
-        "Get summaries", "What has been said so far?", height=100, max_chars=1000
+        "Get summaries",
+        "What has been said so far?",
+        height=100,
+        max_chars=1000,
     )
     st.write(f"You wrote {len(input_txt)} characters.")
 
@@ -26,9 +29,7 @@ with st.form("summaries_form"):
         st.write(out)
 
 with st.form("priors_form"):
-    input_txt = st.text_area(
-        "Get Priors", "What has been said so far?", height=100, max_chars=1000
-    )
+    input_txt = st.text_area("Get Priors", "What has been said so far?", height=100, max_chars=1000)
     st.write(f"You wrote {len(input_txt)} characters.")
 
     # Every form must have a submit button.

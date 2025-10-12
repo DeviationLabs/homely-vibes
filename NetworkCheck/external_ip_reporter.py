@@ -39,7 +39,11 @@ def get_external_ip() -> Tuple[str, bool]:
                 ip_address = response.read().decode("utf-8").strip()
                 logger.debug(f"Got IP: {ip_address}")
                 return ip_address, False
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+        ) as e:
             logger.warning(f"Failed to get IP from {service}: {e}")
             continue
 
@@ -64,7 +68,10 @@ def main() -> None:
     title = "Eden External IP Address"
 
     Mailer.sendmail(
-        topic=f"[{title}]", message=ip_address, always_email=True, alert=is_error
+        topic=f"[{title}]",
+        message=ip_address,
+        always_email=True,
+        alert=is_error,
     )
 
     pushover.send_message(ip_address, title=title)

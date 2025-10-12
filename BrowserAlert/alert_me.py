@@ -84,10 +84,16 @@ if __name__ == "__main__":
         default="garmougal",
     )
     parser.add_argument(
-        "--send_sms", help="Send email report", action="store_true", default=False
+        "--send_sms",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
-        "--always_email", help="Send email report", action="store_true", default=False
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 
@@ -139,16 +145,15 @@ if __name__ == "__main__":
             if only_ssh_fails_count > SSH_ALERT_DELAY_COUNT:
                 for rcpt in host["sms_inform"]:
                     MyTwilio.sendsms(
-                        rcpt, f"[Success][{args.machine}] Ssh failure has self healed"
+                        rcpt,
+                        f"[Success][{args.machine}] Ssh failure has self healed",
                     )
             only_ssh_fails_count = 0
         except Exception as e:
             msg = f"{e}"
             try:
                 # Most probable explanation is ssh has failed, so reconnect and retry
-                client = NetHelpers.ssh_connect(
-                    host["ip"], host["username"], host["password"]
-                )
+                client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
                 (alert, msg, matched) = run_monitor_one_shot(
                     client, host["histfile"], host.get("whitelist", "")
                 )
@@ -157,9 +162,7 @@ if __name__ == "__main__":
                 client = None
                 msg += f"{e}"
                 sleep_time = Constants.REFRESH_DELAY * 10
-                msg += (
-                    f"\nSSH reconnect failed. Take a {sleep_time}s cooloff period...\n"
-                )
+                msg += f"\nSSH reconnect failed. Take a {sleep_time}s cooloff period...\n"
                 if NetHelpers.ping_output(node=host["ip"]):
                     only_ssh_fails_count += 1
                     if only_ssh_fails_count == SSH_ALERT_DELAY_COUNT:
@@ -196,9 +199,7 @@ if __name__ == "__main__":
             args.always_email or currtime.tm_hour == Constants.HR_EMAIL
         ) and last_checked_hr != currtime.tm_hour:
             # Email on the correct hour
-            msg = "Found records:\n" + "\n".join(
-                [f"[{k}]: {v}" for k, v in records.items()]
-            )
+            msg = "Found records:\n" + "\n".join([f"[{k}]: {v}" for k, v in records.items()])
             Mailer.sendmail(
                 topic=f"[BrowserAlert][{args.machine}]",
                 alert=False,

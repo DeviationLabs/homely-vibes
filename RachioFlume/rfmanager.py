@@ -27,9 +27,7 @@ def main():
     logger.info("=" * 50)
     logger.info("Starting Rachio-Flume Water Tracking Integration")
 
-    parser = argparse.ArgumentParser(
-        description="Rachio-Flume Water Tracking Integration"
-    )
+    parser = argparse.ArgumentParser(description="Rachio-Flume Water Tracking Integration")
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -59,17 +57,13 @@ def main():
         default=7,
         help="Number of days to look back from end date (default: 7)",
     )
-    report_parser.add_argument(
-        "--email", action="store_true", help="Send report via email"
-    )
+    report_parser.add_argument("--email", action="store_true", help="Send report via email")
 
     # Summary command
     subparsers.add_parser("summary", help="Generate efficiency analysis")
 
     # Raw data command
-    raw_parser = subparsers.add_parser(
-        "raw", help="Generate raw data report (5-minute intervals)"
-    )
+    raw_parser = subparsers.add_parser("raw", help="Generate raw data report (5-minute intervals)")
     raw_parser.add_argument(
         "--hours",
         type=int,
@@ -114,7 +108,9 @@ def run_collection(args):
     except Exception as e:
         logger.error(f"Error during collection: {e}")
         pushover.send_message(
-            f"Error during collection: {e}", title="RachioFlume Error", priority=2
+            f"Error during collection: {e}",
+            title="RachioFlume Error",
+            priority=2,
         )
         sleep(3600)  ## cooldown for an hour.
         return 1
@@ -138,16 +134,12 @@ def show_status(args):
 
         active_zone = status["active_zone"]
         if active_zone["zone_number"]:
-            logger.info(
-                f"Active Zone: #{active_zone['zone_number']} - {active_zone['zone_name']}"
-            )
+            logger.info(f"Active Zone: #{active_zone['zone_number']} - {active_zone['zone_name']}")
         else:
             logger.info("Active Zone: None")
 
         if status["current_usage_rate_gpm"]:
-            logger.info(
-                f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM"
-            )
+            logger.info(f"Current Usage Rate: {status['current_usage_rate_gpm']:.2f} GPM")
         else:
             logger.info("Current Usage Rate: Not available")
 

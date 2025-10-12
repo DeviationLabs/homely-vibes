@@ -40,13 +40,9 @@ PUSHOVER_TOKENS = {
 
 # WaterMonitor: Processing
 MAX_ZONES = 16
-MAX_NEW_FILES = (
-    2  # Number of recent raw log files that are reprocessed into summary json
-)
+MAX_NEW_FILES = 2  # Number of recent raw log files that are reprocessed into summary json
 LOGROTATE_PER_DAY = 4
-DAYS_LOOKBACK = (
-    90  # Days of data to store in the pumprates file. Perf penalty if too large
-)
+DAYS_LOOKBACK = 90  # Days of data to store in the pumprates file. Perf penalty if too large
 START_FROM_EPOCH = (
     1539161991  # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
 )
@@ -102,9 +98,7 @@ NODES = {
 
 # Browser Alert
 REFRESH_DELAY = 30  # In seconds, how soon should we check?
-MIN_REPORTING_GAP = (
-    6  # If we already got an alert, then don't need a followup right away
-)
+MIN_REPORTING_GAP = 6  # If we already got an alert, then don't need a followup right away
 HR_START_MONITORING = 2  # When do the SMSs start firing
 HR_STOP_MONITORING = 23  # 13
 HR_EMAIL = 19
@@ -132,9 +126,7 @@ POWERWALL_IP = "192.168.X.Y"
 POWERWALL_EMAIL = "a@aa.aa"
 POWERWALL_PASSWORD = "XYZA"
 POWERWALL_SMS_RCPT = "+18001234567"
-POWERWALL_POLL_TIME = (
-    180  # Setting this too high can result in PW dumping more than intended.
-)
+POWERWALL_POLL_TIME = 180  # Setting this too high can result in PW dumping more than intended.
 
 TESLA_EMAIL = "a@aa.aa"
 TESLA_PASSWORD = "XTZA"
@@ -206,7 +198,16 @@ POWERWALL_DECISION_POINTS = [
         True,
     ),
     OpModeConfig(
-        1455, 1900, 0, 0, True, 20, 0, "self_consumption", "In Peak. Discharge..", False
+        1455,
+        1900,
+        0,
+        0,
+        True,
+        20,
+        0,
+        "self_consumption",
+        "In Peak. Discharge..",
+        False,
     ),
     OpModeConfig(
         000,

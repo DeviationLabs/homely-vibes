@@ -11,11 +11,12 @@ import PumpStatsWriter
 import TuyaLogParser
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Compute waterpump stats and email alert"
-    )
+    parser = argparse.ArgumentParser(description="Compute waterpump stats and email alert")
     parser.add_argument(
-        "--always_email", help="Send email report", action="store_true", default=False
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 

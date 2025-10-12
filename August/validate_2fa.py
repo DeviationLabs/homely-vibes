@@ -8,7 +8,7 @@ from yalexs.api_async import ApiAsync
 from lib import Constants
 
 
-async def complete_2fa():
+async def complete_2fa() -> bool:
     session = aiohttp.ClientSession()
     try:
         api = ApiAsync(session)

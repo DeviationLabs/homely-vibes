@@ -49,8 +49,7 @@ class BatteryHistory:
             return 0.0
 
         diffs = [
-            self.percentages[i] - self.percentages[i + 1]
-            for i in range(len(self.percentages) - 1)
+            self.percentages[i] - self.percentages[i + 1] for i in range(len(self.percentages) - 1)
         ]
         return sum(diffs) / len(diffs) if diffs else 0.0
 
@@ -79,9 +78,7 @@ class PowerwallManager:
             None  # APB: 5/25/23 seems we are no longer getting this data from the query
         )
         self.logger = get_logger(__name__)
-        self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["Powerwall"]
-        )
+        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["Powerwall"])
 
     def sanitize_battery_percentage(self, pct: float, time_sampling: float) -> float:
         """Sanitize battery percentage using history and extrapolation."""
@@ -109,9 +106,7 @@ class PowerwallManager:
 
         return original_pct
 
-    def evaluate_condition(
-        self, current: float, threshold: float, direction_up: bool
-    ) -> bool:
+    def evaluate_condition(self, current: float, threshold: float, direction_up: bool) -> bool:
         """Evaluate if condition matches for triggering action."""
         if direction_up:
             return current > threshold
@@ -124,17 +119,14 @@ class PowerwallManager:
         product.get_site_data()
 
         # Validate configuration
-        can_export = product["components"].get(
-            "customer_preferred_export_rule", "Not Found"
-        )
+        can_export = product["components"].get("customer_preferred_export_rule", "Not Found")
         can_grid_charge = not product["components"].get(
             "disallow_charge_from_grid_with_solar_installed", False
         )
 
         if can_export != "battery_ok" or not can_grid_charge:
             raise ValueError(
-                f"Invalid powerwall config - export: {can_export}, "
-                f"grid_charge: {can_grid_charge}"
+                f"Invalid powerwall config - export: {can_export}, grid_charge: {can_grid_charge}"
             )
 
         return {
@@ -145,9 +137,7 @@ class PowerwallManager:
             "can_grid_charge": can_grid_charge,
         }
 
-    def calculate_trigger_percentages(
-        self, decision_point, current_time, sleep_time: int
-    ) -> tuple:
+    def calculate_trigger_percentages(self, decision_point, current_time, sleep_time: int) -> tuple:
         """Calculate trigger percentages for current and next polling cycle."""
         hours_to_end = (
             (int(decision_point.time_end / 100) - current_time.tm_hour)
@@ -156,12 +146,12 @@ class PowerwallManager:
         )
 
         trigger_now = round(
-            decision_point.pct_thresh
-            - (decision_point.pct_gradient_per_hr * hours_to_end),
+            decision_point.pct_thresh - (decision_point.pct_gradient_per_hr * hours_to_end),
             2,
         )
         trigger_next = round(
-            trigger_now + decision_point.pct_gradient_per_hr * (sleep_time / 3600), 2
+            trigger_now + decision_point.pct_gradient_per_hr * (sleep_time / 3600),
+            2,
         )
 
         return trigger_now, trigger_next
@@ -186,10 +176,7 @@ class PowerwallManager:
         if decision_point.pct_min_trail_stop:
             # Trailing stop to avoid unnecessary battery drain
             desired_min = data["backup_percent"]
-            while (
-                data["battery_percent"]
-                >= desired_min + decision_point.pct_min_trail_stop
-            ):
+            while data["battery_percent"] >= desired_min + decision_point.pct_min_trail_stop:
                 desired_min += decision_point.pct_min_trail_stop
 
         # Update backup reserve if needed
@@ -211,17 +198,13 @@ class PowerwallManager:
 
         return changes_made
 
-    def process_decision_points(
-        self, product, data: dict, current_time, sleep_time: int
-    ) -> int:
+    def process_decision_points(self, product, data: dict, current_time, sleep_time: int) -> int:
         """Process all decision points and return updated sleep time."""
         decision_points = Constants.POWERWALL_DECISION_POINTS
         current_time_val = current_time.tm_hour * 100 + current_time.tm_min
 
         for decision_point in decision_points:
-            if not (
-                decision_point.time_start <= current_time_val < decision_point.time_end
-            ):
+            if not (decision_point.time_start <= current_time_val < decision_point.time_end):
                 continue
 
             trigger_now, trigger_next = self.calculate_trigger_percentages(
@@ -246,18 +229,12 @@ class PowerwallManager:
                 return sleep_time
 
             # Check if future condition will match (fast retry)
-            elif self.evaluate_condition(
-                future_pct, trigger_next, decision_point.iff_higher
-            ):
-                self.logger.warning(
-                    f"Future condition match: {decision_point.reason} - fast retry"
-                )
+            elif self.evaluate_condition(future_pct, trigger_next, decision_point.iff_higher):
+                self.logger.warning(f"Future condition match: {decision_point.reason} - fast retry")
                 return min(sleep_time, 60)
 
             else:
-                self.logger.info(
-                    f"In time window but no match: {decision_point.reason}"
-                )
+                self.logger.info(f"In time window but no match: {decision_point.reason}")
 
         self.logger.warning("No decision point matched - is this expected?")
         return sleep_time
@@ -322,15 +299,14 @@ class PowerwallManager:
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Tesla Powerwall Management System")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     parser.add_argument(
-        "-d", "--debug", action="store_true", help="Enable debug logging"
+        "-e",
+        "--email",
+        default=Constants.POWERWALL_EMAIL,
+        help="Tesla account email",
     )
-    parser.add_argument(
-        "-e", "--email", default=Constants.POWERWALL_EMAIL, help="Tesla account email"
-    )
-    parser.add_argument(
-        "-q", "--quiet", action="store_true", help="Suppress stdout logging"
-    )
+    parser.add_argument("-q", "--quiet", action="store_true", help="Suppress stdout logging")
     parser.add_argument(
         "--send-notifications",
         action="store_true",
@@ -365,7 +341,9 @@ def main() -> None:
         logger.error(f"Unexpected error: {e}\nTraceback:\n{tb_str}")
         if "manager" in locals():
             manager.pushover.send_message(
-                f"Powerwall monitoring error: {e}", title="Powerwall Alert", priority=1
+                f"Powerwall monitoring error: {e}",
+                title="Powerwall Alert",
+                priority=1,
             )
 
     finally:

@@ -127,9 +127,7 @@ class TestPowerwallManager(unittest.TestCase):
 
         # Test edge cases
         self.assertFalse(self.manager.evaluate_condition(80.0, 80.0, True))  # Equal, up
-        self.assertFalse(
-            self.manager.evaluate_condition(80.0, 80.0, False)
-        )  # Equal, down
+        self.assertFalse(self.manager.evaluate_condition(80.0, 80.0, False))  # Equal, down
 
     def test_sanitize_battery_percentage(self):
         """Test battery percentage sanitization."""
@@ -146,33 +144,37 @@ class TestPowerwallManager(unittest.TestCase):
             86.0,
             88.0,
         ]  # Full history
-        with patch.object(
-            self.manager.battery_history, "extrapolate", return_value=78.5
-        ):
+        with patch.object(self.manager.battery_history, "extrapolate", return_value=78.5):
             result = self.manager.sanitize_battery_percentage(0.0, 1.0)
             self.assertEqual(result, 78.5)
 
         # Test duplicate percentage with full history - should use extrapolation
-        self.manager.battery_history.percentages = [80.0, 82.0, 84.0, 86.0, 88.0]
-        with patch.object(
-            self.manager.battery_history, "extrapolate", return_value=79.0
-        ):
+        self.manager.battery_history.percentages = [
+            80.0,
+            82.0,
+            84.0,
+            86.0,
+            88.0,
+        ]
+        with patch.object(self.manager.battery_history, "extrapolate", return_value=79.0):
             result = self.manager.sanitize_battery_percentage(80.0, 1.0)  # Duplicate
             self.assertEqual(result, 79.0)
 
         # Test percentage > 100 gets clamped
-        self.manager.battery_history.percentages = [95.0, 96.0, 97.0, 98.0, 99.0]
-        with patch.object(
-            self.manager.battery_history, "extrapolate", return_value=105.0
-        ):
+        self.manager.battery_history.percentages = [
+            95.0,
+            96.0,
+            97.0,
+            98.0,
+            99.0,
+        ]
+        with patch.object(self.manager.battery_history, "extrapolate", return_value=105.0):
             result = self.manager.sanitize_battery_percentage(0.0, 1.0)
             self.assertEqual(result, 100.0)  # Should be clamped to 100
 
         # Test percentage < 0 gets clamped
         self.manager.battery_history.percentages = [5.0, 4.0, 3.0, 2.0, 1.0]
-        with patch.object(
-            self.manager.battery_history, "extrapolate", return_value=-5.0
-        ):
+        with patch.object(self.manager.battery_history, "extrapolate", return_value=-5.0):
             result = self.manager.sanitize_battery_percentage(0.0, 1.0)
             self.assertEqual(result, 0.0)  # Should be clamped to 0
 
