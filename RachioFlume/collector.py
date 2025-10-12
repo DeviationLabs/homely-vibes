@@ -2,11 +2,11 @@
 
 import asyncio
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
-from rachio_client import RachioClient
-from flume_client import FlumeClient
-from data_storage import WaterTrackingDB
+from .rachio_client import RachioClient
+from .flume_client import FlumeClient
+from .data_storage import WaterTrackingDB
 from lib.logger import get_logger
 
 
@@ -156,7 +156,7 @@ class WaterTrackingCollector:
                 # Wait a bit before retrying
                 await asyncio.sleep(60)
 
-    def get_current_status(self) -> dict:
+    def get_current_status(self) -> Dict[str, Any]:
         """Get current status of water tracking system."""
         try:
             # Get current active zone from Rachio
@@ -189,7 +189,7 @@ class WaterTrackingCollector:
             self.logger.error(f"Error getting current status: {e}")
             return {"error": str(e)}
 
-    def _filter_duplicate_events(self, events: list) -> list:
+    def _filter_duplicate_events(self, events: List[Any]) -> List[Any]:
         """Filter out watering events that already exist in the database."""
         if not events:
             return events
@@ -210,7 +210,7 @@ class WaterTrackingCollector:
 
         return filtered_events
 
-    def _filter_duplicate_readings(self, readings: list) -> list:
+    def _filter_duplicate_readings(self, readings: List[Any]) -> List[Any]:
         """Filter out water readings that already exist in the database."""
         if not readings:
             return readings

@@ -1,3 +1,4 @@
+from typing import Any
 import pandas as pd
 import streamlit as st
 import requests
@@ -18,7 +19,7 @@ def summary(text: str = "") -> str:
         headers={"auth": "validated_user"},
         json=dict(summary_question=text),
     )
-    return json.loads(response._content).get("message", "Something went wrong")
+    return str(json.loads(response.content).get("message", "Something went wrong"))
 
 
 def priors(text: str = "") -> str:
@@ -27,14 +28,14 @@ def priors(text: str = "") -> str:
         headers={"auth": "validated_user"},
         json=dict(match_on=text),
     )
-    return json.loads(response._content).get("message", "Something went wrong")
+    return str(json.loads(response.content).get("message", "Something went wrong"))
 
 
 @st.cache_data
-def load_data(nrows):
+def load_data(nrows: int) -> pd.DataFrame:
     data = pd.read_csv(DATA_URL, nrows=nrows)
 
-    def lowercase(x):
+    def lowercase(x: Any) -> str:
         return str(x).lower()
 
     data.rename(lowercase, axis="columns", inplace=True)

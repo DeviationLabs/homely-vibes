@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from typing import Any, Tuple, Dict
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,7 +21,7 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
-def load_my_model(model_file):
+def load_my_model(model_file: str) -> Tuple[Any, Dict[str, int]]:
     with open(re.sub(r".h5$", ".pickle", model_file), "rb") as pickle_file:
         model_labels = pickle.load(pickle_file)
 
@@ -36,7 +37,7 @@ def load_my_model(model_file):
     return (model, model_labels)
 
 
-def run_predictor(model, model_labels, img):
+def run_predictor(model: Any, model_labels: Dict[str, int], img: Any) -> Tuple[str, str]:
     x = image.img_to_array(img)
     x = cv2.resize(x, dsize=(224, 224), interpolation=cv2.INTER_CUBIC)
     x = np.expand_dims(x, axis=0)

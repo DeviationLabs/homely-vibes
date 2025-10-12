@@ -5,7 +5,7 @@ import argparse
 import sys
 import time
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 import importlib
 from lib import Constants
 from lib.MyPushover import Pushover
@@ -34,7 +34,7 @@ class BatteryHistory:
 
     MAX_HISTORY = 5
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.percentages: List[float] = []
 
     def add_percentage(self, pct: float) -> None:
@@ -113,7 +113,7 @@ class PowerwallManager:
         else:
             return current < threshold
 
-    def get_powerwall_data(self, product) -> dict:
+    def get_powerwall_data(self, product: Any) -> Dict[str, Any]:
         """Fetch and validate powerwall data."""
         product.get_site_info()
         product.get_site_data()
@@ -137,7 +137,9 @@ class PowerwallManager:
             "can_grid_charge": can_grid_charge,
         }
 
-    def calculate_trigger_percentages(self, decision_point, current_time, sleep_time: int) -> tuple:
+    def calculate_trigger_percentages(
+        self, decision_point: DecisionPoint, current_time: Any, sleep_time: int
+    ) -> Tuple[float, float]:
         """Calculate trigger percentages for current and next polling cycle."""
         hours_to_end = (
             (int(decision_point.time_end / 100) - current_time.tm_hour)
@@ -157,7 +159,11 @@ class PowerwallManager:
         return trigger_now, trigger_next
 
     def apply_decision_point(
-        self, product, data: dict, decision_point, trigger_percentage: float
+        self,
+        product: Any,
+        data: Dict[str, Any],
+        decision_point: DecisionPoint,
+        trigger_percentage: float,
     ) -> bool:
         """Apply a decision point configuration to the powerwall."""
         status_messages = []
@@ -198,7 +204,9 @@ class PowerwallManager:
 
         return changes_made
 
-    def process_decision_points(self, product, data: dict, current_time, sleep_time: int) -> int:
+    def process_decision_points(
+        self, product: Any, data: Dict[str, Any], current_time: Any, sleep_time: int
+    ) -> int:
         """Process all decision points and return updated sleep time."""
         decision_points = Constants.POWERWALL_DECISION_POINTS
         current_time_val = current_time.tm_hour * 100 + current_time.tm_min

@@ -2,6 +2,7 @@
 import contextlib
 import logging
 from paramiko import SSHClient
+from typing import Generator
 import requests
 import subprocess
 import sys
@@ -32,7 +33,7 @@ def ping_output(node, count=1, desired_up=True) -> bool:
 
 
 # run a command in ssh and return string output
-def ssh_cmd(node, user, passwd, winCmd):
+def ssh_cmd(node, user, passwd, winCmd) -> str:
     sshOpts = "-o ConnectTimeout=10"
     cmd = "sshpass -p %s ssh %s %s@%s %s 2> /dev/null" % (
         passwd,
@@ -49,7 +50,7 @@ def ssh_cmd(node, user, passwd, winCmd):
 
 
 # Create a paramiko SSH Client
-def ssh_connect(node_ip, user, passwd):
+def ssh_connect(node_ip, user, passwd) -> SSHClient:
     client = SSHClient()
     client.load_system_host_keys()
     client.connect(node_ip, username=user, password=passwd, timeout=10)
@@ -66,7 +67,7 @@ def ssh_connect(node_ip, user, passwd):
 
 
 # Run a command on client and return string output
-def ssh_cmd_v2(client, remote_cmd):
+def ssh_cmd_v2(client, remote_cmd) -> str:
     if client is None:
         raise AssertionError("No Client\n")
     stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=5)
@@ -74,7 +75,7 @@ def ssh_cmd_v2(client, remote_cmd):
 
 
 # Run an http request and return string output
-def http_req(cmd):
+def http_req(cmd) -> str:
     resp_text = "\n"
     resp = requests.get(cmd)
     resp_text = " ".join(resp.text.split("\n"))
@@ -83,7 +84,7 @@ def http_req(cmd):
 
 # Suppress stdout.
 @contextlib.contextmanager
-def no_stdout():
+def no_stdout() -> Generator[None, None, None]:
     class DummyFile(object):
         def write(self, x):
             pass

@@ -26,6 +26,7 @@ code doesn't need to record audio.
     the Google Assistant.
 """
 
+from typing import Optional, Any
 import logging
 import sys
 import threading
@@ -67,7 +68,7 @@ class MyAssistant:
     be invoked.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         logging.warning("Initializing...")
         self._task = threading.Thread(target=self._run_task)
         self._can_start_conversation = False
@@ -75,20 +76,20 @@ class MyAssistant:
         self._board = Board()
         self._board.button.when_pressed = self._on_button_pressed
 
-    def start(self):
+    def start(self) -> None:
         """
         Starts the assistant event loop and begins processing events.
         """
         self._task.start()
 
-    def _run_task(self):
+    def _run_task(self) -> None:
         credentials = auth_helpers.get_assistant_credentials()
         with Assistant(credentials) as assistant:
             self._assistant = assistant
             for event in assistant.start():
                 self._process_event(event)
 
-    def _process_event(self, event):
+    def _process_event(self, event: Any) -> None:
         logging.info(event)
         if event.type == EventType.ON_START_FINISHED:
             self._board.led.status = Led.BEACON_DARK  # Ready.
@@ -133,7 +134,7 @@ class MyAssistant:
         elif event.type == EventType.ON_ASSISTANT_ERROR and event.args and event.args["is_fatal"]:
             sys.exit(1)
 
-    def _on_button_pressed(self):
+    def _on_button_pressed(self) -> None:
         # Check if we can start a conversation. 'self._can_start_conversation'
         # is False when either:
         # 1. The assistant library is not yet ready; OR
@@ -144,7 +145,7 @@ class MyAssistant:
         if self._can_start_conversation:
             self._assistant.start_conversation()
 
-    def _index_text(self, text):
+    def _index_text(self, text: str) -> None:
         try:
             logging.info("Attempting to index ...")
             response = requests.post(
@@ -156,7 +157,7 @@ class MyAssistant:
         except Exception as e:
             logging.warning(f"Caught and ignored the following exception {e}")
 
-    def _summarize(self, text):
+    def _summarize(self, text: Optional[str]) -> None:
         try:
             logging.info("Attempting to summarize ...")
             response = requests.post(
@@ -172,12 +173,12 @@ class MyAssistant:
 
 class MyAuth(requests.auth.AuthBase):
     # unused: APB 03/07/24
-    def __call__(self, r):
+    def __call__(self, r: Any) -> str:
         # Implement my authentication
         return "validated_user"
 
 
-def main():
+def main() -> None:
     MyAssistant().start()
 
 
