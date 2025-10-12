@@ -46,9 +46,7 @@ async def complete_2fa():
             verification_code = sys.stdin.readline().strip()
 
             print(f"Validating code: {verification_code}")
-            validation_result = await auth.async_validate_verification_code(
-                verification_code
-            )
+            validation_result = await auth.async_validate_verification_code(verification_code)
 
             print(f"Validation result: {validation_result}")
 

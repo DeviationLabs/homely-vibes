@@ -14,6 +14,7 @@ from lib import Mailer
 @dataclass
 class ZoneStats:
     """Statistics for a single zone."""
+
     zone_number: int
     zone_name: str
     sessions: int
@@ -26,6 +27,7 @@ class ZoneStats:
 @dataclass
 class ReportSummary:
     """Summary statistics for the entire report."""
+
     total_watering_sessions: int
     total_duration_hours: float
     total_water_used_gallons: float
@@ -35,6 +37,7 @@ class ReportSummary:
 @dataclass
 class WaterUsageReport:
     """Complete water usage report."""
+
     report_generated: datetime
     period_start: datetime
     period_end: datetime
@@ -140,16 +143,20 @@ class WeeklyReporter:
             Formatted report as string
         """
         report_text = []
-        
+
         report_text.append("WATER USAGE REPORT")
-        report_text.append(f"Period: {report.period_start.date()} to {report.period_end.date()}")
+        report_text.append(
+            f"Period: {report.period_start.date()} to {report.period_end.date()}"
+        )
         report_text.append("=" * 35)
 
         report_text.append("\nSUMMARY:")
         report_text.append(
             f"  Total watering sessions: {report.summary.total_watering_sessions}"
         )
-        report_text.append(f"  Total duration: {report.summary.total_duration_hours} hours")
+        report_text.append(
+            f"  Total duration: {report.summary.total_duration_hours} hours"
+        )
         report_text.append(
             f"  Total water used: {report.summary.total_water_used_gallons} gallons"
         )
@@ -226,7 +233,7 @@ class WeeklyReporter:
             alert: Whether to mark as alert email
         """
         report_text = self.format_report_text(report)
-        
+
         start_date = report.period_start.date()
         subject_prefix = "Period"
 
@@ -237,7 +244,9 @@ class WeeklyReporter:
             always_email=True,
         )
 
-        self.logger.info(f"Report emailed for {subject_prefix.lower()} starting {start_date}")
+        self.logger.info(
+            f"Report emailed for {subject_prefix.lower()} starting {start_date}"
+        )
 
     def generate_raw_data_report(self, hours_back: int = 24) -> Dict[str, Any]:
         """Generate raw data report with 5-minute increments.

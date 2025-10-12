@@ -14,7 +14,10 @@ from datetime import datetime, timedelta
 
 # Create default database path using Constants.LOGGING_DIR
 DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS.get("RachioFlume", Constants.PUSHOVER_DEFAULT_TOKEN))
+pushover = Pushover(
+    Constants.PUSHOVER_USER,
+    Constants.PUSHOVER_TOKENS.get("RachioFlume", Constants.PUSHOVER_DEFAULT_TOKEN),
+)
 
 
 def main():
@@ -110,8 +113,10 @@ def run_collection(args):
         return 0
     except Exception as e:
         logger.error(f"Error during collection: {e}")
-        pushover.send_message(f"Error during collection: {e}", title="RachioFlume Error", priority=2)
-        sleep(3600)  ## cooldown for an hour. 
+        pushover.send_message(
+            f"Error during collection: {e}", title="RachioFlume Error", priority=2
+        )
+        sleep(3600)  ## cooldown for an hour.
         return 1
 
 
