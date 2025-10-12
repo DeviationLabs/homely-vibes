@@ -69,6 +69,7 @@ packages = ["lib", "Tesla", "WaterParser", "Bimpop.ai", "August"]
 
 [tool.deptry]
 known_first_party = [
+    "lib",  # Add lib as first-party module
     "Constants",
     "Mailer", 
     "MyPushover",
@@ -107,7 +108,8 @@ DEP001 = [
     "matplotlib",
     "twilio",
     "paramiko",
-    "cv2"
+    "cv2",
+    "__main__"  # Built-in module used in logger.py
 ]
 DEP002 = [
     # Dev tools that aren't imported directly
@@ -138,7 +140,24 @@ DEP002 = [
     "selenium",
     "pywebview",
     "oauthlib",
-    "setuptools"
+    "setuptools",
+    # August module unused dependencies
+    "requests",
+    "openai", 
+    "pandas",
+    "numpy",
+    "pydantic",
+    "fastapi",
+    "langchain",
+    "langchain-openai",
+    "tiktoken",
+    "uvicorn",
+    "pyfoscam",
+    "matplotlib",
+    "tld",
+    "pytest",
+    "yalexs",
+    "aiohttp"
 ]
 DEP003 = ["google", "TeslaPy"]
 
