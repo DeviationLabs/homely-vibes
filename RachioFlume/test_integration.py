@@ -1,6 +1,5 @@
 """Tests for the Rachio-Flume water tracking integration."""
 
-from typing import Any
 import pytest
 import tempfile
 from datetime import datetime
@@ -34,7 +33,7 @@ class TestRachioClient:
                 RachioClient()
 
     @patch("rachio_client.requests.get")
-    def test_get_zones(self, mock_get: Any) -> None:
+    def test_get_zones(self, mock_get: Mock) -> None:
         """Test getting zones from device."""
         mock_response = Mock()
         mock_response.json.return_value = {
@@ -100,7 +99,7 @@ class TestFlumeClient:
 
     @patch("flume_client.requests.get")
     @patch("flume_client.requests.post")
-    def test_get_usage(self, mock_post, mock_get: Any) -> None:
+    def test_get_usage(self, mock_post: Mock, mock_get: Mock) -> None:
         """Test getting water usage data."""
         # Mock device list response
         mock_devices_response = Mock()
@@ -142,7 +141,7 @@ class TestFlumeClient:
             assert readings[1].value == 2.0
 
     @patch("flume_client.requests.get")
-    def test_get_devices(self, mock_get: Any) -> None:
+    def test_get_devices(self, mock_get: Mock) -> None:
         """Test getting user devices."""
         mock_response = Mock()
         mock_response.json.return_value = [
@@ -171,21 +170,26 @@ class TestFlumeClient:
             assert devices[1].location == "Pool"
 
     @patch("flume_client.requests.get")
-    def test_get_device_id_auto_selection(self, mock_get: Any) -> None:
-        """Test automatic device ID selection."""
+    def test_get_active_device(self, mock_get: Mock) -> None:
+        """Test getting active device from device list."""
         mock_response = Mock()
-        mock_response.json.return_value = [
-            {"id": "inactive_device", "name": "Old Meter", "active": False},
-            {"id": "active_device", "name": "Current Meter", "active": True},
-        ]
+        mock_response.json.return_value = {
+            "success": True,
+            "data": [
+                {"id": "inactive_device", "name": "Old Meter", "connected": False, "type": 2},
+                {"id": "active_device", "name": "Current Meter", "connected": True, "type": 2},
+            ],
+        }
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
         with patch.dict(os.environ, {"FLUME_ACCESS_TOKEN": "token789"}):
             client = FlumeClient()
-            device_id = client.get_device_id()
+            devices = client.get_devices()
 
-            assert device_id == "active_device"
+            active_devices = [d for d in devices if d.active]
+            assert len(active_devices) == 1
+            assert active_devices[0].id == "active_device"
 
 
 class TestWaterTrackingDB:
@@ -309,14 +313,15 @@ class TestWeeklyReporter:
                 conn.commit()
 
             # Generate report
-            week_start = datetime(2023, 1, 2)  # Monday
-            report = reporter.generate_weekly_report(week_start)
+            period_start = datetime(2023, 1, 2)  # Monday
+            period_end = datetime(2023, 1, 9)  # Next Monday
+            report = reporter.generate_period_report_with_dates(period_start, period_end)
 
-            assert report["summary"]["total_watering_sessions"] == 1
-            assert report["summary"]["total_duration_hours"] == 0.5
-            assert report["summary"]["total_water_used_gallons"] == 50.0
-            assert len(report["zones"]) == 1
-            assert report["zones"][0]["zone_name"] == "Front Yard"
+            assert report.summary.total_watering_sessions == 1
+            assert report.summary.total_duration_hours == 0.5
+            assert report.summary.total_water_used_gallons == 50.0
+            assert len(report.zones) == 1
+            assert report.zones[0].zone_name == "Front Yard"
 
             os.unlink(tmp.name)
 
@@ -326,7 +331,7 @@ class TestWaterTrackingCollector:
 
     @patch("collector.RachioClient")
     @patch("collector.FlumeClient")
-    def test_collector_initialization(self, mock_flume, mock_rachio: Any) -> None:
+    def test_collector_initialization(self, mock_flume: Mock, mock_rachio: Mock) -> None:
         """Test collector initializes correctly."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             collector = WaterTrackingCollector(tmp.name)
@@ -338,7 +343,7 @@ class TestWaterTrackingCollector:
 
     @patch("collector.RachioClient")
     @patch("collector.FlumeClient")
-    async def test_collect_once(self, mock_flume_class, mock_rachio_class: Any) -> None:
+    async def test_collect_once(self, mock_flume_class: Mock, mock_rachio_class: Mock) -> None:
         """Test single collection cycle."""
         # Setup mocks
         mock_rachio = Mock()

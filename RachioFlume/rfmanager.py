@@ -20,7 +20,7 @@ pushover = Pushover(
 )
 
 
-def main():
+def main() -> int:
     """Main entry point with command line interface."""
     # Setup logging first
     logger = get_logger(__name__)
@@ -91,7 +91,7 @@ def main():
     return 0
 
 
-def run_collection(args):
+def run_collection(args: argparse.Namespace) -> int:
     """Run data collection."""
     logger = get_logger(__name__)
 
@@ -101,6 +101,7 @@ def run_collection(args):
         logger.info(f"Starting continuous collection every {args.interval} seconds")
         logger.info("Press Ctrl+C to stop")
         asyncio.run(collector.run_continuous())
+        return 0
 
     except KeyboardInterrupt:
         logger.info("Collection stopped by user")
@@ -116,7 +117,7 @@ def run_collection(args):
         return 1
 
 
-def show_status(args):
+def show_status(_args: argparse.Namespace) -> int:
     """Show current system status."""
     logger = get_logger(__name__)
 
@@ -163,7 +164,7 @@ def show_status(args):
         return 1
 
 
-def generate_report(args):
+def generate_report(args: argparse.Namespace) -> int:
     """Generate reports."""
     logger = get_logger(__name__)
 
@@ -186,7 +187,7 @@ def generate_report(args):
         return 1
 
 
-def generate_summary_report(args):
+def generate_summary_report(_args: argparse.Namespace) -> int:
     """Generate efficiency analysis reports."""
     logger = get_logger(__name__)
 
@@ -203,7 +204,7 @@ def generate_summary_report(args):
         return 1
 
 
-def generate_raw_report(args):
+def generate_raw_report(args: argparse.Namespace) -> int:
     """Generate raw data reports."""
     logger = get_logger(__name__)
 

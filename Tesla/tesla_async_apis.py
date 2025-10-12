@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import asyncio
-from typing import Any
 from tesla_api import TeslaApiClient
 
 from lib import Constants

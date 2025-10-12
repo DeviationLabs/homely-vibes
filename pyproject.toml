@@ -205,8 +205,6 @@ module = [
     "BimpopAI.app.utils",
     "BrowserAlert.alert_me",
     "GarageCheck.TFOneShot",
-    "RachioFlume.rfmanager",
-    "RachioFlume.test_integration",
     "Tesla.manage_power",
     "Tesla.tesla_async_apis",
     "Tesla.test_manage_power",

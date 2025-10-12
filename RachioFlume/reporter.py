@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from pathlib import Path
 
-from data_storage import WaterTrackingDB
+from .data_storage import WaterTrackingDB
 from lib.logger import get_logger
 from lib import Mailer
 
@@ -225,7 +225,7 @@ class WeeklyReporter:
         start_date = report.period_start.date()
         subject_prefix = "Period"
 
-        Mailer.sendmail(
+        Mailer.sendmail(  # type: ignore[no-untyped-call]
             topic=f"[Water Report] {subject_prefix} {start_date}",
             alert=alert,
             message=report_text,

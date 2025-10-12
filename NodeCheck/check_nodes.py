@@ -46,16 +46,18 @@ def reboot_foscam(nodeName: str) -> str:
 def reboot_windows(node: str) -> str:
     # Ping to keep child proc alive for long enough
     winCmd = "shutdown /r /f ; ping localhost -n 3 > nul"
-    return str(NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd))
+    return str(
+        NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
+    )
 
 
 # Note: For windows nodes only
 def print_deep_state(nodeName: str) -> str:
     node = Constants.WINDOWS_NODES[nodeName]
     winCmd = "net statistics workstation"
-    output = str(NetHelpers.ssh_cmd(
-        node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd
-    ))
+    output = str(
+        NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
+    )
     if "successful" in output:
         match = re.search("Statistics since (.*)", output)
         if match:
