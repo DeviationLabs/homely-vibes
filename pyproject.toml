@@ -101,6 +101,7 @@ DEP002 = [
     "pytest-cov",
     "pytest-asyncio", 
     "pytest-mock",
+    "ruff",
     "flake8",
     "mypy",
     "vulture",
