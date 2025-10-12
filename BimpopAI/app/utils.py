@@ -1,4 +1,4 @@
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Dict
 from fastapi import HTTPException, Header
 from openai import OpenAI
 import logging

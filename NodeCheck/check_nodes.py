@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Dict, Any, Optional
+from typing import Dict
 import argparse
 import re
 import sys

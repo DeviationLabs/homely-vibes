@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Any, Tuple, Optional, Union, List
+from typing import Any, Tuple, Optional
 import argparse
 from importlib import reload
 import os
