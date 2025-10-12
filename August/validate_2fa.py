@@ -40,7 +40,7 @@ async def complete_2fa():
 
             # Get the verification code from user
             import sys
-            
+
             # Always prompt for input - don't use command line args when called from august_manager
             print("Enter the 6-digit verification code: ", end="", flush=True)
             verification_code = sys.stdin.readline().strip()

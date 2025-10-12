@@ -16,6 +16,7 @@ from lib import Constants
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
+
 @dataclass
 class LockState:
     lock_id: str
@@ -112,7 +113,9 @@ class AugustClient:
             self.logger.error(f"Error retrieving locks: {e}")
             raise
 
-    async def get_lock_status(self, lock_id: str, retry: int = 3) -> Optional[LockState]:
+    async def get_lock_status(
+        self, lock_id: str, retry: int = 3
+    ) -> Optional[LockState]:
         try:
             assert self.api is not None
             assert self.access_token is not None
@@ -135,7 +138,9 @@ class AugustClient:
                 door_state=door_state,
             )
 
-            self.logger.info(f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}")
+            self.logger.info(
+                f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}"
+            )
             return lock_state
 
         except Exception as e:
@@ -155,7 +160,6 @@ class AugustClient:
         return statuses
 
 
-
 class AugustMonitor:
     def __init__(
         self,
@@ -165,7 +169,7 @@ class AugustMonitor:
         unlock_threshold_minutes: int = 5,
         ajar_threshold_minutes: int = 10,
         battery_threshold_pct: int = 20,
-        battery_alert_cooldown_minutes: int = 42*60, # 1.75 days
+        battery_alert_cooldown_minutes: int = 42 * 60,  # 1.75 days
         door_alert_cooldown_minutes: int = 2,
     ):
         self.client = AugustClient(email, password, phone)
@@ -193,9 +197,13 @@ class AugustMonitor:
             with open(self.state_file, "r") as f:
                 state = json.load(f)
                 self.unlock_start_times = state.get("unlock_start_times", {})
-                self.ajar_start_times = state.get("ajar_start_times", {})  # Fix inconsistent key
+                self.ajar_start_times = state.get(
+                    "ajar_start_times", {}
+                )  # Fix inconsistent key
                 self.last_unlock_alerts = state.get("last_unlock_alerts", {})
-                self.last_ajar_alerts = state.get("last_ajar_alerts", {})  # Fix inconsistent key
+                self.last_ajar_alerts = state.get(
+                    "last_ajar_alerts", {}
+                )  # Fix inconsistent key
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
                 self.last_lock_failure_alerts = state.get(
                     "last_lock_failure_alerts", {}
@@ -235,9 +243,7 @@ class AugustMonitor:
                 k: v for k, v in self.unlock_start_times.items() if k in existing_locks
             }
             self.ajar_start_times = {
-                k: v
-                for k, v in self.ajar_start_times.items()
-                if k in existing_locks
+                k: v for k, v in self.ajar_start_times.items() if k in existing_locks
             }
             self.last_unlock_alerts = {
                 k: v for k, v in self.last_unlock_alerts.items() if k in existing_locks
@@ -285,7 +291,6 @@ class AugustMonitor:
                         await self._send_unlock_alert(lock_id, status, unlock_duration)
                         self.last_unlock_alerts[lock_id] = current_time
 
-        
         if status.door_state == LockDoorStatus.CLOSED:
             if lock_id in self.ajar_start_times:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
@@ -306,7 +311,6 @@ class AugustMonitor:
                     if current_time - last_alert >= self.door_alert_cooldown:
                         await self._send_door_ajar_alert(lock_id, status, ajar_duration)
                         self.last_ajar_alerts[lock_id] = current_time
-
 
     async def _send_unlock_alert(
         self, lock_id: str, status: LockState, unlock_duration: float
@@ -351,7 +355,9 @@ class AugustMonitor:
 
         last_alert = self.last_battery_alerts.get(lock_id, 0)
         if current_time - last_alert < self.battery_alert_cooldown:
-            self.logger.info(f"Skipping battery alert for {status.lock_name} (cooldown) last_alert: {datetime.fromtimestamp(last_alert)}")
+            self.logger.info(
+                f"Skipping battery alert for {status.lock_name} (cooldown) last_alert: {datetime.fromtimestamp(last_alert)}"
+            )
             return
 
         title = "🔋 August Low Battery"
