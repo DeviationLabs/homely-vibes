@@ -806,14 +806,12 @@ dependencies = [
     { name = "numpy" },
     { name = "openai" },
     { name = "pandas" },
-    { name = "pandas-stubs" },
     { name = "pydantic" },
     { name = "pytest" },
     { name = "requests" },
     { name = "streamlit" },
     { name = "tiktoken" },
     { name = "tld" },
-    { name = "types-requests" },
     { name = "uvicorn" },
     { name = "yalexs" },
 ]
@@ -833,7 +831,6 @@ dev = [
     { name = "semgrep" },
     { name = "types-paramiko" },
     { name = "types-requests" },
-    { name = "types-setuptools" },
     { name = "vulture" },
 ]
 streamlit = [
@@ -856,7 +853,6 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "pandas", specifier = ">=2.2.0" },
-    { name = "pandas-stubs", specifier = ">=1.5.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", specifier = ">=8.4.1" },
@@ -872,9 +868,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.8.0" },
     { name = "tld", specifier = ">=0.13.1" },
     { name = "types-paramiko", marker = "extra == 'dev'", specifier = ">=3.4.0" },
-    { name = "types-requests", specifier = ">=2.25.0" },
     { name = "types-requests", marker = "extra == 'dev'", specifier = ">=2.31.0" },
-    { name = "types-setuptools", marker = "extra == 'dev'", specifier = ">=68.0.0" },
     { name = "uvicorn", specifier = ">=0.23.0" },
     { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "yalexs", specifier = ">=8.0.0" },
@@ -2544,15 +2538,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/36/27/489922f4505975b11de2b5ad07b4fe1dca0bca9be81a703f26c5f3acfce5/types_requests-2.32.4.20250913.tar.gz", hash = "sha256:abd6d4f9ce3a9383f269775a9835a4c24e5cd6b9f647d64f88aa4613c33def5d", size = 23113, upload-time = "2025-09-13T02:40:02.309Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/20/9a227ea57c1285986c4cf78400d0a91615d25b24e257fd9e2969606bdfae/types_requests-2.32.4.20250913-py3-none-any.whl", hash = "sha256:78c9c1fffebbe0fa487a418e0fa5252017e9c60d1a2da394077f1780f655d7e1", size = 20658, upload-time = "2025-09-13T02:40:01.115Z" },
-]
-
-[[package]]
-name = "types-setuptools"
-version = "80.9.0.20250822"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/19/bd/1e5f949b7cb740c9f0feaac430e301b8f1c5f11a81e26324299ea671a237/types_setuptools-80.9.0.20250822.tar.gz", hash = "sha256:070ea7716968ec67a84c7f7768d9952ff24d28b65b6594797a464f1b3066f965", size = 41296, upload-time = "2025-08-22T03:02:08.771Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/2d/475bf15c1cdc172e7a0d665b6e373ebfb1e9bf734d3f2f543d668b07a142/types_setuptools-80.9.0.20250822-py3-none-any.whl", hash = "sha256:53bf881cb9d7e46ed12c76ef76c0aaf28cfe6211d3fab12e0b83620b1a8642c3", size = 63179, upload-time = "2025-08-22T03:02:07.643Z" },
 ]
 
 [[package]]

@@ -28,8 +28,6 @@ dependencies = [
     "gpxpy>=1.5.0",
     "click>=8.0.0",
     "streamlit>=1.20.0",
-    "types-requests>=2.25.0",
-    "pandas-stubs>=1.5.0",
 ]
 
 [project.optional-dependencies]
@@ -50,10 +48,9 @@ dev = [
     "semgrep>=1.0.0",
     "codespell>=2.0.0",
     "deptry>=0.23.1",
-    # Type stubs
+    # Type stubs  
     "types-requests>=2.31.0",
-    "types-paramiko>=3.4.0", 
-    "types-setuptools>=68.0.0",
+    "types-paramiko>=3.4.0",
     "pandas-stubs>=2.0.0",
 ]
 
@@ -115,6 +112,10 @@ DEP002 = [
     "semgrep",
     "codespell",
     "deptry",
+    # Type stubs for mypy (not directly imported)
+    "types-requests",
+    "types-paramiko", 
+    "pandas-stubs",
 ]
 DEP003 = ["google", "TeslaPy", "foscam"]
 
