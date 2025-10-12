@@ -23,7 +23,7 @@ parse_start_time = 0
 def refresh_dns_cache(client: Any) -> str:
     # Purge DNS cache before start of tailer...
     cmd = "sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder && date"
-    return NetHelpers.ssh_cmd_v2(client, cmd)
+    return str(NetHelpers.ssh_cmd_v2(client, cmd))
 
 
 def run_monitor_one_shot(

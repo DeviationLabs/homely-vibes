@@ -32,7 +32,7 @@ def reboot_foscam(nodeName: str) -> str:
         Constants.FOSCAM_PASSWORD,
     )
     try:
-        msg = NetHelpers.http_req(cmd)
+        msg = str(NetHelpers.http_req(cmd))
     except OSError as e:
         err_msg = getattr(e, "message", repr(e))
         msg = ">> ERROR: When rebooting %s. Got %s..." % (
@@ -46,16 +46,16 @@ def reboot_foscam(nodeName: str) -> str:
 def reboot_windows(node: str) -> str:
     # Ping to keep child proc alive for long enough
     winCmd = "shutdown /r /f ; ping localhost -n 3 > nul"
-    return NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
+    return str(NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd))
 
 
 # Note: For windows nodes only
 def print_deep_state(nodeName: str) -> str:
     node = Constants.WINDOWS_NODES[nodeName]
     winCmd = "net statistics workstation"
-    output = NetHelpers.ssh_cmd(
+    output = str(NetHelpers.ssh_cmd(
         node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd
-    )
+    ))
     if "successful" in output:
         match = re.search("Statistics since (.*)", output)
         if match:
