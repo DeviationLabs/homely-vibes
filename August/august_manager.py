@@ -4,12 +4,11 @@ import argparse
 import sys
 from typing import Optional
 
-from august_client import AugustMonitor
+from .august_client import AugustMonitor, AugustClient
 from lib.logger import get_logger
 from lib import Constants
-from august_client import AugustClient
 from lib.MyPushover import Pushover
-from validate_2fa import complete_2fa
+from .validate_2fa import complete_2fa
 
 pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
 

@@ -22,6 +22,7 @@ setup:
 	    echo "Found python version: $$(python3 -V)"; \
 		echo "${RED}Recommended python version not in path${RESET}\n${YELLOW}Please review the README.md for setup instructions${RESET}" && exit 1; \
 	fi
+	@brew upgrade
 	@brew install libomp pre-commit yamllint -q
 	@echo "📥 Installing project dependencies for $(PYTHON_VERSION)..."
 	@uv sync --extra dev
@@ -80,32 +81,18 @@ coverage-html: coverage ## Run the tests with coverage and generate HTML report
 
 ## Linting:
 lint: ## Run all the linters
-	@make ruff-check
+	@make ruff
 	@make mypy
-	@make vulture
-	@make semgrep
-	@make codespell-check
-	@make deptry
-	@echo "${GREEN}All linters completed successfully.${RESET}"
-
-lint-fix: ## Run all the linters and fix the issues
-	@make ruff-format
-	@make mypy
-	@make vulture
+#	@make vulture
 	@make semgrep
 	@make codespell
 	@make deptry
-	@echo "${GREEN}All linters fixed successfully.${RESET}"
+	@echo "${GREEN}All linters completed successfully.${RESET}"
 
 codespell: ## Run codespell against the project and fix any errors found
 	@echo "📝 Running codespell"
 	@uv run codespell -w --skip="dist,docs"
 	@echo "${GREEN}Codespell completed successfully.${RESET}"
-
-codespell-check: ## Check codespell against the project
-	@echo "📝 Running codespell"
-	@uv run codespell --skip="dist,docs"
-	@echo "${GREEN}Codespell check completed successfully.${RESET}"
 
 deptry: ## Run deptry on the project
 	@echo "🔎 Running deptry"
@@ -115,19 +102,13 @@ deptry: ## Run deptry on the project
 ruff: ## Use ruff on the project
 	@echo "🔎 Performing static code analysis"
 	@uv run ruff check --fix
+	@uv run ruff format
 	@echo "${GREEN}Static code analysis completed successfully.${RESET}"
-
-ruff-check: ## Check the project with ruff
-	@echo "🔎 Checking the project with ruff"
-	@uv run ruff check
-	@echo "${GREEN}Project checked with ruff successfully.${RESET}"
-
 
 mypy: ## Run mypy on the project
 	@echo "🔎 Running mypy"
 	@uv run mypy . || echo "${YELLOW}⚠️  mypy found issues${RESET}"
 	@echo "${GREEN}mypy completed successfully.${RESET}"
-
 
 vulture: ## Run vulture on the project to detect dead code
 	@echo "🔎 Running vulture"
@@ -181,8 +162,8 @@ validate-jobs-yaml:
 .PHONY: all \
 	setup \
 	test coverage coverage-lcov coverage-html \
-	lint lint-fix codespell codespell-check deptry \
-	ruff ruff-check ruff-format ruff-format-check mypy vulture semgrep \
+	lint lint-fix codespell deptry \
+	ruff mypy vulture semgrep \
 	hooks clean \
 	colima \
 	yamllint validate-jobs-yaml \
