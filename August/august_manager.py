@@ -14,13 +14,7 @@ from .validate_2fa import complete_2fa
 pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
 
 
-async def _test(
-    args: argparse.Namespace,  # noqa: ARG001
-    email: str,  # noqa: ARG001
-    password: str,  # noqa: ARG001
-    phone: Optional[str],  # noqa: ARG001
-    logger: logging.Logger,  # noqa: ARG001
-) -> None:
+async def _test() -> None:
     client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
     message = ""
     try:
@@ -67,7 +61,7 @@ async def _run_command(
         await complete_2fa()
 
     elif args.command == "test":
-        await _test(args, email, password, phone, logger)
+        await _test()
 
 
 def main() -> None:
