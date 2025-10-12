@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 
 import asyncio
+from typing import Any
 from tesla_api import TeslaApiClient
 
 from lib import Constants
 
 
-async def save_token(token):
+async def save_token(token: str) -> None:
     open("token_file", "w").write(token)
 
 
-async def main():
+async def main() -> None:
     async with TeslaApiClient(email, password, on_new_token=save_token) as client:
         await client.authenticate()
 
 
-async def main_vehicle(email, password, token):
+async def main_vehicle(email: str, password: str, token: str) -> None:
     async with TeslaApiClient(email, password, token, on_new_token=save_token) as client:
         vehicles = await client.list_vehicles()
         for v in vehicles:
@@ -23,7 +24,7 @@ async def main_vehicle(email, password, token):
             await v.controls.flash_lights()
 
 
-async def main_energy(email, password, token):
+async def main_energy(email: str, password: str, token: str) -> None:
     client = TeslaApiClient(email, password, token, on_new_token=save_token)
     energy_sites = await client.list_energy_sites()
     print("Number of energy sites = %d" % (len(energy_sites)))
@@ -35,7 +36,7 @@ async def main_energy(email, password, token):
     client.close()
 
 
-def initialize():
+def initialize() -> None:
     email = password = token = None
     try:
         token = open("token_file").read()
