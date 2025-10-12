@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Any, Tuple, Optional
+from typing import Any, Tuple, Optional, Union
 import argparse
 from importlib import reload
 import os
@@ -51,8 +51,8 @@ def run_monitor_one_shot(
             # Malformed. Ignore.
             continue
 
-        data[0] = int(data[0])
-        if data[0] <= parse_start_time:
+        timestamp = int(data[0])
+        if timestamp <= parse_start_time:
             # We've already digested this record
             continue
         elif re.search(ignore_patterns, data[2]):
@@ -64,8 +64,8 @@ def run_monitor_one_shot(
             matched = res.fld if hasattr(res, "fld") else None
         msg += f"[{data[1]}] {data[2]})\n"
 
-        if data[0] > parse_start_time:
-            parse_start_time = data[0]
+        if timestamp > parse_start_time:
+            parse_start_time = timestamp
             records[data[1]] = data[2]
 
     return (alert, msg, matched)
@@ -118,6 +118,7 @@ if __name__ == "__main__":
     time.sleep(args.start_after_seconds)
 
     host = Constants.NODES[args.machine]
+    client: Optional[Any] = None
     try:
         client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
         msg = refresh_dns_cache(client)
@@ -143,7 +144,7 @@ if __name__ == "__main__":
             Constants = reload(Constants)
             host = Constants.NODES[args.machine]
             (alert, msg, matched) = run_monitor_one_shot(
-                client, host["histfile"], host.get("whitelist", "")
+                client, str(host["histfile"]), str(host.get("whitelist", ""))
             )
             if only_ssh_fails_count > SSH_ALERT_DELAY_COUNT:
                 sms_inform = host.get("sms_inform", [])
@@ -164,7 +165,7 @@ if __name__ == "__main__":
                 # Most probable explanation is ssh has failed, so reconnect and retry
                 client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
                 (alert, msg, matched) = run_monitor_one_shot(
-                    client, host["histfile"], host.get("whitelist", "")
+                    client, str(host["histfile"]), str(host.get("whitelist", ""))
                 )
             except Exception as e:
                 # Take a cooling off period.

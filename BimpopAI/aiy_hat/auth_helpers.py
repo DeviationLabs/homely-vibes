@@ -68,7 +68,7 @@ def _credentials_flow_interactive(
         client_secrets_path, scopes=[_ASSISTANT_OAUTH_SCOPE]
     )
     if False:  # 'DISPLAY' in os.environ: ## APB -- chromium will not load. We just want the console validation
-        logging.info("UI based validation")
+        logging.info("UI based validation")  # pragma: no cover
         # Use chromium-browser by default. Raspbian Stretch uses Epiphany by
         # default but that seems to cause issues:
         # https://github.com/google/aiyprojects-raspbian/issues/269
