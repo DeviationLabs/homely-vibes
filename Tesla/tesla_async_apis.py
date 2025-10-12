@@ -16,9 +16,7 @@ async def main():
 
 
 async def main_vehicle(email, password, token):
-    async with TeslaApiClient(
-        email, password, token, on_new_token=save_token
-    ) as client:
+    async with TeslaApiClient(email, password, token, on_new_token=save_token) as client:
         vehicles = await client.list_vehicles()
         for v in vehicles:
             print(v.vin)

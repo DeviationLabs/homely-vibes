@@ -41,7 +41,9 @@ class TuyaLogParser:
             logging.error("Warn: No records in file %s. Ignoring..." % csvLogfile)
             if isMostRecentLog:
                 Mailer.sendmail(
-                    "[PumpStats]", alert=True, message="Log file empty. Polling issue"
+                    "[PumpStats]",
+                    alert=True,
+                    message="Log file empty. Polling issue",
                 )
             return
 
@@ -65,9 +67,7 @@ class TuyaLogParser:
                 " ".join(dataPoints[-1]),
             )
             if fetch(dataPoints[-1], "CURRENT", "int") < 0:
-                msg += (
-                    "Recommended Action: Manually power cycle the Tuya switch for pump"
-                )
+                msg += "Recommended Action: Manually power cycle the Tuya switch for pump"
             elif fetch(dataPoints[-1], "ZONE_NUM", "int") < -1:
                 msg += "Recommended Action: Check if Rachio online from iOS app"
             logging.warning(msg)
@@ -108,9 +108,7 @@ class TuyaLogParser:
                 prevZoneNum = currZoneNum
                 prevEpoch = currEpoch
             except IndexError:
-                logging.info(
-                    "Failed to parse record: %s in file %s" % (record, self.csvLogfile)
-                )
+                logging.info("Failed to parse record: %s in file %s" % (record, self.csvLogfile))
 
         # Done looping through the file. Now compute average pumpRate in this window
         for zoneNum, zone in self.zonesStats.items():
@@ -192,9 +190,7 @@ def loadCsv(csvLogfile):
     logErrors = 0
     try:
         with open(csvLogfile, "r", encoding="utf-8", errors="replace") as csv_file:
-            csvReader = csv.reader(
-                (x.replace("\0", "") for x in csv_file), delimiter=","
-            )
+            csvReader = csv.reader((x.replace("\0", "") for x in csv_file), delimiter=",")
             for record in csvReader:
                 if len(record) == len(TuyaLogCols):
                     dataPoints.append(record)

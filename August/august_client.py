@@ -16,6 +16,7 @@ from lib import Constants
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
+
 @dataclass
 class LockState:
     lock_id: str
@@ -116,9 +117,7 @@ class AugustClient:
         try:
             assert self.api is not None
             assert self.access_token is not None
-            lock_detail = await self.api.async_get_lock_detail(
-                self.access_token, lock_id
-            )
+            lock_detail = await self.api.async_get_lock_detail(self.access_token, lock_id)
             lock_name = lock_detail.device_name
             lock_serial = lock_detail.serial_number
 
@@ -135,7 +134,9 @@ class AugustClient:
                 door_state=door_state,
             )
 
-            self.logger.info(f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}")
+            self.logger.info(
+                f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}"
+            )
             return lock_state
 
         except Exception as e:
@@ -155,7 +156,6 @@ class AugustClient:
         return statuses
 
 
-
 class AugustMonitor:
     def __init__(
         self,
@@ -165,7 +165,7 @@ class AugustMonitor:
         unlock_threshold_minutes: int = 5,
         ajar_threshold_minutes: int = 10,
         battery_threshold_pct: int = 20,
-        battery_alert_cooldown_minutes: int = 42*60, # 1.75 days
+        battery_alert_cooldown_minutes: int = 42 * 60,  # 1.75 days
         door_alert_cooldown_minutes: int = 2,
     ):
         self.client = AugustClient(email, password, phone)
@@ -175,15 +175,13 @@ class AugustMonitor:
         self.battery_alert_cooldown = battery_alert_cooldown_minutes * 60
         self.door_alert_cooldown = door_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
-        self.pushover = Pushover(
-            Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"]
-        )
-        # Tracking for different alert types
+        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
         self.unlock_start_times: Dict[str, float] = {}
         self.ajar_start_times: Dict[str, float] = {}
-        self.last_unlock_alerts: Dict[str, float] = {}  # For unlock alerts
-        self.last_ajar_alerts: Dict[str, float] = {}  # For door ajar alerts
+        self.last_unlock_alerts: Dict[str, float] = {}
+        self.last_ajar_alerts: Dict[str, float] = {}
         self.last_battery_alerts: Dict[str, float] = {}
+        self.last_lock_failure_alerts: Dict[str, float] = {}
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
 
@@ -192,13 +190,11 @@ class AugustMonitor:
             with open(self.state_file, "r") as f:
                 state = json.load(f)
                 self.unlock_start_times = state.get("unlock_start_times", {})
-                self.ajar_start_times = state.get("door_ajar_start_times", {})
+                self.ajar_start_times = state.get("ajar_start_times", {})
                 self.last_unlock_alerts = state.get("last_unlock_alerts", {})
-                self.last_ajar_alerts = state.get("last_door_ajar_alerts", {})
+                self.last_ajar_alerts = state.get("last_ajar_alerts", {})
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
-                self.last_lock_failure_alerts = state.get(
-                    "last_lock_failure_alerts", {}
-                )
+                self.last_lock_failure_alerts = state.get("last_lock_failure_alerts", {})
             self.logger.debug("Loaded monitor state from file")
         except (FileNotFoundError, json.JSONDecodeError):
             self.logger.debug("No existing state file found, starting fresh")
@@ -207,9 +203,9 @@ class AugustMonitor:
         try:
             state = {
                 "unlock_start_times": self.unlock_start_times,
-                "door_ajar_start_times": self.ajar_start_times,
+                "ajar_start_times": self.ajar_start_times,
                 "last_unlock_alerts": self.last_unlock_alerts,
-                "last_door_ajar_alerts": self.last_ajar_alerts,
+                "last_ajar_alerts": self.last_ajar_alerts,
                 "last_battery_alerts": self.last_battery_alerts,
                 "last_lock_failure_alerts": self.last_lock_failure_alerts,
             }
@@ -234,9 +230,7 @@ class AugustMonitor:
                 k: v for k, v in self.unlock_start_times.items() if k in existing_locks
             }
             self.ajar_start_times = {
-                k: v
-                for k, v in self.ajar_start_times.items()
-                if k in existing_locks
+                k: v for k, v in self.ajar_start_times.items() if k in existing_locks
             }
             self.last_unlock_alerts = {
                 k: v for k, v in self.last_unlock_alerts.items() if k in existing_locks
@@ -248,9 +242,7 @@ class AugustMonitor:
                 k: v for k, v in self.last_battery_alerts.items() if k in existing_locks
             }
             self.last_lock_failure_alerts = {
-                k: v
-                for k, v in self.last_lock_failure_alerts.items()
-                if k in existing_locks
+                k: v for k, v in self.last_lock_failure_alerts.items() if k in existing_locks
             }
 
             self._save_state()
@@ -265,32 +257,26 @@ class AugustMonitor:
             if lock_id in self.unlock_start_times:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
                 self.logger.info(
-                    f"Lock {status.lock_name} secured after "
-                    f"{unlock_duration / 60:.1f} minutes"
+                    f"Lock {status.lock_name} secured after {unlock_duration / 60:.1f} minutes"
                 )
                 del self.unlock_start_times[lock_id]
         else:
             if lock_id not in self.unlock_start_times:
                 self.unlock_start_times[lock_id] = current_time
-                self.logger.info(
-                    f"Lock {status.lock_name} is unlocked - starting timer"
-                )
+                self.logger.info(f"Lock {status.lock_name} is unlocked - starting timer")
             else:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
                 if unlock_duration >= self.unlock_threshold:
-                    # Check cooldown before sending alert
                     last_alert = self.last_unlock_alerts.get(lock_id, 0)
                     if current_time - last_alert >= self.door_alert_cooldown:
                         await self._send_unlock_alert(lock_id, status, unlock_duration)
                         self.last_unlock_alerts[lock_id] = current_time
 
-        
         if status.door_state == LockDoorStatus.CLOSED:
             if lock_id in self.ajar_start_times:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
                 self.logger.info(
-                    f"Door {status.lock_name} closed after "
-                    f"{ajar_duration / 60:.1f} minutes"
+                    f"Door {status.lock_name} closed after {ajar_duration / 60:.1f} minutes"
                 )
                 del self.ajar_start_times[lock_id]
         else:
@@ -300,12 +286,10 @@ class AugustMonitor:
             else:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
                 if ajar_duration >= self.ajar_threshold:
-                    # Check cooldown before sending alert
                     last_alert = self.last_ajar_alerts.get(lock_id, 0)
                     if current_time - last_alert >= self.door_alert_cooldown:
                         await self._send_door_ajar_alert(lock_id, status, ajar_duration)
                         self.last_ajar_alerts[lock_id] = current_time
-
 
     async def _send_unlock_alert(
         self, lock_id: str, status: LockState, unlock_duration: float
@@ -313,9 +297,7 @@ class AugustMonitor:
         minutes_unlocked = unlock_duration / 60
 
         title = "🔓 August Lock Alert"
-        message = (
-            f"{status.lock_name} has been unlocked for {minutes_unlocked:.0f} minutes"
-        )
+        message = f"{status.lock_name} has been unlocked for {minutes_unlocked:.0f} minutes"
 
         try:
             self.pushover.send_message(message, title=title, priority=1)
@@ -329,9 +311,7 @@ class AugustMonitor:
         minutes_ajar = ajar_duration / 60
 
         title = "🚪 August Door Alert"
-        message = (
-            f"{status.lock_name} door has been ajar for {minutes_ajar:.0f} minutes"
-        )
+        message = f"{status.lock_name} door has been ajar for {minutes_ajar:.0f} minutes"
 
         try:
             self.pushover.send_message(message, title=title, priority=1)
@@ -342,15 +322,14 @@ class AugustMonitor:
     async def _check_battery_level(
         self, lock_id: str, status: LockState, current_time: float
     ) -> None:
-        if (
-            not status.battery_level
-            or status.battery_level >= self.battery_threshold_pct
-        ):
+        if not status.battery_level or status.battery_level >= self.battery_threshold_pct:
             return
 
         last_alert = self.last_battery_alerts.get(lock_id, 0)
         if current_time - last_alert < self.battery_alert_cooldown:
-            self.logger.info(f"Skipping battery alert for {status.lock_name} (cooldown) last_alert: {datetime.fromtimestamp(last_alert)}")
+            self.logger.info(
+                f"Skipping battery alert for {status.lock_name} (cooldown) last_alert: {datetime.fromtimestamp(last_alert)}"
+            )
             return
 
         title = "🔋 August Low Battery"

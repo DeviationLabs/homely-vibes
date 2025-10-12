@@ -9,9 +9,7 @@ BASE_URL = "https://aiybackend.deviationlabs.com/api/v1/"  # APB: why is this no
 # BASE_URL = "https://srqbimf23j.us-east-1.awsapprunner.comi:8080/api/v1"
 
 DATE_COLUMN = "date/time"
-DATA_URL = (
-    "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
-)
+DATA_URL = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
 
 
 def summary(text: str = "") -> str:

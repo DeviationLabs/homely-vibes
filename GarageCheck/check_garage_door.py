@@ -13,11 +13,12 @@ logger = SystemLogger.get_logger(__name__)
 # import TFOneShot ## Imported on demand
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="ML detector for checking state of garage door"
-    )
+    parser = argparse.ArgumentParser(description="ML detector for checking state of garage door")
     parser.add_argument(
-        "--always_email", help="Send email report", action="store_true", default=False
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
     )
     parser.add_argument(
         "--out_dir",
@@ -45,9 +46,7 @@ if __name__ == "__main__":
     send_email = args.always_email
     model = None
     msg = ""
-    mycam = FoscamImager.FoscamImager(
-        Constants.FOSCAM_NODES["Garage"], args.display_image
-    )
+    mycam = FoscamImager.FoscamImager(Constants.FOSCAM_NODES["Garage"], args.display_image)
 
     if args.model_file and os.path.isfile(args.model_file):
         import TFOneShot

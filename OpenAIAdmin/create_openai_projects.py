@@ -45,18 +45,12 @@ class OpenAIProjectManager:
             response.raise_for_status()
 
             project_data = response.json()
-            logger.info(
-                f"Successfully created project: {name} (ID: {project_data.get('id')})"
-            )
+            logger.info(f"Successfully created project: {name} (ID: {project_data.get('id')})")
             return project_data
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to create project {name}: {e}")
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 logger.error(f"Response: {e.response.text}")
             return None
 
@@ -90,11 +84,7 @@ class OpenAIProjectManager:
             logger.warning(
                 f"Budget setting may not be available via API for project {project_id}: {e}"
             )
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 logger.debug(f"Response: {e.response.text}")
             # Don't treat budget setting failure as a critical error
             return True  # Consider it successful so project creation continues
@@ -135,11 +125,7 @@ class OpenAIProjectManager:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to lookup user {email}: {e}")
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 logger.error(f"Response: {e.response.text}")
             return None
 
@@ -153,18 +139,12 @@ class OpenAIProjectManager:
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
 
-            logger.info(
-                f"Successfully invited {email} to organization with role {role}"
-            )
+            logger.info(f"Successfully invited {email} to organization with role {role}")
             return True
 
         except requests.exceptions.RequestException as e:
             # Check if the error is because the invite already exists or user already exists
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 error_text = e.response.text.lower()
 
                 # If user already has an invite, this is actually a success case
@@ -230,18 +210,14 @@ class OpenAIProjectManager:
                 logger.info(
                     f"User {email} is already in project with role {current_role}, updating to {role}"
                 )
-                update_success = self.update_user_project_role(
-                    project_id, user_id, role
-                )
+                update_success = self.update_user_project_role(project_id, user_id, role)
                 if update_success:
                     logger.info(
                         f"Successfully updated {email} to role {role} in project {project_id}"
                     )
                     return True
                 else:
-                    logger.error(
-                        f"Failed to update {email} to role {role} in project {project_id}"
-                    )
+                    logger.error(f"Failed to update {email} to role {role} in project {project_id}")
                     return False
             else:
                 # User already has the correct role or is an owner and we're trying to downgrade
@@ -259,9 +235,7 @@ class OpenAIProjectManager:
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
 
-            logger.info(
-                f"Successfully added {email} to project {project_id} with role {role}"
-            )
+            logger.info(f"Successfully added {email} to project {project_id} with role {role}")
             return True
 
         except requests.exceptions.RequestException as e:
@@ -278,11 +252,7 @@ class OpenAIProjectManager:
                         return True  # Consider this a success since the invitation process is in progress
 
                     # Check if user already exists in project (common scenario, not an error)
-                    if (
-                        "already" in error_text
-                        or "exists" in error_text
-                        or "member" in error_text
-                    ):
+                    if "already" in error_text or "exists" in error_text or "member" in error_text:
                         # User exists but we couldn't detect this earlier, try updating role
                         if role == "owner":
                             logger.info(
@@ -329,17 +299,11 @@ class OpenAIProjectManager:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to get users for project {project_id}: {e}")
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 logger.error(f"Response: {e.response.text}")
             return None
 
-    def update_user_project_role(
-        self, project_id: str, user_id: str, role: str
-    ) -> bool:
+    def update_user_project_role(self, project_id: str, user_id: str, role: str) -> bool:
         """Update a user's role in a project using POST request."""
         url = f"{self.base_url}/organization/projects/{project_id}/users/{user_id}"
 
@@ -359,11 +323,7 @@ class OpenAIProjectManager:
             logger.error(
                 f"Failed to update user {user_id} to role {role} in project {project_id}: {e}"
             )
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 logger.error(f"Response: {e.response.text}")
             return False
 
@@ -398,11 +358,7 @@ class OpenAIProjectManager:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to list projects: {e}")
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and hasattr(e.response, "text")
-            ):
+            if hasattr(e, "response") and e.response is not None and hasattr(e.response, "text"):
                 logger.error(f"Response: {e.response.text}")
             return []
 
@@ -507,7 +463,11 @@ def validate_team_data(teams: List[Dict]) -> List[Dict]:
             description = description[:97] + "..."
 
         valid_teams.append(
-            {"team_name": project_name, "email": email, "description": description}
+            {
+                "team_name": project_name,
+                "email": email,
+                "description": description,
+            }
         )
 
     logger.info(f"Validated {len(valid_teams)} out of {len(teams)} teams")
@@ -518,13 +478,9 @@ def main():
     """Main execution function."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Create OpenAI projects from spreadsheet"
-    )
+    parser = argparse.ArgumentParser(description="Create OpenAI projects from spreadsheet")
     parser.add_argument("spreadsheet", help="Path to spreadsheet file (CSV or Excel)")
-    parser.add_argument(
-        "--api-key", help="OpenAI API key (or set OPENAI_API_KEY env var)"
-    )
+    parser.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY env var)")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -595,14 +551,10 @@ def main():
         existing_names = {
             proj["name"].lower() for proj in existing_projects
         }  # Case-insensitive comparison
-        existing_projects_by_name = {
-            proj["name"].lower(): proj for proj in existing_projects
-        }
+        existing_projects_by_name = {proj["name"].lower(): proj for proj in existing_projects}
 
         if existing_names:
-            logger.info(
-                f"Found existing projects: {[proj['name'] for proj in existing_projects]}"
-            )
+            logger.info(f"Found existing projects: {[proj['name'] for proj in existing_projects]}")
 
         # Create projects
         created_count = 0
@@ -615,9 +567,7 @@ def main():
 
             # Check if we've already processed this project name in this batch
             if team_name.lower() in processed_names:
-                logger.warning(
-                    f"Skipping duplicate project '{team_name}' found in CSV batch"
-                )
+                logger.warning(f"Skipping duplicate project '{team_name}' found in CSV batch")
                 continue
 
             # Check if project already exists (case-insensitive)
@@ -676,16 +626,12 @@ def main():
                 )
 
                 if user_added:
-                    logger.info(
-                        f"Project created and user added as owner for {team_name}"
-                    )
+                    logger.info(f"Project created and user added as owner for {team_name}")
                     created_count += 1
                 else:
                     logger.warning(f"Project created but failed to add user {email}")
             else:
-                logger.error(
-                    f"Failed to create project '{team_name}', skipping user addition"
-                )
+                logger.error(f"Failed to create project '{team_name}', skipping user addition")
 
         logger.info(f"Successfully processed {created_count} projects")
 

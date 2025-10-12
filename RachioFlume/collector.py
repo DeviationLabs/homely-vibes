@@ -13,9 +13,7 @@ from lib.logger import get_logger
 class WaterTrackingCollector:
     """Service that collects data from Rachio and Flume APIs."""
 
-    def __init__(
-        self, db_path: str, poll_interval_seconds: int = 300
-    ):  # 5 minutes default
+    def __init__(self, db_path: str, poll_interval_seconds: int = 300):  # 5 minutes default
         self.logger = get_logger(__name__)
 
         self.db = WaterTrackingDB(db_path)
@@ -24,11 +22,11 @@ class WaterTrackingCollector:
         self.poll_interval = poll_interval_seconds
 
         # Initialize last collection times from database to avoid duplicates
-        self.last_rachio_collection: Optional[datetime] = (
-            self.db.get_last_collection_timestamp("rachio")
+        self.last_rachio_collection: Optional[datetime] = self.db.get_last_collection_timestamp(
+            "rachio"
         )
-        self.last_flume_collection: Optional[datetime] = (
-            self.db.get_last_collection_timestamp("flume")
+        self.last_flume_collection: Optional[datetime] = self.db.get_last_collection_timestamp(
+            "flume"
         )
 
         if self.last_rachio_collection:
@@ -54,9 +52,7 @@ class WaterTrackingCollector:
                 events = self.rachio_client.get_recent_events(days=7)
             else:
                 # Get events since last collection
-                events = self.rachio_client.get_events(
-                    self.last_rachio_collection, datetime.now()
-                )
+                events = self.rachio_client.get_events(self.last_rachio_collection, datetime.now())
 
             if events:
                 # Filter out events that overlap with existing data
@@ -143,9 +139,7 @@ class WaterTrackingCollector:
 
     async def run_continuous(self) -> None:
         """Run continuous data collection."""
-        self.logger.info(
-            f"Starting continuous collection every {self.poll_interval} seconds"
-        )
+        self.logger.info(f"Starting continuous collection every {self.poll_interval} seconds")
 
         while True:
             try:
@@ -184,14 +178,10 @@ class WaterTrackingCollector:
                 "current_usage_rate_gpm": current_usage_rate,
                 "recent_sessions_count": len(recent_sessions),
                 "last_rachio_collection": (
-                    self.last_rachio_collection.isoformat()
-                    if self.last_rachio_collection
-                    else None
+                    self.last_rachio_collection.isoformat() if self.last_rachio_collection else None
                 ),
                 "last_flume_collection": (
-                    self.last_flume_collection.isoformat()
-                    if self.last_flume_collection
-                    else None
+                    self.last_flume_collection.isoformat() if self.last_flume_collection else None
                 ),
             }
 
@@ -236,10 +226,7 @@ class WaterTrackingCollector:
         filtered_readings = []
         for reading in readings:
             # Assuming the reading has a timestamp attribute
-            if (
-                hasattr(reading, "timestamp")
-                and reading.timestamp > last_data_timestamp
-            ):
+            if hasattr(reading, "timestamp") and reading.timestamp > last_data_timestamp:
                 filtered_readings.append(reading)
 
         return filtered_readings

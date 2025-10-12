@@ -19,9 +19,7 @@ def print_ipinfo(returncode, params):
 class FoscamImager:
     def __init__(self, nodeIP, display_images=False):
         self.nodeIP = nodeIP
-        self.mycam = FoscamCamera(
-            nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD
-        )
+        self.mycam = FoscamCamera(nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
         self.display_images = display_images
         self.err_count = 0
         if display_images:

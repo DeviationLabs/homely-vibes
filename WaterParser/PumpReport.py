@@ -25,9 +25,7 @@ def custom_sort(record):
 
 # Flag all zone where latest rate is greater than average of the last N days.
 def genSendMessage(always_email):
-    aggregated = collections.defaultdict(
-        lambda: {"pumpTime": 0, "toggles": 0, "runTime": 0}
-    )
+    aggregated = collections.defaultdict(lambda: {"pumpTime": 0, "toggles": 0, "runTime": 0})
     latest = collections.defaultdict(
         lambda: {
             "pumpTime": 0,
@@ -72,9 +70,7 @@ def genSendMessage(always_email):
             if latestZoneStats["zoneName"] is None:
                 latestZoneStats["startEpoch"] = record["logStartEpoch"]
                 latestZoneStats["zoneName"] = zoneStats.get("zoneName", "UNK")
-            if not meetsMinRunTime(
-                latestZoneStats["zoneName"], latestZoneStats["runTime"]
-            ):
+            if not meetsMinRunTime(latestZoneStats["zoneName"], latestZoneStats["runTime"]):
                 latestZoneStats["pumpTime"] += pumpTime
                 latestZoneStats["runTime"] += runTime
                 latestZoneStats["pumpRate"] = (
@@ -82,7 +78,9 @@ def genSendMessage(always_email):
                 )
 
     # Return a summary message.
-    message = '<html><head><link href="favicon.ico"/><title>Eden Monitoring Systems (TM)</title><style>'
+    message = (
+        '<html><head><link href="favicon.ico"/><title>Eden Monitoring Systems (TM)</title><style>'
+    )
     message += """
   th {
     background-color: black;
@@ -107,16 +105,11 @@ def genSendMessage(always_email):
     message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th><th>Usage</th></tr>"
 
     for zoneNumStr, zoneStats in sorted(latest.items(), key=custom_sort):
-        if (
-            aggregated[zoneNumStr]["pumpTime"] == 0
-            or aggregated[zoneNumStr]["runTime"] == 0
-        ):
+        if aggregated[zoneNumStr]["pumpTime"] == 0 or aggregated[zoneNumStr]["runTime"] == 0:
             average = 0
             deviation = 0
         else:
-            average = (
-                aggregated[zoneNumStr]["pumpTime"] / aggregated[zoneNumStr]["runTime"]
-            )
+            average = aggregated[zoneNumStr]["pumpTime"] / aggregated[zoneNumStr]["runTime"]
             deviation = (zoneStats["pumpRate"] - average) * 100 / average
 
         if not meetsMinRunTime(zoneStats["zoneName"], zoneStats["runTime"]):
@@ -136,9 +129,10 @@ def genSendMessage(always_email):
             zoneStats["zoneName"],
             attrib,
         )
-        message += (
-            '<td align="right">%+3d %%</td><td>%0.03f</td><td align="right">%4d</td>'
-            % (deviation, zoneStats["pumpRate"], zoneStats["runTime"] / 60)
+        message += '<td align="right">%+3d %%</td><td>%0.03f</td><td align="right">%4d</td>' % (
+            deviation,
+            zoneStats["pumpRate"],
+            zoneStats["runTime"] / 60,
         )
         message += '<td align="right">%3d</td></tr>\n' % zoneStats["pumpTime"]
 
@@ -173,10 +167,7 @@ def genSendMessage(always_email):
 def meetsMinRunTime(zoneName, runTime):
     if "D" in zoneName.split("-")[0] and runTime > Constants.MIN_DRIP_ZONE_ALERT_TIME:
         return True
-    elif (
-        "S" in zoneName.split("-")[0]
-        and runTime > Constants.MIN_SPRINKLER_ZONE_ALERT_TIME
-    ):
+    elif "S" in zoneName.split("-")[0] and runTime > Constants.MIN_SPRINKLER_ZONE_ALERT_TIME:
         return True
     elif runTime > Constants.MIN_MISC_ZONE_ALERT_TIME:
         return True
