@@ -93,6 +93,10 @@ known_first_party = [
     "utils",  # for Bimpop.ai/fe/utils.py
 ]
 exclude = ["tests", ".venv", "backups", "lib/TeslaPy"]
+
+[tool.deptry.package_module_name_map]
+streamlit = "streamlit"
+gpxpy = "gpxpy"
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
