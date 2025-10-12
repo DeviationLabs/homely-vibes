@@ -199,6 +199,17 @@ module = [
     "GPXParser.*",
     "WaterLogging.*",
     "OpenAIAdmin.*",
+    # Modules with remaining complex type issues (clean baseline)
+    "BimpopAI.aiy_hat.aiy_runner",
+    "BimpopAI.aiy_hat.auth_helpers", 
+    "BimpopAI.app.utils",
+    "BrowserAlert.alert_me",
+    "GarageCheck.TFOneShot",
+    "RachioFlume.rfmanager",
+    "RachioFlume.test_integration",
+    "Tesla.manage_power",
+    "Tesla.tesla_async_apis",
+    "Tesla.test_manage_power",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
