@@ -19,7 +19,6 @@ dependencies = [
     "langchain>=0.2.5",
     "langchain-openai>=0.1.0",
     "tiktoken>=0.8.0",
-    "urllib3==2.5.0",
     "uvicorn>=0.23.0",
     "matplotlib>=3.10.5",
     "tld>=0.13.1",
@@ -111,23 +110,6 @@ DEP002 = [
     "semgrep",
     "codespell",
     "deptry",
-    # Core dependencies not used in all modules
-    "requests",
-    "openai", 
-    "pandas",
-    "numpy",
-    "pydantic",
-    "fastapi",
-    "langchain",
-    "langchain-openai",
-    "tiktoken",
-    "uvicorn",
-    "matplotlib",
-    "tld",
-    "pytest",
-    "yalexs",
-    "aiohttp",
-    "urllib3"
 ]
 DEP003 = ["google", "TeslaPy", "foscam"]
 
