@@ -48,6 +48,11 @@ dev = [
     "semgrep>=1.0.0",
     "codespell>=2.0.0",
     "deptry>=0.23.1",
+    # Type stubs
+    "types-requests>=2.31.0",
+    "types-paramiko>=3.4.0", 
+    "types-setuptools>=68.0.0",
+    "pandas-stubs>=2.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -149,27 +154,68 @@ strict_equality = true
 namespace_packages = true
 explicit_package_bases = true
 exclude = [
-    "lib/",
-    "WaterParser/",
-    "GarageCheck/",
-    "Tesla/",
-    "Bimpop.ai/",
-    "RachioFlume/",
-    "OpenAIAdmin/",
-    "BrowserAlert/",
-    "NodeCheck/",
-    "NetworkCheck/",
-    "JWTs/",
-    "GPXParser/",
-    "WaterLogging/",
+    "lib/TeslaPy/",  # Third-party submodule
+    "Bimpop.ai/",  # Legacy AI module
 ]
 
 [[tool.mypy.overrides]]
 module = [
     "Constants",
     "TeslaPy.*",
-    "tesla_powerwall.*",
+    "tesla_powerwall.*", 
     "yalexs.*",
+    "twilio.*",
+    "foscam.*",
+    "teslapy.*",
+    "webview.*",
+    "selenium.*",
+    "geopy.*",
+    "tensorflow.*",
+    "keras.*",
+    "aiy.*",
+    "google.*",
+    "google_auth_oauthlib.*",
+    "websocket.*",
+    "urlparse.*",
+    "rachio_client.*",
+    "flume_client.*",
+    "data_storage.*",
+    "Mailer.*",
+    "PumpReport.*",
+    "PumpStatsWriter.*", 
+    "TuyaLogParser.*",
+    "tesla_api.*",
+    "pinecone.*",
+    "langchain_pinecone.*",
+    "cv2.*",
+    "collector.*",
+    "reporter.*",
+    "utils.*",
 ]
 ignore_missing_imports = true
+
+# Less strict checking for legacy modules  
+[[tool.mypy.overrides]]
+module = [
+    "lib.*",
+    "WaterParser.*", 
+    "Tesla.*",
+    "RachioFlume.*",
+    "BrowserAlert.*",
+    "Bimpop.*",
+    "GarageCheck.*",
+    "NodeCheck.*",
+    "NetworkCheck.*",
+    "JWTs.*",
+    "GPXParser.*",
+    "WaterLogging.*",
+    "OpenAIAdmin.*",
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+disallow_untyped_decorators = false
+warn_return_any = false
+warn_unreachable = false
+ignore_errors = true
 
