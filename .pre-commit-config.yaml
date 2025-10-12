@@ -7,6 +7,13 @@ repos:
         language: system
         require_serial: true
         stages: [pre-commit]
+      - id: test
+        name: Run Tests
+        entry: make test
+        language: system
+        require_serial: true
+        pass_filenames: false
+        stages: [pre-commit]
       - id: secrets-scan
         name: Secrets Scan
         entry: scripts/secret-scan.sh
