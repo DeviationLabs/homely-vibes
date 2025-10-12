@@ -40,6 +40,8 @@ dependencies = [
     "yalexs>=8.0.0",
     "aiohttp>=3.12.15",
     "pytest>=8.4.1",
+    "gpxpy>=1.5.0",
+    "click>=8.0.0",
 ]
 
 [project.optional-dependencies]
