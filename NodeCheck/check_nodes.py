@@ -49,7 +49,8 @@ def reboot_foscam(nodeName: str) -> str:
 
 def reboot_windows(node: str) -> str:
     # Ping to keep child proc alive for long enough
-    winCmd = "shutdown /r /f ; ping localhost -n 3 > nul"
+    # Windows commands need to be wrapped in cmd /c and use & instead of ;
+    winCmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
     return str(
         NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
     )
