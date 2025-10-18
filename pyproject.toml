@@ -27,7 +27,8 @@ dependencies = [
     "pytest>=8.4.1",
     "gpxpy>=1.5.0",
     "click>=8.0.0",
-    "paramiko>=2.8.0"
+    "paramiko>=2.8.0",
+    "libpyfoscam>=1.2.2"
 ]
 
 [project.optional-dependencies]
@@ -82,15 +83,14 @@ exclude = ["tests", ".venv", "backups", "lib/TeslaPy"]
 [tool.deptry.per_rule_ignores]
 DEP001 = [
     "aiy",
-    "google_auth_oauthlib", 
+    "google_auth_oauthlib",
     "pinecone",
     "langchain_pinecone",
     "tld",
-    "tensorflow", 
+    "tensorflow",
     "keras",
     "tesla_api",
     "tesla_powerwall",
-    "foscam",
     "matplotlib",
     "twilio",
     "cv2",

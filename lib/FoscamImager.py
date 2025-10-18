@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from foscam.foscam import FoscamCamera, FOSCAM_SUCCESS
+from libpyfoscam.foscam import FoscamCamera, FOSCAM_SUCCESS
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import io

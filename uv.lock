@@ -815,6 +815,7 @@ dependencies = [
     { name = "gpxpy" },
     { name = "langchain" },
     { name = "langchain-openai" },
+    { name = "libpyfoscam" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "openai" },
@@ -858,6 +859,7 @@ requires-dist = [
     { name = "gpxpy", specifier = ">=1.5.0" },
     { name = "langchain", specifier = ">=0.2.5" },
     { name = "langchain-openai", specifier = ">=0.1.0" },
+    { name = "libpyfoscam", specifier = ">=1.2.2" },
     { name = "matplotlib", specifier = ">=3.10.5" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=1.24.0" },
@@ -1172,6 +1174,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/fb/a0fab0ce0bb46aaae9703c1fb814b4ac7cbc2d75adc51e8689f1b34ac08d/langsmith-0.4.16.tar.gz", hash = "sha256:a94f374c7fa0f406757f95f311e84873258563961e1af0ba8996411822cd7241", size = 930411, upload-time = "2025-08-22T15:45:16.56Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/79/ed/7a48189bdad850cfd47df671204c31779dd190de6bc681f169d4535f852e/langsmith-0.4.16-py3-none-any.whl", hash = "sha256:9ba95ed09b057dfe227e882f5446e1824bfc9f2c89de542ee6f0f8d90ab953a7", size = 375761, upload-time = "2025-08-22T15:45:14.82Z" },
+]
+
+[[package]]
+name = "libpyfoscam"
+version = "1.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/df/d6/03ac4173fcea8cb5462277d47db6c41c72dc438336735cd16bdf39c40a35/libpyfoscam-1.2.2.tar.gz", hash = "sha256:14b3dead5cf1dbeddfe5b8a2aadd091c98c1b8c21a95406463e6c66f64a155aa", size = 20929, upload-time = "2022-10-31T19:37:43.977Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/f5/8a181cb6179c984b1ec75e5b4f5a2bc4c39e5221cb52b5c919d3efe3373a/libpyfoscam-1.2.2-py3-none-any.whl", hash = "sha256:c1a5f040c5f951bdad9275a22e8551f6f7669f6ab0641bec507ac7f5e9f04707", size = 20294, upload-time = "2022-10-31T19:37:42.032Z" },
 ]
 
 [[package]]

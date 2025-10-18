@@ -34,18 +34,35 @@ def ping_output(node, count=1, desired_up=True) -> bool:
 
 # run a command in ssh and return string output
 def ssh_cmd(node, user, passwd, winCmd) -> str:
-    sshOpts = "-o ConnectTimeout=10"
-    cmd = "sshpass -p %s ssh %s %s@%s %s 2> /dev/null" % (
-        passwd,
-        sshOpts,
-        user,
-        node,
-        winCmd,
-    )
+    import os
+
+    # SSH options: ConnectTimeout for connection, ServerAliveInterval to detect hung connections
+    sshOpts = [
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "ServerAliveInterval=2",
+        "-o",
+        "ServerAliveCountMax=3",
+    ]
+
+    # Build command with password hidden in process list by using env variable
+    env = os.environ.copy()
+    env["SSHPASS"] = passwd
+
+    # Remote command must be a single argument for SSH
+    cmd = ["sshpass", "-e", "ssh", *sshOpts, f"{user}@{node}", winCmd]
     try:
-        output = subprocess.check_output(cmd.split(), timeout=10).decode("utf-8")
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        output = f"{e}"
+        output = subprocess.check_output(cmd, timeout=15, stderr=subprocess.PIPE, env=env).decode(
+            "utf-8"
+        )
+    except subprocess.CalledProcessError as e:
+        error_output = e.stderr.decode("utf-8") if e.stderr else ""
+        output = f"SSH command failed: {e}\nStderr: {error_output}"
+        logging.error(output)
+    except subprocess.TimeoutExpired as e:
+        output = f"SSH command timed out: {e}"
+        logging.error(output)
     return output
 
 
