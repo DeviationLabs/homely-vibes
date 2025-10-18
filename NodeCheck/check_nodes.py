@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 import argparse
 import re
 import sys
@@ -7,10 +7,12 @@ import time
 import traceback
 from lib import Constants
 from lib.logger import SystemLogger
-from lib.FoscamImager import FoscamImager
 from lib import Mailer
 from lib import NetHelpers
 from lib.MyPushover import Pushover
+
+if TYPE_CHECKING:
+    pass
 
 logger = SystemLogger.get_logger(__name__)
 
@@ -33,6 +35,8 @@ def reboot_foscam(nodeName: str) -> str:
     )
     try:
         msg = str(NetHelpers.http_req(cmd))
+        # Log without exposing password
+        logger.info(f"Rebooted foscam node: {nodeName}")
     except OSError as e:
         err_msg = getattr(e, "message", repr(e))
         msg = ">> ERROR: When rebooting %s. Got %s..." % (
@@ -68,6 +72,8 @@ def print_deep_state(nodeName: str) -> str:
 
 # Note: For Foscam nodes only
 def check_if_can_image(nodeName: str, display_image: bool) -> bool:
+    from lib.FoscamImager import FoscamImager
+
     MAX_COUNT = 2
     count = 0
     while count < MAX_COUNT:
@@ -195,7 +201,10 @@ if __name__ == "__main__":
         time.sleep(60)  # generously wait for nodes to stabilize
 
     # Do a deeper check
-    log_message("Check if foscams are healthy...")
+    if args.mode == "foscam":
+        log_message("Check if foscams are healthy...")
+    else:
+        log_message("Check windows node details...")
     for nodeName, nodeIP in nodes.items():
         if state[nodeName]:
             if args.mode == "foscam":
