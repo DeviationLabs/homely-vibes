@@ -1,0 +1,57 @@
+name: Lint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run ruff format check
+        run: uv run ruff format --check .
+
+      - name: Run ruff lint
+        run: uv run ruff check .
+
+      - name: Run mypy
+        run: uv run mypy .
+
+      - name: Run vulture
+        run: uv run vulture --min-confidence 80 .
+        continue-on-error: true
+
+      - name: Run codespell
+        run: uv run codespell .
+        continue-on-error: true
+
+      - name: Run deptry
+        run: uv run deptry .
+
+      - name: Run semgrep
+        run: uv run semgrep scan --config auto --error
+        continue-on-error: true

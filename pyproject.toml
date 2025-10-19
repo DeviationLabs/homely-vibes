@@ -34,6 +34,9 @@ dependencies = [
 [project.optional-dependencies]
 iot = [
 ]
+streamlit = [
+    "streamlit>=1.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -59,7 +62,7 @@ packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August"]
 known_first_party = [
     "lib",  # Add lib as first-party module
     "Constants",
-    "Mailer", 
+    "Mailer",
     "MyPushover",
     "MyTwilio",
     "NetHelpers",
@@ -74,11 +77,14 @@ known_first_party = [
     "reporter",
     "logger",
     "PumpReport",
-    "PumpStatsWriter", 
+    "PumpStatsWriter",
     "TuyaLogParser",
     "utils",  # for Bimpop.ai/fe/utils.py
 ]
 exclude = ["tests", ".venv", "backups", "lib/TeslaPy"]
+
+[tool.deptry.package_module_name_map]
+streamlit = "streamlit"
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
@@ -113,7 +119,7 @@ DEP002 = [
     "types-paramiko", 
     "pandas-stubs",
 ]
-DEP003 = ["google", "streamlit"]
+DEP003 = ["google", "streamlit", "BimpopAI"]
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "NetworkCheck", "NodeCheck", "RachioFlume", "August"]
@@ -171,7 +177,7 @@ module = [
     "websocket.*",
     "urlparse.*",
     "PumpReport.*",
-    "PumpStatsWriter.*", 
+    "PumpStatsWriter.*",
     "TuyaLogParser.*",
     "tesla_api.*",
     "pinecone.*",
@@ -180,6 +186,7 @@ module = [
     "collector.*",
     "reporter.*",
     "utils.*",
+    "streamlit.*",
 ]
 ignore_missing_imports = true
 
