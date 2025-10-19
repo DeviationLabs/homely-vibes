@@ -67,7 +67,7 @@ def _credentials_flow_interactive(
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
         client_secrets_path, scopes=[_ASSISTANT_OAUTH_SCOPE]
     )
-    if False:  # 'DISPLAY' in os.environ: ## APB -- chromium will not load. We just want the console validation
+    if False:  # 'DISPLAY' in os.environ: ## APB -- chromium will not load. We just want the console validation  # noqa: vulture
         logging.info("UI based validation")  # pragma: no cover
         # Use chromium-browser by default. Raspbian Stretch uses Epiphany by
         # default but that seems to cause issues:

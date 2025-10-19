@@ -36,9 +36,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run ruff format check
+      - name: Run Make lint
         run: make lint
-
-      - name: Run vulture
-        run: uv run vulture --min-confidence 80 .
-        continue-on-error: true
