@@ -37,24 +37,8 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run ruff format check
-        run: uv run ruff format --check .
-
-      - name: Run ruff lint
-        run: uv run ruff check .
-
-      - name: Run mypy
-        run: uv run mypy .
+        run: make lint
 
       - name: Run vulture
         run: uv run vulture --min-confidence 80 .
-        continue-on-error: true
-
-      - name: Run codespell
-        run: uv run codespell .
-
-      - name: Run deptry
-        run: uv run deptry .
-
-      - name: Run semgrep
-        run: uv run semgrep scan --config auto --error
         continue-on-error: true
