@@ -125,6 +125,16 @@ class AugustClient:
             door_state = getattr(lock_detail, "door_state", LockDoorStatus.UNKNOWN)
             lock_status = getattr(lock_detail, "lock_status", LockStatus.UNKNOWN)
 
+            self.logger.info(
+                f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}"
+            )
+
+            if door_state == LockDoorStatus.UNKNOWN or lock_status == LockStatus.UNKNOWN:
+                self.logger.warning(
+                    f"Lock {lock_name} has UNKNOWNs in state. Please debug."
+                    f"Raw LockStatus data: {lock_detail}"
+                )
+
             lock_state = LockState(
                 lock_id=lock_id,
                 lock_name=lock_name,
@@ -132,10 +142,6 @@ class AugustClient:
                 lock_status=lock_detail.lock_status,
                 battery_level=battery_level,
                 door_state=door_state,
-            )
-
-            self.logger.info(
-                f"Lock {lock_name} ({lock_serial}) lock_status: {lock_status} door_state: {door_state} battery_level: {battery_level}"
             )
             return lock_state
 

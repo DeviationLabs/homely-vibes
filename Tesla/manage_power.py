@@ -163,7 +163,6 @@ class PowerwallManager:
         product: Any,
         data: Dict[str, Any],
         decision_point: DecisionPoint,
-        trigger_percentage: float,
     ) -> bool:
         """Apply a decision point configuration to the powerwall."""
         status_messages = []
@@ -233,7 +232,7 @@ class PowerwallManager:
                 data["battery_percent"], trigger_now, decision_point.iff_higher
             ):
                 self.logger.info(f"Matched current condition: {decision_point.reason}")
-                self.apply_decision_point(product, data, decision_point, trigger_now)
+                self.apply_decision_point(product, data, decision_point)
                 return sleep_time
 
             # Check if future condition will match (fast retry)
