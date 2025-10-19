@@ -31,7 +31,7 @@ def priors(text: str = "") -> str:
     return str(json.loads(response.content).get("message", "Something went wrong"))
 
 
-@st.cache_data
+@st.cache_data  # type: ignore[misc]
 def load_data(nrows: int) -> pd.DataFrame:
     data = pd.read_csv(DATA_URL, nrows=nrows)
 

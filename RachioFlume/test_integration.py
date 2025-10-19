@@ -76,7 +76,7 @@ class TestFlumeClient:
     @patch.object(Constants, "FLUME_USER_EMAIL", "test@example.com")
     @patch.object(Constants, "FLUME_PASSWORD", "password789")
     @patch.object(FlumeClient, "_get_access_token", return_value="token123")
-    def test_init_with_env_vars(self, mock_token: Mock) -> None:
+    def test_init_with_env_vars(self, _mock_token: Mock) -> None:
         """Test initialization with environment variables."""
         client = FlumeClient()
         assert client.client_id == "client123"

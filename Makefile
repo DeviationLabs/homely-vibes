@@ -83,7 +83,7 @@ coverage-html: coverage ## Run the tests with coverage and generate HTML report
 lint: ## Run all the linters
 	@make ruff
 	@make mypy
-#	@make vulture
+	@make vulture
 	@make semgrep
 	@make codespell
 	@make deptry
@@ -112,7 +112,7 @@ mypy: ## Run mypy on the project
 
 vulture: ## Run vulture on the project to detect dead code
 	@echo "🔎 Running vulture"
-	@uv run vulture . --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
+	@uv run vulture . --min-confidence 95 --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
 	@echo "${GREEN}vulture completed successfully.${RESET}"
 
 semgrep: ## Run semgrep security analysis
