@@ -7,11 +7,11 @@ from unittest.mock import Mock, patch
 import os
 
 from lib import Constants
-from .rachio_client import RachioClient, Zone, WateringEvent
-from .flume_client import FlumeClient, WaterReading
-from .data_storage import WaterTrackingDB
-from .collector import WaterTrackingCollector
-from .reporter import WeeklyReporter
+from RachioFlume.rachio_client import RachioClient, Zone, WateringEvent
+from RachioFlume.flume_client import FlumeClient, WaterReading
+from RachioFlume.data_storage import WaterTrackingDB
+from RachioFlume.collector import WaterTrackingCollector
+from RachioFlume.reporter import WeeklyReporter
 
 
 class TestRachioClient:

@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Generator
 from contextlib import contextmanager
 
-from .rachio_client import WateringEvent, Zone
-from .flume_client import WaterReading
+from RachioFlume.rachio_client import WateringEvent, Zone
+from RachioFlume.flume_client import WaterReading
 from lib.logger import get_logger
 
 
