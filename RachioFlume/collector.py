@@ -4,9 +4,9 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
-from .rachio_client import RachioClient
-from .flume_client import FlumeClient
-from .data_storage import WaterTrackingDB
+from RachioFlume.rachio_client import RachioClient
+from RachioFlume.flume_client import FlumeClient
+from RachioFlume.data_storage import WaterTrackingDB
 from lib.logger import get_logger
 
 

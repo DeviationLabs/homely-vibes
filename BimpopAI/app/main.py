@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from . import indexer
-from . import queries
+from BimpopAI.app import indexer
+from BimpopAI.app import queries
 import logging
 
 app = FastAPI()

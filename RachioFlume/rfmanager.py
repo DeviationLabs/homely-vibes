@@ -5,9 +5,9 @@ import asyncio
 import argparse
 import sys
 from time import sleep
-from .collector import WaterTrackingCollector
+from RachioFlume.collector import WaterTrackingCollector
 from lib.MyPushover import Pushover
-from .reporter import WeeklyReporter
+from RachioFlume.reporter import WeeklyReporter
 from lib.logger import get_logger
 from lib import Constants
 from datetime import datetime, timedelta
