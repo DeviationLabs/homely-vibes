@@ -17,7 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
+
+      - name: Checkout submodules
+        run: |
+          git submodule update --init --recursive || true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -47,7 +51,6 @@ jobs:
 
       - name: Run codespell
         run: uv run codespell .
-        continue-on-error: true
 
       - name: Run deptry
         run: uv run deptry .
