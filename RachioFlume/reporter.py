@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from pathlib import Path
 
-from .data_storage import WaterTrackingDB
+from RachioFlume.data_storage import WaterTrackingDB
 from lib.logger import get_logger
 from lib import Mailer
 

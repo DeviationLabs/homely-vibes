@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
-from . import utils
+from BimpopAI.app import utils
 
 
 router = APIRouter(dependencies=[Depends(utils.auth_user)])
