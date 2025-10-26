@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from typing import Dict, TYPE_CHECKING
+from abc import ABC, abstractmethod
+from typing import List, TYPE_CHECKING
 import argparse
 import re
 import sys
@@ -16,110 +17,218 @@ if TYPE_CHECKING:
 
 logger = SystemLogger.get_logger(__name__)
 
-# Initialize Pushover client for NodeCheck notifications
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
 
-system_healthy = True
-state: Dict[str, bool] = dict()
-message = ""
+class Node(ABC):
+    def __init__(self, name: str, ip: str, pushover: Pushover):
+        self.name = name
+        self.ip = ip
+        self.pushover = pushover
+        self.is_online = False
 
-#### Helper Functions ####
-
-
-def reboot_foscam(nodeName: str) -> str:
-    node = Constants.FOSCAM_NODES[nodeName]
-    cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" % (
-        node,
-        Constants.FOSCAM_USERNAME,
-        Constants.FOSCAM_PASSWORD,
-    )
-    try:
-        msg = str(NetHelpers.http_req(cmd))
-        # Log without exposing password
-        logger.info(f"Rebooted foscam node: {nodeName}")
-    except OSError as e:
-        err_msg = getattr(e, "message", repr(e))
-        msg = ">> ERROR: When rebooting %s. Got %s..." % (
-            nodeName,
-            err_msg[:100],
-        )
-        log_message(msg)
-    return msg
-
-
-def reboot_windows(node: str) -> str:
-    # Ping to keep child proc alive for long enough
-    # Windows commands need to be wrapped in cmd /c and use & instead of ;
-    winCmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
-    return str(
-        NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
-    )
-
-
-# Note: For windows nodes only
-def print_deep_state(nodeName: str) -> str:
-    node = Constants.WINDOWS_NODES[nodeName]
-    winCmd = "net statistics workstation"
-    output = str(
-        NetHelpers.ssh_cmd(node, Constants.WINDOWS_USERNAME, Constants.WINDOWS_PASSWORD, winCmd)
-    )
-    if "successful" in output:
-        match = re.search("Statistics since (.*)", output)
-        if match:
-            foundStr = match.group(1)
-            output = "%s is up since %s" % (nodeName, foundStr)
-    return output
-
-
-# Note: For Foscam nodes only
-def check_if_can_image(nodeName: str, display_image: bool) -> bool:
-    from lib.FoscamImager import FoscamImager
-
-    MAX_COUNT = 2
-    count = 0
-    while count < MAX_COUNT:
-        count += 1
-        try:
-            myCam = FoscamImager(Constants.FOSCAM_NODES[nodeName], display_image)
-            if myCam.getImage() is not None:
-                log_message("   Got image from node: %s" % nodeName)
-                if display_image:
-                    print("Displaying %s ..." % nodeName)
-                    time.sleep(5)
+    def check_state(self, desired_up: bool = True, attempts: int = 5) -> bool:
+        """Check if node is in desired state (up/down) - used for reboot verification"""
+        for attempt in range(attempts):
+            current_state = NetHelpers.ping_output(node=self.ip, desired_up=desired_up)
+            logger.debug(
+                f"{attempt=} for {self.name}, {desired_up=} In desired state: {current_state}"
+            )
+            if current_state == desired_up:
+                self.is_online = current_state if desired_up else not current_state
                 return True
-        except Exception:
-            temp = "\n%s" % traceback.format_exc()
-            logger.error(temp)
-            time.sleep(30)
-    log_message(">> ERROR: Got image, but failed to preview from: %s" % nodeName)
-    return False
+            time.sleep(1)
+        self.is_online = False if desired_up else True
+        return False
+
+    def heartbeat(self) -> bool:
+        """Base health check - ping test. Subclasses should call super() then add specific checks"""
+        self.is_online = NetHelpers.ping_output(node=self.ip, desired_up=True)
+        logger.debug(f"Ping check for {self.name}: {self.is_online}")
+        return self.is_online
+
+    @abstractmethod
+    def reboot_node(self) -> str:
+        """Reboot the node and return status message"""
+        pass
 
 
-def log_message(msg: str) -> None:
-    global message
-    logger.info(msg)
-    message += msg + "\n"
+class FoscamNode(Node):
+    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
+        super().__init__(name, config.ip, pushover)
+        self.config = config
+
+    def reboot_node(self) -> str:
+        """Reboot Foscam camera via HTTP API"""
+        cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" % (
+            self.ip,
+            self.config.username,
+            self.config.password,
+        )
+        try:
+            msg = str(NetHelpers.http_req(cmd))
+            logger.info(f"Rebooted foscam node: {self.name}")
+            return msg
+        except OSError as e:
+            err_msg = getattr(e, "message", repr(e))
+            msg = f">> ERROR: When rebooting {self.name}. Got {err_msg[:100]}..."
+            logger.error(msg)
+            return msg
+
+    def heartbeat(self) -> bool:
+        """Check Foscam health: ping + image capture"""
+        # First do base ping check
+        if not super().heartbeat():
+            return False
+
+        # Then do Foscam-specific image capture test
+        from lib.FoscamImager import FoscamImager
+
+        MAX_COUNT = 2
+        for _ in range(MAX_COUNT):
+            try:
+                myCam = FoscamImager(self.ip, False)
+                if myCam.getImage() is not None:
+                    logger.info(f"Got image from node: {self.name}")
+                    return True
+            except Exception:
+                temp = "\n%s" % traceback.format_exc()
+                logger.error(temp)
+                time.sleep(30)
+
+        logger.error(f"Got image, but failed to preview from: {self.name}")
+        self.pushover.send_message(
+            f"Foscam node {self.name} cannot capture image",
+            title="Foscam Health Check Failed",
+        )
+        return False
 
 
-def check_state(desired_up: bool, attempts: int) -> None:
-    global state
-    global system_healthy  # We do something strange here with global state. Do not touch
-    for nodeName, nodeIP in nodes.items():
-        state[nodeName] = False
-    for attempt in range(attempts):
-        logger.debug(f"{state.values()=}")
-        if all(state.values()):
-            return
-        time.sleep(1)
-        for nodeName, nodeIP in nodes.items():
-            # if state is false, then ping again to check if state is now true
-            if not state[nodeName]:
-                state[nodeName] = NetHelpers.ping_output(node=nodeIP, desired_up=desired_up)
-                logger.debug(
-                    f"{attempt=} for {nodeName}, {desired_up=} In desired state: {state[nodeName]}"
+class WindowsNode(Node):
+    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
+        super().__init__(name, config.ip, pushover)
+        self.config = config
+
+    def reboot_node(self) -> str:
+        """Reboot Windows machine via SSH"""
+        winCmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
+        return str(NetHelpers.ssh_cmd(self.ip, self.config.username, self.config.password, winCmd))
+
+    def heartbeat(self) -> bool:
+        """Check Windows health: ping + uptime statistics"""
+        # First do base ping check
+        if not super().heartbeat():
+            return False
+
+        # Then do Windows-specific uptime check
+        winCmd = "net statistics workstation"
+        output = str(
+            NetHelpers.ssh_cmd(self.ip, self.config.username, self.config.password, winCmd)
+        )
+        if "successful" in output:
+            match = re.search("Statistics since (.*)", output)
+            if match:
+                foundStr = match.group(1)
+                logger.info(f"{self.name} is up since {foundStr}")
+                return True
+        return False
+
+
+class NodeChecker:
+    def __init__(self, mode: str):
+        self.mode = mode
+        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
+        self.nodes: List[Node] = []
+        self.messages: List[str] = []
+
+        # Create nodes based on mode
+        for name, config in Constants.NODE_CONFIGS.items():
+            if mode == "foscam" and config.node_type == "foscam":
+                self.nodes.append(FoscamNode(name, config, self.pushover))
+            elif mode == "windows" and config.node_type == "windows":
+                self.nodes.append(WindowsNode(name, config, self.pushover))
+
+    def log_message(self, msg: str) -> None:
+        """Log message and add to report"""
+        logger.info(msg)
+        self.messages.append(msg)
+
+    def check_connectivity(self) -> bool:
+        """Check connectivity of all nodes"""
+        self.log_message("Checking connectivity...")
+        all_healthy = True
+
+        for node in self.nodes:
+            if node.heartbeat():
+                self.log_message(f"   {self.mode}: {node.name} online.")
+            else:
+                self.log_message(f">> ERROR {self.mode}: {node.name} offline.")
+                self.pushover.send_message(
+                    f"{self.mode.title()} node {node.name} is offline",
+                    title="Node Check Failed",
                 )
-    else:
-        system_healthy = False
+                all_healthy = False
+
+        return all_healthy
+
+    def reboot_nodes(self) -> bool:
+        """Reboot all nodes and verify they come back online"""
+        self.log_message("Rebooting now...")
+
+        # Reboot all nodes
+        for node in self.nodes:
+            if isinstance(node, WindowsNode):
+                # Do deep check before rebooting Windows nodes
+                node.heartbeat()
+            result = node.reboot_node()
+            logger.debug(result)
+
+        # Wait for nodes to go down
+        self.log_message("Waiting for nodes to go down...")
+        for node in self.nodes:
+            if node.check_state(desired_up=False, attempts=180):
+                self.log_message(f"   Confirmed node is down: {node.name}")
+            else:
+                self.log_message(f">> ERROR: Oops! Node did not reboot: {node.name}")
+                self.pushover.send_message(
+                    f"{self.mode.title()} node {node.name} failed to reboot",
+                    title="Node Reboot Failed",
+                )
+
+        # Wait for nodes to come back up
+        self.log_message("Sleep until nodes restart...")
+        all_recovered = True
+        for node in self.nodes:
+            if node.check_state(desired_up=True, attempts=180):
+                self.log_message(f"   {self.mode}: {node.name} back online.")
+            else:
+                self.log_message(f">> ERROR: {self.mode}: {node.name} failed online.")
+                self.pushover.send_message(
+                    f"{self.mode.title()} node {node.name} failed to come back online after reboot",
+                    title="Node Recovery Failed",
+                )
+                all_recovered = False
+
+        time.sleep(60)  # Wait for nodes to stabilize
+        return all_recovered
+
+    def generate_report(self, system_healthy: bool, always_email: bool = False) -> None:
+        """Generate and send final report"""
+        if not system_healthy:
+            self.log_message(">> ERROR: Node check failed!")
+            failed_nodes = [node.name for node in self.nodes if not node.is_online]
+            self.pushover.send_message(
+                f"{self.mode.title()} Node check failed for {', '.join(failed_nodes)}",
+                title="Node Check",
+                priority=1,
+            )
+        else:
+            self.log_message("All is well")
+
+        Mailer.sendmail(
+            topic=f"[NodeCheck-{self.mode}]",
+            alert=not system_healthy,
+            message="\n".join(self.messages),
+            always_email=always_email,
+        )
 
 
 #### Main Routine ####
@@ -155,86 +264,22 @@ if __name__ == "__main__":
     logger.info("============")
     logger.info("Invoked command: %s" % " ".join(sys.argv))
 
-    nodes = Constants.FOSCAM_NODES if args.mode == "foscam" else Constants.WINDOWS_NODES
+    # Initialize node checker
+    checker = NodeChecker(args.mode)
 
-    log_message("Checking connectivity...")
-    check_state(desired_up=True, attempts=5)  ## Seeing intermittent nwk failures. Let's mask these
-    for nodeName, nodeIP in nodes.items():
-        if state[nodeName]:
-            log_message("   %s: %s online." % (args.mode, nodeName))
-        else:
-            log_message(">> ERROR %s: %s offline." % (args.mode, nodeName))
-            pushover.send_message(
-                f"{args.mode.title()} node {nodeName} is offline",
-                title="Node Check Failed",
-            )
+    # Check initial connectivity (includes full health checks via heartbeat)
+    connectivity_ok = checker.check_connectivity()
+    system_healthy = connectivity_ok
 
+    # Reboot if requested
     if args.reboot:
-        log_message("Rebooting now...")
-        for nodeName, nodeIP in nodes.items():
-            if args.mode == "foscam":
-                logger.debug(reboot_foscam(nodeName))
-            else:
-                # If windows and alive, do a deep check before rebooting.
-                log_message(print_deep_state(nodeName))
-                logger.debug(reboot_windows(nodeIP))
-        check_state(desired_up=False, attempts=180)
-        for nodeName, nodeIP in nodes.items():
-            if state[nodeName]:
-                log_message("   Confirmed node is down: %s" % nodeName)
-            else:
-                log_message(">> ERROR: Oops! Node did not reboot: %s" % nodeName)
-                pushover.send_message(
-                    f"{args.mode.title()} node {nodeName} failed to reboot",
-                    title="Node Reboot Failed",
-                )
-        log_message("Sleep until nodes restart...")
-        check_state(desired_up=True, attempts=180)
-        for nodeName, nodeIP in nodes.items():
-            if state[nodeName]:
-                log_message("   %s: %s back online." % (args.mode, nodeName))
-            else:
-                log_message(">> ERROR: %s: %s failed online." % (args.mode, nodeName))
-                pushover.send_message(
-                    f"{args.mode.title()} node {nodeName} failed to come back online after reboot",
-                    title="Node Recovery Failed",
-                )
-        time.sleep(60)  # generously wait for nodes to stabilize
+        reboot_ok = checker.reboot_nodes()
+        system_healthy = system_healthy and reboot_ok
 
-    # Do a deeper check
-    if args.mode == "foscam":
-        log_message("Check if foscams are healthy...")
-    else:
-        log_message("Check windows node details...")
-    for nodeName, nodeIP in nodes.items():
-        if state[nodeName]:
-            if args.mode == "foscam":
-                node_healthy = check_if_can_image(nodeName, args.display_image)
-                system_healthy = system_healthy and node_healthy
-                if not node_healthy:
-                    pushover.send_message(
-                        f"Foscam node {nodeName} cannot capture image",
-                        title="Foscam Health Check Failed",
-                    )
-            else:
-                # If windows and alive, do a deep check
-                log_message(print_deep_state(nodeName))
+        # Re-check health after reboot
+        final_health = checker.check_connectivity()
+        system_healthy = system_healthy and final_health
 
-    # Cleanup and reporting
-    if not system_healthy:
-        log_message(">> ERROR: Node check failed!")
-        failed_nodes = [nodeName for nodeName, _ in nodes.items() if not state[nodeName]]
-        pushover.send_message(
-            f"{args.mode.title()} Node check failed for {', '.join(failed_nodes)}",
-            title="Node Check",
-            priority=1,
-        )
-    else:
-        log_message("All is well")
-    Mailer.sendmail(
-        topic="[NodeCheck-%s]" % args.mode,
-        alert=not system_healthy,
-        message=message,
-        always_email=args.always_email,
-    )
+    # Generate final report
+    checker.generate_report(system_healthy, args.always_email)
     print("Done!")
