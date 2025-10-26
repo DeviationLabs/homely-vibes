@@ -59,27 +59,18 @@ ALERT_THRESH = 1.18  # ie: 18% higher than average
 PUMP_ALERT = 22  # If pump cycles off faster than this in seconds, then alert.
 PUMP_TOGGLES_COUNT = 25
 
-# Nodes
-
-FOSCAM_USERNAME = "user_from"
-FOSCAM_PASSWORD = "YYY"
-WINDOWS_USERNAME = "user_from"
-WINDOWS_PASSWORD = "YYY"
-
-
 @dataclass
 class NodeConfig:
     ip: str
     node_type: str
-    username: str
-    password: str
+    username: str | None = None
+    password: str | None = None
 
 
 NODE_CONFIGS: Dict[str, NodeConfig] = {
-    "Frontyard": NodeConfig("192.168.1.A", "foscam", FOSCAM_USERNAME, FOSCAM_PASSWORD),
-    "Garage": NodeConfig("192.168.1.B", "foscam", FOSCAM_USERNAME, FOSCAM_PASSWORD),
-    "Alpha": NodeConfig("192.168.1.C", "windows", WINDOWS_USERNAME, WINDOWS_PASSWORD),
-    "OtterBox": NodeConfig("192.168.1.D", "windows", WINDOWS_USERNAME, WINDOWS_PASSWORD),
+    "Frontyard": NodeConfig("192.168.1.A", "foscam", "user", "pass"),
+    "OtterBox": NodeConfig("192.168.1.D", "windows", "user", "pass"),
+    "some_node": NodeConfig("192.168.1.E", "generic"),
 }
 
 # Foscam file purge settings

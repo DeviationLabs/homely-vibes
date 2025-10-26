@@ -46,12 +46,7 @@ if __name__ == "__main__":
     send_email = args.always_email
     model = None
     msg = ""
-    # Use Garage Backup node for garage monitoring
-    garage_node = next(
-        (config for name, config in Constants.NODE_CONFIGS.items() if "Garage" in name), None
-    )
-    if not garage_node:
-        raise ValueError("No Garage node found in Constants.NODE_CONFIGS")
+    garage_node = Constants.NODE_CONFIGS["Garage Backup"]
     mycam = FoscamImager(garage_node.ip, args.display_image)
 
     if args.model_file and os.path.isfile(args.model_file):
