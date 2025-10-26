@@ -230,6 +230,24 @@ class NodeChecker:
             always_email=always_email,
         )
 
+    def heartbeat_check(self) -> bool:
+        """Perform heartbeat check on all nodes"""
+        self.log_message("Performing heartbeat checks...")
+        all_healthy = True
+
+        for node in self.nodes:
+            if node.heartbeat():
+                self.log_message(f"   {self.mode}: {node.name} healthy.")
+            else:
+                self.log_message(f">> ERROR {self.mode}: {node.name} unhealthy.")
+                self.pushover.send_message(
+                    f"{self.mode.title()} node {node.name} failed heartbeat check",
+                    title="Node Heartbeat Failed",
+                )
+                all_healthy = False
+
+        return all_healthy
+
 
 #### Main Routine ####
 if __name__ == "__main__":
@@ -258,6 +276,12 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--heartbeat",
+        help="Perform heartbeat check only (no reboot)",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("-d", "--debug", action="store_true", help="set logging level to debug")
     args = parser.parse_args()
 
@@ -267,18 +291,23 @@ if __name__ == "__main__":
     # Initialize node checker
     checker = NodeChecker(args.mode)
 
-    # Check initial connectivity (includes full health checks via heartbeat)
-    connectivity_ok = checker.check_connectivity()
-    system_healthy = connectivity_ok
+    # Handle different operation modes
+    if args.heartbeat:
+        # Heartbeat check only
+        system_healthy = checker.heartbeat_check()
+    else:
+        # Full connectivity check (includes heartbeat checks)
+        connectivity_ok = checker.check_connectivity()
+        system_healthy = connectivity_ok
 
-    # Reboot if requested
-    if args.reboot:
-        reboot_ok = checker.reboot_nodes()
-        system_healthy = system_healthy and reboot_ok
+        # Reboot if requested
+        if args.reboot:
+            reboot_ok = checker.reboot_nodes()
+            system_healthy = system_healthy and reboot_ok
 
-        # Re-check health after reboot
-        final_health = checker.check_connectivity()
-        system_healthy = system_healthy and final_health
+            # Re-check health after reboot
+            final_health = checker.check_connectivity()
+            system_healthy = system_healthy and final_health
 
     # Generate final report
     checker.generate_report(system_healthy, args.always_email)

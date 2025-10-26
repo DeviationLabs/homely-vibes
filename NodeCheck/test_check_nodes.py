@@ -275,6 +275,39 @@ class TestNodeChecker:
         )
         assert "All is well" in "\n".join(checker.messages)
 
+    @patch(
+        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
+    )
+    @patch("NodeCheck.check_nodes.Pushover")
+    def test_heartbeat_check_success(self, mock_pushover_class):
+        mock_pushover_class.return_value = Mock()
+        checker = NodeChecker("foscam")
+
+        with patch.object(checker.nodes[0], "heartbeat", return_value=True):
+            result = checker.heartbeat_check()
+
+            assert result is True
+            assert "TestCam healthy" in "\n".join(checker.messages)
+
+    @patch(
+        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
+    )
+    @patch("NodeCheck.check_nodes.Pushover")
+    def test_heartbeat_check_failure(self, mock_pushover_class):
+        mock_pushover = Mock()
+        mock_pushover_class.return_value = mock_pushover
+        checker = NodeChecker("foscam")
+
+        with patch.object(checker.nodes[0], "heartbeat", return_value=False):
+            result = checker.heartbeat_check()
+
+            assert result is False
+            assert "ERROR" in "\n".join(checker.messages)
+            assert "TestCam unhealthy" in "\n".join(checker.messages)
+            mock_pushover.send_message.assert_called_once()
+
 
 if __name__ == "__main__":
     pytest.main([__file__])
