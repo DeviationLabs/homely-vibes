@@ -113,7 +113,7 @@ class HeartbeatMonitor:
                     should_notify = (
                         current_down_nodes != self.last_down_nodes
                         or self.last_notification_time is None
-                        or time.time() - self.last_notification_time > cooloff_time * 60
+                        or time.time() - self.last_notification_time > cooloff_time
                     )
                     if should_notify:
                         self.send_notification(current_down_nodes)
