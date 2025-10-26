@@ -3,7 +3,8 @@ import pytest
 from unittest.mock import Mock, patch
 from lib.Constants import NodeConfig
 from lib.MyPushover import Pushover
-from NodeCheck.check_nodes import FoscamNode, WindowsNode, NodeChecker
+from NodeCheck.check_nodes import NodeChecker
+from NodeCheck.nodes import FoscamNode, WindowsNode
 
 
 class TestNodeBase:

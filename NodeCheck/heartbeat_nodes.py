@@ -6,7 +6,7 @@ from typing import List, Set
 from lib import Constants
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
-from NodeCheck.check_nodes import NodeChecker
+from NodeCheck.nodes import Node, FoscamNode, WindowsNode, GenericNode
 
 logger = SystemLogger.get_logger(__name__)
 
@@ -19,47 +19,65 @@ def cooloff_time_passed(last_notification_time: float | None) -> bool:
 
 
 class HeartbeatMonitor:
-    def __init__(self, poll_time: int, specific_nodes: List[str] | None = None):
+    def __init__(self, poll_time: int, specific_nodes: List[str] | None = None):    
         self.poll_time = poll_time
-        self.specific_nodes = specific_nodes
+        self.specific_nodes = [node.lower() for node in specific_nodes] if specific_nodes else None
         self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
         
-        # Create a single checker for all nodes (using foscam as default)
-        self.checker = NodeChecker("foscam")
+        # Create all nodes directly (no NodeChecker needed for heartbeat monitoring)
+        self.all_nodes = self._create_all_nodes()
         
         # Filter nodes if specific ones requested
-        if specific_nodes:
-            available_nodes = {node.name for node in self.checker.nodes}
-            requested_set = set(specific_nodes)
-            missing_nodes = requested_set - available_nodes
+        self._filter_nodes()
+        
+        self.last_down_nodes: Set[str] = set()
+        self.last_notification_time: float | None = None
+        
+    def _create_all_nodes(self) -> List[Node]:
+        """Create nodes for all node types"""
+        nodes = []
+        
+        for name, config in Constants.NODE_CONFIGS.items():
+            if config.node_type == "foscam":
+                nodes.append(FoscamNode(name, config, self.pushover))
+            elif config.node_type == "windows":
+                nodes.append(WindowsNode(name, config, self.pushover))
+            elif config.node_type == "generic":
+                nodes.append(GenericNode(name, config, self.pushover))
+        
+        return nodes
+
+    def _filter_nodes(self) -> None:
+        """Filter nodes based on specific_nodes parameter"""
+        if self.specific_nodes:
+            available_node_names = {node.name.lower() for node in self.all_nodes}
+            requested_set = set(self.specific_nodes)  # already lowercase
+            missing_nodes = requested_set - available_node_names
 
             if missing_nodes:
                 logger.warning(f"Requested nodes not found: {', '.join(missing_nodes)}")
 
-            # Filter to only include existing requested nodes
-            self.checker.nodes = [node for node in self.checker.nodes if node.name in requested_set]
+            # Filter to only include existing requested nodes (case-insensitive)
+            self.all_nodes = [node for node in self.all_nodes if node.name.lower() in requested_set]
 
-            if not self.checker.nodes:
+            if not self.all_nodes:
                 raise ValueError(
-                    f"No valid nodes found from requested: {', '.join(specific_nodes)}"
+                    f"No valid nodes found from requested: {', '.join(self.specific_nodes)}"
                 )
 
             logger.info(
-                f"Monitoring specific nodes: {', '.join([node.name for node in self.checker.nodes])}"
+                f"Monitoring specific nodes: {', '.join([node.name for node in self.all_nodes])}"
             )
         else:
             logger.info(
-                f"Monitoring all nodes: {', '.join([node.name for node in self.checker.nodes])}"
+                f"Monitoring all nodes: {', '.join([node.name for node in self.all_nodes])}"
             )
-            
-        self.last_down_nodes: Set[str] = set()
-        self.last_notification_time: float | None = None
 
     def check_all_nodes(self) -> Set[str]:
         """Check all monitored nodes and return set of down node names"""
         down_nodes = set()
 
-        for node in self.checker.nodes:
+        for node in self.all_nodes:
             try:
                 if not node.heartbeat():
                     down_nodes.add(node.name)

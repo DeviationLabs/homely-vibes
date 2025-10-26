@@ -1,135 +1,18 @@
 #!/usr/bin/env python3
-from abc import ABC, abstractmethod
 from typing import List, TYPE_CHECKING
 import argparse
-import re
 import sys
 import time
-import traceback
 from lib import Constants
 from lib.logger import SystemLogger
 from lib import Mailer
-from lib import NetHelpers
 from lib.MyPushover import Pushover
+from .nodes import Node, FoscamNode, WindowsNode
 
 if TYPE_CHECKING:
     pass
 
 logger = SystemLogger.get_logger(__name__)
-
-
-class Node(ABC):
-    def __init__(self, name: str, ip: str, pushover: Pushover):
-        self.name = name
-        self.ip = ip
-        self.pushover = pushover
-        self.is_online = False
-
-    def check_state(self, desired_up: bool = True, attempts: int = 5) -> bool:
-        """Check if node is in desired state (up/down) - used for reboot verification"""
-        for attempt in range(attempts):
-            current_state = NetHelpers.ping_output(node=self.ip, desired_up=desired_up)
-            logger.debug(
-                f"{attempt=} for {self.name}, {desired_up=} In desired state: {current_state}"
-            )
-            if current_state == desired_up:
-                self.is_online = current_state if desired_up else not current_state
-                return True
-            time.sleep(1)
-        self.is_online = False if desired_up else True
-        return False
-
-    def heartbeat(self) -> bool:
-        """Base health check - ping test. Subclasses should call super() then add specific checks"""
-        self.is_online = NetHelpers.ping_output(node=self.ip, desired_up=True)
-        logger.debug(f"Ping check for {self.name}: {self.is_online}")
-        return self.is_online
-
-    @abstractmethod
-    def reboot_node(self) -> str:
-        """Reboot the node and return status message"""
-        pass
-
-
-class FoscamNode(Node):
-    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
-        super().__init__(name, config.ip, pushover)
-        self.config = config
-
-    def reboot_node(self) -> str:
-        """Reboot Foscam camera via HTTP API"""
-        cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" % (
-            self.ip,
-            self.config.username,
-            self.config.password,
-        )
-        try:
-            msg = str(NetHelpers.http_req(cmd))
-            logger.info(f"Rebooted foscam node: {self.name}")
-            return msg
-        except OSError as e:
-            err_msg = getattr(e, "message", repr(e))
-            msg = f">> ERROR: When rebooting {self.name}. Got {err_msg[:100]}..."
-            logger.error(msg)
-            return msg
-
-    def heartbeat(self) -> bool:
-        """Check Foscam health: ping + image capture"""
-        # First do base ping check
-        if not super().heartbeat():
-            return False
-
-        # Then do Foscam-specific image capture test
-        from lib.FoscamImager import FoscamImager
-
-        MAX_COUNT = 2
-        for _ in range(MAX_COUNT):
-            try:
-                myCam = FoscamImager(self.ip, False)
-                if myCam.getImage() is not None:
-                    logger.info(f"Got image from node: {self.name}")
-                    return True
-            except Exception:
-                temp = "\n%s" % traceback.format_exc()
-                logger.error(temp)
-                time.sleep(30)
-
-        logger.error(f"Got image, but failed to preview from: {self.name}")
-        self.pushover.send_message(
-            f"Foscam node {self.name} cannot capture image",
-            title="Foscam Health Check Failed",
-        )
-        return False
-
-
-class WindowsNode(Node):
-    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
-        super().__init__(name, config.ip, pushover)
-        self.config = config
-
-    def reboot_node(self) -> str:
-        """Reboot Windows machine via SSH"""
-        winCmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
-        return str(NetHelpers.ssh_cmd(self.ip, self.config.username, self.config.password, winCmd))
-
-    def heartbeat(self) -> bool:
-        """Check Windows health: ping + uptime statistics"""
-        # First do base ping check
-        if not super().heartbeat():
-            return False
-
-        # Then do Windows-specific uptime check
-        winCmd = "net statistics workstation"
-        output = str(
-            NetHelpers.ssh_cmd(self.ip, self.config.username, self.config.password, winCmd)
-        )
-        if "successful" in output:
-            match = re.search("Statistics since (.*)", output)
-            if match:
-                foundStr = match.group(1)
-                logger.info(f"{self.name} is up since {foundStr}")
-                return True
-        return False
 
 
 class NodeChecker:
@@ -195,6 +78,7 @@ class NodeChecker:
 
         # Wait for nodes to come back up
         self.log_message("Sleep until nodes restart...")
+        time.sleep(60)  # Wait for nodes to stabilize
         all_recovered = True
         for node in self.nodes:
             if node.check_state(desired_up=True, attempts=180):
@@ -207,7 +91,6 @@ class NodeChecker:
                 )
                 all_recovered = False
 
-        time.sleep(60)  # Wait for nodes to stabilize
         return all_recovered
 
     def generate_report(self, system_healthy: bool, always_email: bool = False) -> None:
