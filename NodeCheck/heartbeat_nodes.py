@@ -98,7 +98,7 @@ class HeartbeatMonitor:
     def run_continuous_monitoring(self, poll_time: int, cooloff_time: int) -> None:
         """Run continuous heartbeat monitoring"""
         logger.info(
-            f"Starting continuous heartbeat monitoring (poll interval: {poll_time}s, cooloff: {cooloff_time}m)"
+            f"Starting continuous heartbeat monitoring (poll interval: {poll_time}s, cooloff: {cooloff_time}s)"
         )
 
         try:
@@ -146,7 +146,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--cooloff",
-        help="Cooloff time in minutes",
+        help="Cooloff time in seconds",
         type=int,
         default=3600,
     )
