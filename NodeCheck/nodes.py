@@ -122,14 +122,15 @@ class WindowsNode(Node):
 
 class GenericNode(Node):
     """Generic node that only does ping checks"""
+
     def __init__(self, name: str, config: Constants.NodeConfig):
         super().__init__(name, config.ip)
         self.config = config
-    
+
     def reboot_node(self) -> str:
         """Generic nodes don't support reboot"""
         return f"Reboot not supported for generic node {self.name}"
-    
+
     def heartbeat(self) -> bool:
         """Generic node health check: ping only"""
         return super().heartbeat()

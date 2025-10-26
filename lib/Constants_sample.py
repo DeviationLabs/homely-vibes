@@ -59,6 +59,7 @@ ALERT_THRESH = 1.18  # ie: 18% higher than average
 PUMP_ALERT = 22  # If pump cycles off faster than this in seconds, then alert.
 PUMP_TOGGLES_COUNT = 25
 
+
 @dataclass
 class NodeConfig:
     ip: str

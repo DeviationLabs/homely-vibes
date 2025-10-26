@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import Mock, patch
 from lib.Constants import NodeConfig
 from lib.MyPushover import Pushover
-from NodeCheck.check_nodes import NodeChecker
+from NodeCheck.manage_nodes import NodeChecker
 from NodeCheck.nodes import FoscamNode, WindowsNode
 
 
@@ -190,13 +190,13 @@ class TestWindowsNode(TestNodeBase):
 
 class TestNodeChecker:
     @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        "NodeCheck.manage_nodes.Constants.NODE_CONFIGS",
         {
             "TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass"),
             "TestWin": NodeConfig("192.168.1.100", "windows", "user", "pass"),
         },
     )
-    @patch("NodeCheck.check_nodes.Pushover")
+    @patch("NodeCheck.manage_nodes.Pushover")
     def test_init_foscam_mode(self, mock_pushover_class):
         mock_pushover_class.return_value = Mock()
         checker = NodeChecker("foscam")
@@ -207,13 +207,13 @@ class TestNodeChecker:
         assert checker.nodes[0].name == "TestCam"
 
     @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        "NodeCheck.manage_nodes.Constants.NODE_CONFIGS",
         {
             "TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass"),
             "TestWin": NodeConfig("192.168.1.100", "windows", "user", "pass"),
         },
     )
-    @patch("NodeCheck.check_nodes.Pushover")
+    @patch("NodeCheck.manage_nodes.Pushover")
     def test_init_windows_mode(self, mock_pushover_class):
         mock_pushover_class.return_value = Mock()
         checker = NodeChecker("windows")
@@ -224,10 +224,10 @@ class TestNodeChecker:
         assert checker.nodes[0].name == "TestWin"
 
     @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        "NodeCheck.manage_nodes.Constants.NODE_CONFIGS",
         {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
     )
-    @patch("NodeCheck.check_nodes.Pushover")
+    @patch("NodeCheck.manage_nodes.Pushover")
     def test_check_connectivity_success(self, mock_pushover_class):
         mock_pushover_class.return_value = Mock()
         checker = NodeChecker("foscam")
@@ -239,10 +239,10 @@ class TestNodeChecker:
             assert "TestCam online" in "\n".join(checker.messages)
 
     @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        "NodeCheck.manage_nodes.Constants.NODE_CONFIGS",
         {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
     )
-    @patch("NodeCheck.check_nodes.Pushover")
+    @patch("NodeCheck.manage_nodes.Pushover")
     def test_check_connectivity_failure(self, mock_pushover_class):
         mock_pushover = Mock()
         mock_pushover_class.return_value = mock_pushover
@@ -256,10 +256,10 @@ class TestNodeChecker:
             mock_pushover.send_message.assert_called_once()
 
     @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        "NodeCheck.manage_nodes.Constants.NODE_CONFIGS",
         {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
     )
-    @patch("NodeCheck.check_nodes.Pushover")
+    @patch("NodeCheck.manage_nodes.Pushover")
     @patch("NodeCheck.check_nodes.Mailer.sendmail")
     def test_generate_report(self, mock_sendmail, mock_pushover_class):
         mock_pushover_class.return_value = Mock()
@@ -275,74 +275,6 @@ class TestNodeChecker:
             always_email=False,
         )
         assert "All is well" in "\n".join(checker.messages)
-
-    @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
-        {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
-    )
-    @patch("NodeCheck.check_nodes.Pushover")
-    def test_heartbeat_check_success(self, mock_pushover_class):
-        mock_pushover_class.return_value = Mock()
-        checker = NodeChecker("foscam")
-
-        with patch.object(checker.nodes[0], "heartbeat", return_value=True):
-            result = checker.heartbeat_check()
-
-            assert result is True
-            assert "TestCam healthy" in "\n".join(checker.messages)
-
-    @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
-        {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
-    )
-    @patch("NodeCheck.check_nodes.Pushover")
-    def test_heartbeat_check_failure(self, mock_pushover_class):
-        mock_pushover = Mock()
-        mock_pushover_class.return_value = mock_pushover
-        checker = NodeChecker("foscam")
-
-        with patch.object(checker.nodes[0], "heartbeat", return_value=False):
-            result = checker.heartbeat_check()
-
-            assert result is False
-            assert "ERROR" in "\n".join(checker.messages)
-            assert "TestCam unhealthy" in "\n".join(checker.messages)
-            mock_pushover.send_message.assert_called_once()
-
-    @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
-        {
-            "TestCam1": NodeConfig("192.168.1.51", "foscam", "user", "pass"),
-            "TestCam2": NodeConfig("192.168.1.52", "foscam", "user", "pass"),
-        },
-    )
-    @patch("NodeCheck.check_nodes.Pushover")
-    def test_heartbeat_check_specific_nodes(self, mock_pushover_class):
-        mock_pushover_class.return_value = Mock()
-        checker = NodeChecker("foscam")
-
-        with patch.object(checker.nodes[0], "heartbeat", return_value=True):
-            result = checker.heartbeat_check(["TestCam1"])
-
-            assert result is True
-            assert "Performing heartbeat checks on: TestCam1" in "\n".join(checker.messages)
-            assert "TestCam1 healthy" in "\n".join(checker.messages)
-            # TestCam2 should not be mentioned since it wasn't checked
-            assert "TestCam2" not in "\n".join(checker.messages)
-
-    @patch(
-        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
-        {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
-    )
-    @patch("NodeCheck.check_nodes.Pushover")
-    def test_heartbeat_check_nonexistent_nodes(self, mock_pushover_class):
-        mock_pushover_class.return_value = Mock()
-        checker = NodeChecker("foscam")
-
-        result = checker.heartbeat_check(["NonExistent"])
-
-        assert result is False
-        assert "No matching nodes found for: NonExistent" in "\n".join(checker.messages)
 
 
 if __name__ == "__main__":
