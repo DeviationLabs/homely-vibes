@@ -11,15 +11,22 @@ from NodeCheck.check_nodes import NodeChecker
 logger = SystemLogger.get_logger(__name__)
 
 
+def cooloff_time_passed(last_notification_time: float | None) -> bool:
+    """Check if enough time has passed since last notification to avoid spam"""
+    if last_notification_time is None:
+        return True
+    return time.time() - last_notification_time > 300  # 5 minutes cooloff
+
+
 class HeartbeatMonitor:
-    def __init__(self, mode: str, poll_time: int, specific_nodes: List[str] | None = None):
-        self.mode = mode
+    def __init__(self, poll_time: int, specific_nodes: List[str] | None = None):
         self.poll_time = poll_time
         self.specific_nodes = specific_nodes
         self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
-        self.checker = NodeChecker(mode)
-        self.last_down_nodes: Set[str] = set()
-
+        
+        # Create a single checker for all nodes (using foscam as default)
+        self.checker = NodeChecker("foscam")
+        
         # Filter nodes if specific ones requested
         if specific_nodes:
             available_nodes = {node.name for node in self.checker.nodes}
@@ -42,8 +49,11 @@ class HeartbeatMonitor:
             )
         else:
             logger.info(
-                f"Monitoring all {mode} nodes: {', '.join([node.name for node in self.checker.nodes])}"
+                f"Monitoring all nodes: {', '.join([node.name for node in self.checker.nodes])}"
             )
+            
+        self.last_down_nodes: Set[str] = set()
+        self.last_notification_time: float | None = None
 
     def check_all_nodes(self) -> Set[str]:
         """Check all monitored nodes and return set of down node names"""
@@ -71,10 +81,10 @@ class HeartbeatMonitor:
         count = len(down_nodes)
 
         if count == 1:
-            title = f"{self.mode.title()} Node Down"
+            title = "Node Down"
             message = f"Node {node_list} is down"
         else:
-            title = f"{self.mode.title()} Nodes Down"
+            title = "Nodes Down"
             message = f"{count} nodes are down: {node_list}"
 
         self.pushover.send_message(
@@ -82,6 +92,7 @@ class HeartbeatMonitor:
             title=title,
             priority=1,  # High priority
         )
+        self.last_notification_time = time.time()
         logger.info(f"Sent notification: {message}")
 
     def run_continuous_monitoring(self) -> None:
@@ -97,7 +108,7 @@ class HeartbeatMonitor:
                 # (regardless of previous state - this ensures we get notified of ongoing issues)
                 if current_down_nodes:
                     # Send notification if we have new down nodes or if this is a new check cycle
-                    if current_down_nodes != self.last_down_nodes:
+                    if current_down_nodes != self.last_down_nodes and cooloff_time_passed(self.last_notification_time):
                         self.send_notification(current_down_nodes)
                     else:
                         logger.debug(f"Same nodes still down: {', '.join(current_down_nodes)}")
@@ -120,12 +131,6 @@ class HeartbeatMonitor:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Continuous Node Heartbeat Monitor")
-    parser.add_argument(
-        "--mode",
-        help="Node type to monitor",
-        choices=["foscam", "windows"],
-        default="foscam",
-    )
     parser.add_argument(
         "--poll",
         help="Polling interval in seconds",
@@ -155,7 +160,7 @@ def main() -> None:
 
     try:
         # Initialize monitor
-        monitor = HeartbeatMonitor(args.mode, args.poll, args.nodes)
+        monitor = HeartbeatMonitor(args.poll, args.nodes)
 
         # Start continuous monitoring
         monitor.run_continuous_monitoring()
