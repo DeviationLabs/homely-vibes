@@ -6,16 +6,14 @@ import traceback
 from lib import Constants
 from lib import NetHelpers
 from lib.logger import SystemLogger
-from lib.MyPushover import Pushover
 
 logger = SystemLogger.get_logger(__name__)
 
 
 class Node(ABC):
-    def __init__(self, name: str, ip: str, pushover: Pushover):
+    def __init__(self, name: str, ip: str):
         self.name = name
         self.ip = ip
-        self.pushover = pushover
         self.is_online = False
 
     def check_state(self, desired_up: bool = True, attempts: int = 5) -> bool:
@@ -45,8 +43,8 @@ class Node(ABC):
 
 
 class FoscamNode(Node):
-    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
-        super().__init__(name, config.ip, pushover)
+    def __init__(self, name: str, config: Constants.NodeConfig):
+        super().__init__(name, config.ip)
         self.config = config
 
     def reboot_node(self) -> str:
@@ -88,16 +86,13 @@ class FoscamNode(Node):
                 time.sleep(30)
 
         logger.error(f"Got image, but failed to preview from: {self.name}")
-        self.pushover.send_message(
-            f"Foscam node {self.name} cannot capture image",
-            title="Foscam Health Check Failed",
-        )
+        # Note: Pushover notifications should be handled by the calling code
         return False
 
 
 class WindowsNode(Node):
-    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
-        super().__init__(name, config.ip, pushover)
+    def __init__(self, name: str, config: Constants.NodeConfig):
+        super().__init__(name, config.ip)
         self.config = config
 
     def reboot_node(self) -> str:
@@ -127,8 +122,8 @@ class WindowsNode(Node):
 
 class GenericNode(Node):
     """Generic node that only does ping checks"""
-    def __init__(self, name: str, config: Constants.NodeConfig, pushover: Pushover):
-        super().__init__(name, config.ip, pushover)
+    def __init__(self, name: str, config: Constants.NodeConfig):
+        super().__init__(name, config.ip)
         self.config = config
     
     def reboot_node(self) -> str:

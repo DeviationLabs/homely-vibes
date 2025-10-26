@@ -11,73 +11,59 @@ from NodeCheck.nodes import Node, FoscamNode, WindowsNode, GenericNode
 logger = SystemLogger.get_logger(__name__)
 
 
-def cooloff_time_passed(last_notification_time: float | None) -> bool:
-    """Check if enough time has passed since last notification to avoid spam"""
-    if last_notification_time is None:
-        return True
-    return time.time() - last_notification_time > 300  # 5 minutes cooloff
-
-
 class HeartbeatMonitor:
-    def __init__(self, poll_time: int, specific_nodes: List[str] | None = None):    
-        self.poll_time = poll_time
-        self.specific_nodes = [node.lower() for node in specific_nodes] if specific_nodes else None
+    def __init__(self, specific_nodes: Set[str] | None = None) -> None:
+        self.specific_nodes = {node.lower() for node in specific_nodes} if specific_nodes else None
         self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
         
-        # Create all nodes directly (no NodeChecker needed for heartbeat monitoring)
-        self.all_nodes = self._create_all_nodes()
-        
-        # Filter nodes if specific ones requested
-        self._filter_nodes()
+        self.monitored_nodes = self._create_nodes_list()
         
         self.last_down_nodes: Set[str] = set()
         self.last_notification_time: float | None = None
         
-    def _create_all_nodes(self) -> List[Node]:
-        """Create nodes for all node types"""
+    def _create_nodes_list(self) -> List[Node]:
+        """Create nodes for all node types and filter based on specific_nodes parameter"""
         nodes = []
         
         for name, config in Constants.NODE_CONFIGS.items():
             if config.node_type == "foscam":
-                nodes.append(FoscamNode(name, config, self.pushover))
+                nodes.append(FoscamNode(name, config))
             elif config.node_type == "windows":
-                nodes.append(WindowsNode(name, config, self.pushover))
+                nodes.append(WindowsNode(name, config))
             elif config.node_type == "generic":
-                nodes.append(GenericNode(name, config, self.pushover))
+                nodes.append(GenericNode(name, config))
         
-        return nodes
-
-    def _filter_nodes(self) -> None:
-        """Filter nodes based on specific_nodes parameter"""
         if self.specific_nodes:
-            available_node_names = {node.name.lower() for node in self.all_nodes}
-            requested_set = set(self.specific_nodes)  # already lowercase
+            available_node_names = {node.name.lower() for node in nodes}
+            requested_set = self.specific_nodes
             missing_nodes = requested_set - available_node_names
 
             if missing_nodes:
-                logger.warning(f"Requested nodes not found: {', '.join(missing_nodes)}")
+                raise ValueError(f"Requested nodes not found: {', '.join(missing_nodes)}")
 
             # Filter to only include existing requested nodes (case-insensitive)
-            self.all_nodes = [node for node in self.all_nodes if node.name.lower() in requested_set]
+            nodes = [node for node in nodes if node.name.lower() in requested_set]
 
-            if not self.all_nodes:
+            if not nodes:
                 raise ValueError(
                     f"No valid nodes found from requested: {', '.join(self.specific_nodes)}"
                 )
 
             logger.info(
-                f"Monitoring specific nodes: {', '.join([node.name for node in self.all_nodes])}"
+                f"Monitoring specific nodes: {', '.join([node.name for node in nodes])}"
             )
         else:
             logger.info(
-                f"Monitoring all nodes: {', '.join([node.name for node in self.all_nodes])}"
+                f"Monitoring all nodes: {', '.join([node.name for node in nodes])}"
             )
+        
+        return nodes
 
-    def check_all_nodes(self) -> Set[str]:
+    def check_monitored_nodes(self) -> Set[str]:
         """Check all monitored nodes and return set of down node names"""
         down_nodes = set()
 
-        for node in self.all_nodes:
+        for node in self.monitored_nodes:
             try:
                 if not node.heartbeat():
                     down_nodes.add(node.name)
@@ -113,20 +99,23 @@ class HeartbeatMonitor:
         self.last_notification_time = time.time()
         logger.info(f"Sent notification: {message}")
 
-    def run_continuous_monitoring(self) -> None:
+    def run_continuous_monitoring(self, poll_time: int, cooloff_time: int) -> None:
         """Run continuous heartbeat monitoring"""
-        logger.info(f"Starting continuous heartbeat monitoring (poll interval: {self.poll_time}s)")
+        logger.info(f"Starting continuous heartbeat monitoring (poll interval: {poll_time}s)")
 
         try:
             while True:
                 logger.debug("Performing heartbeat check cycle...")
-                current_down_nodes = self.check_all_nodes()
+                current_down_nodes = self.check_monitored_nodes()
 
                 # Only send notification if nodes are currently down
                 # (regardless of previous state - this ensures we get notified of ongoing issues)
                 if current_down_nodes:
-                    # Send notification if we have new down nodes or if this is a new check cycle
-                    if current_down_nodes != self.last_down_nodes and cooloff_time_passed(self.last_notification_time):
+                    # Send notification if we have new down nodes or if enough time has passed since last notification
+                    should_notify = (current_down_nodes != self.last_down_nodes or 
+                                   self.last_notification_time is None or 
+                                   time.time() - self.last_notification_time > cooloff_time * 60)
+                    if should_notify:
                         self.send_notification(current_down_nodes)
                     else:
                         logger.debug(f"Same nodes still down: {', '.join(current_down_nodes)}")
@@ -137,8 +126,8 @@ class HeartbeatMonitor:
 
                 self.last_down_nodes = current_down_nodes
 
-                logger.debug(f"Sleeping for {self.poll_time} seconds...")
-                time.sleep(self.poll_time)
+                logger.debug(f"Sleeping for {poll_time} seconds...")
+                time.sleep(poll_time)
 
         except KeyboardInterrupt:
             logger.info("Monitoring stopped by user (Ctrl+C)")
@@ -152,6 +141,12 @@ def main() -> None:
     parser.add_argument(
         "--poll",
         help="Polling interval in seconds",
+        type=int,
+        default=3600,
+    )
+    parser.add_argument(
+        "--cooloff",
+        help="Cooloff time in minutes",
         type=int,
         default=3600,
     )
@@ -178,10 +173,10 @@ def main() -> None:
 
     try:
         # Initialize monitor
-        monitor = HeartbeatMonitor(args.poll, args.nodes)
+        monitor = HeartbeatMonitor(args.nodes)
 
         # Start continuous monitoring
-        monitor.run_continuous_monitoring()
+        monitor.run_continuous_monitoring(poll_time=args.poll, cooloff_time=args.cooloff)
 
     except ValueError as e:
         logger.error(f"Configuration error: {e}")

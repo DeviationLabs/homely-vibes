@@ -25,9 +25,9 @@ class NodeChecker:
         # Create nodes based on mode
         for name, config in Constants.NODE_CONFIGS.items():
             if mode == "foscam" and config.node_type == "foscam":
-                self.nodes.append(FoscamNode(name, config, self.pushover))
+                self.nodes.append(FoscamNode(name, config))
             elif mode == "windows" and config.node_type == "windows":
-                self.nodes.append(WindowsNode(name, config, self.pushover))
+                self.nodes.append(WindowsNode(name, config))
 
     def log_message(self, msg: str) -> None:
         """Log message and add to report"""
@@ -167,28 +167,10 @@ if __name__ == "__main__":
         default=False,
     )
     parser.add_argument(
-        "--display_image",
-        help="Display captured image",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
         "--always_email",
         help="Send email report",
         action="store_true",
         default=False,
-    )
-    parser.add_argument(
-        "--heartbeat",
-        help="Perform heartbeat check only (no reboot)",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--nodes",
-        help="Specific nodes to check (use with --heartbeat). If omitted, checks all nodes",
-        nargs="*",
-        metavar="NODE_NAME",
     )
     parser.add_argument("-d", "--debug", action="store_true", help="set logging level to debug")
     args = parser.parse_args()
