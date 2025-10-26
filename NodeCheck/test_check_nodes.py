@@ -308,6 +308,41 @@ class TestNodeChecker:
             assert "TestCam unhealthy" in "\n".join(checker.messages)
             mock_pushover.send_message.assert_called_once()
 
+    @patch(
+        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        {
+            "TestCam1": NodeConfig("192.168.1.51", "foscam", "user", "pass"),
+            "TestCam2": NodeConfig("192.168.1.52", "foscam", "user", "pass"),
+        },
+    )
+    @patch("NodeCheck.check_nodes.Pushover")
+    def test_heartbeat_check_specific_nodes(self, mock_pushover_class):
+        mock_pushover_class.return_value = Mock()
+        checker = NodeChecker("foscam")
+
+        with patch.object(checker.nodes[0], "heartbeat", return_value=True):
+            result = checker.heartbeat_check(["TestCam1"])
+
+            assert result is True
+            assert "Performing heartbeat checks on: TestCam1" in "\n".join(checker.messages)
+            assert "TestCam1 healthy" in "\n".join(checker.messages)
+            # TestCam2 should not be mentioned since it wasn't checked
+            assert "TestCam2" not in "\n".join(checker.messages)
+
+    @patch(
+        "NodeCheck.check_nodes.Constants.NODE_CONFIGS",
+        {"TestCam": NodeConfig("192.168.1.51", "foscam", "user", "pass")},
+    )
+    @patch("NodeCheck.check_nodes.Pushover")
+    def test_heartbeat_check_nonexistent_nodes(self, mock_pushover_class):
+        mock_pushover_class.return_value = Mock()
+        checker = NodeChecker("foscam")
+
+        result = checker.heartbeat_check(["NonExistent"])
+
+        assert result is False
+        assert "No matching nodes found for: NonExistent" in "\n".join(checker.messages)
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

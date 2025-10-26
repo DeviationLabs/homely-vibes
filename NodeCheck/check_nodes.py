@@ -230,12 +230,31 @@ class NodeChecker:
             always_email=always_email,
         )
 
-    def heartbeat_check(self) -> bool:
-        """Perform heartbeat check on all nodes"""
-        self.log_message("Performing heartbeat checks...")
+    def heartbeat_check(self, specific_nodes: List[str] | None = None) -> bool:
+        """Perform heartbeat check on specified nodes or all nodes"""
+        if specific_nodes:
+            # Filter nodes to only check specified ones
+            nodes_to_check = [node for node in self.nodes if node.name in specific_nodes]
+            if not nodes_to_check:
+                self.log_message(
+                    f">> ERROR: No matching nodes found for: {', '.join(specific_nodes)}"
+                )
+                return False
+
+            # Check if any specified nodes don't exist
+            found_names = {node.name for node in nodes_to_check}
+            missing_nodes = set(specific_nodes) - found_names
+            if missing_nodes:
+                self.log_message(f">> WARNING: Nodes not found: {', '.join(missing_nodes)}")
+
+            self.log_message(f"Performing heartbeat checks on: {', '.join(found_names)}...")
+        else:
+            nodes_to_check = self.nodes
+            self.log_message("Performing heartbeat checks on all nodes...")
+
         all_healthy = True
 
-        for node in self.nodes:
+        for node in nodes_to_check:
             if node.heartbeat():
                 self.log_message(f"   {self.mode}: {node.name} healthy.")
             else:
@@ -282,11 +301,22 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--nodes",
+        help="Specific nodes to check (use with --heartbeat). If omitted, checks all nodes",
+        nargs="*",
+        metavar="NODE_NAME",
+    )
     parser.add_argument("-d", "--debug", action="store_true", help="set logging level to debug")
     args = parser.parse_args()
 
     logger.info("============")
     logger.info("Invoked command: %s" % " ".join(sys.argv))
+
+    # Validate arguments
+    if args.nodes and not args.heartbeat:
+        print("Error: --nodes can only be used with --heartbeat")
+        sys.exit(1)
 
     # Initialize node checker
     checker = NodeChecker(args.mode)
@@ -294,7 +324,7 @@ if __name__ == "__main__":
     # Handle different operation modes
     if args.heartbeat:
         # Heartbeat check only
-        system_healthy = checker.heartbeat_check()
+        system_healthy = checker.heartbeat_check(args.nodes)
     else:
         # Full connectivity check (includes heartbeat checks)
         connectivity_ok = checker.check_connectivity()
