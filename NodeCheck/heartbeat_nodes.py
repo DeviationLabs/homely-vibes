@@ -6,7 +6,7 @@ from typing import List, Set
 from lib import Constants
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
-from NodeCheck.nodes import Node, FoscamNode, WindowsNode, GenericNode
+from NodeCheck.nodes import Node, GenericNode
 
 logger = SystemLogger.get_logger(__name__)
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from abc import ABC, abstractmethod
 import re
 import time
 import traceback
@@ -13,7 +12,7 @@ logger = SystemLogger.get_logger(__name__)
 class GenericNode:
     def __init__(self, name: str, config: Constants.NodeConfig):
         self.name = name
-        self.ip = config.ip
+        self.config = config
         self.is_online = False
 
     def check_state(self, desired_up: bool = True, attempts: int = 5) -> bool:
@@ -32,7 +31,7 @@ class GenericNode:
 
     def heartbeat(self) -> bool:
         """Base health check - ping test. Subclasses should call super() then add specific checks"""
-        self.is_online = NetHelpers.ping_output(node=self.ip, desired_up=True)
+        self.is_online = NetHelpers.ping_output(node=self.config.ip, desired_up=True)
         logger.debug(f"Ping check for {self.name}: {self.is_online}")
         return self.is_online
 
@@ -109,3 +108,4 @@ class WindowsNode(GenericNode):
                 logger.info(f"{self.name} is up since {foundStr}")
                 return True
         return False
+
