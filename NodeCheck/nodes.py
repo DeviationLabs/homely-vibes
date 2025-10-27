@@ -10,10 +10,10 @@ from lib.logger import SystemLogger
 logger = SystemLogger.get_logger(__name__)
 
 
-class Node(ABC):
-    def __init__(self, name: str, ip: str):
+class GenericNode:
+    def __init__(self, name: str, config: Constants.NodeConfig):
         self.name = name
-        self.ip = ip
+        self.ip = config.ip
         self.is_online = False
 
     def check_state(self, desired_up: bool = True, attempts: int = 5) -> bool:
@@ -36,17 +36,12 @@ class Node(ABC):
         logger.debug(f"Ping check for {self.name}: {self.is_online}")
         return self.is_online
 
-    @abstractmethod
-    def reboot_node(self) -> str:
+    def reboot_node(self) -> None:
         """Reboot the node and return status message"""
-        pass
+        raise NotImplementedError("Reboot not supported for generic node")
 
 
-class FoscamNode(Node):
-    def __init__(self, name: str, config: Constants.NodeConfig):
-        super().__init__(name, config.ip)
-        self.config = config
-
+class FoscamNode(GenericNode):
     def reboot_node(self) -> str:
         """Reboot Foscam camera via HTTP API"""
         cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" % (
@@ -90,11 +85,7 @@ class FoscamNode(Node):
         return False
 
 
-class WindowsNode(Node):
-    def __init__(self, name: str, config: Constants.NodeConfig):
-        super().__init__(name, config.ip)
-        self.config = config
-
+class WindowsNode(GenericNode):
     def reboot_node(self) -> str:
         """Reboot Windows machine via SSH"""
         winCmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
@@ -118,19 +109,3 @@ class WindowsNode(Node):
                 logger.info(f"{self.name} is up since {foundStr}")
                 return True
         return False
-
-
-class GenericNode(Node):
-    """Generic node that only does ping checks"""
-
-    def __init__(self, name: str, config: Constants.NodeConfig):
-        super().__init__(name, config.ip)
-        self.config = config
-
-    def reboot_node(self) -> str:
-        """Generic nodes don't support reboot"""
-        return f"Reboot not supported for generic node {self.name}"
-
-    def heartbeat(self) -> bool:
-        """Generic node health check: ping only"""
-        return super().heartbeat()

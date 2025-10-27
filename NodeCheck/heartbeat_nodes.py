@@ -26,12 +26,8 @@ class HeartbeatMonitor:
         nodes: List[Node] = []
 
         for name, config in Constants.NODE_CONFIGS.items():
-            if config.node_type == "foscam":
-                nodes.append(FoscamNode(name, config))
-            elif config.node_type == "windows":
-                nodes.append(WindowsNode(name, config))
-            elif config.node_type == "generic":
-                nodes.append(GenericNode(name, config))
+            # This is intentionally generic to run only the basic methods
+            nodes.append(GenericNode(name, config))
 
         if self.specific_nodes:
             available_node_names = {node.name.lower() for node in nodes}
