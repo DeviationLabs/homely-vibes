@@ -265,6 +265,11 @@ class AugustMonitor:
                 self.logger.info(
                     f"Lock {status.lock_name} secured after {unlock_duration / 60:.1f} minutes"
                 )
+
+                # Send simple recovery notification if we had sent an alert for this lock
+                if lock_id in self.last_unlock_alerts:
+                    await self._send_all_healthy_notification()
+
                 del self.unlock_start_times[lock_id]
         else:
             if lock_id not in self.unlock_start_times:
@@ -284,6 +289,11 @@ class AugustMonitor:
                 self.logger.info(
                     f"Door {status.lock_name} closed after {ajar_duration / 60:.1f} minutes"
                 )
+
+                # Send simple recovery notification if we had sent an alert for this door
+                if lock_id in self.last_ajar_alerts:
+                    await self._send_all_healthy_notification()
+
                 del self.ajar_start_times[lock_id]
         else:
             if lock_id not in self.ajar_start_times:
@@ -324,6 +334,16 @@ class AugustMonitor:
             self.logger.warning(f"Sent door ajar alert: {message}")
         except Exception as e:
             self.logger.error(f"Failed to send door ajar alert: {e}")
+
+    async def _send_all_healthy_notification(self) -> None:
+        title = "✅ August All Healthy"
+        message = "All locks and doors are now secure"
+
+        try:
+            self.pushover.send_message(message, title=title, priority=0)
+            self.logger.info(f"Sent all healthy notification: {message}")
+        except Exception as e:
+            self.logger.error(f"Failed to send all healthy notification: {e}")
 
     async def _check_battery_level(
         self, lock_id: str, status: LockState, current_time: float
