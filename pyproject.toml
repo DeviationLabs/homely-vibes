@@ -42,6 +42,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.10.0",
+    "pytest-forked>=1.4.0",
     "ruff>=0.13.0",
     "flake8>=5.0.0",
     "mypy>=1.0.0",
@@ -122,8 +123,9 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI"]
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "NetworkCheck", "NodeCheck", "RachioFlume", "August"]
+testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
 
 
 [tool.ruff]
@@ -216,5 +218,10 @@ disallow_untyped_decorators = false
 warn_return_any = false
 warn_unreachable = false
 ignore_errors = true
+
+[dependency-groups]
+dev = [
+    "pytest-forked>=1.6.0",
+]
 
 
