@@ -25,6 +25,9 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
         
+      - name: Install markdown dependency
+        run: pip install markdown
+        
       - name: Create simple HTML from README
         run: |
           mkdir -p _site
