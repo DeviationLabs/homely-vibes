@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-import http.client
-import urllib.parse
 import logging
+import requests
 from lib import Constants
 
 
@@ -29,7 +28,6 @@ class Pushover:
         Returns:
             True if message sent successfully, False otherwise
         """
-        conn = http.client.HTTPSConnection("api.pushover.net:443")
         try:
             payload = {
                 "token": self.token,
@@ -43,27 +41,23 @@ class Pushover:
             if priority != 0:
                 payload["priority"] = str(priority)
 
-            conn.request(
-                "POST",
-                "/1/messages.json",
-                urllib.parse.urlencode(payload),
-                {"Content-type": "application/x-www-form-urlencoded"},
+            resp = requests.post(
+                "https://api.pushover.net/1/messages.json",
+                data=payload,
+                timeout=10,
             )
-            resp = conn.getresponse()
-            success = resp.status == 200
+            success = resp.status_code == 200
 
             if success:
-                logging.debug(f"Pushover message sent successfully: {resp.status}")
+                logging.debug(f"Pushover message sent successfully: {resp.status_code}")
             else:
-                logging.warning(f"Pushover message failed: {resp.status} {resp.reason}")
+                logging.warning(f"Pushover message failed: {resp.status_code} {resp.reason}")
 
             return success
 
         except Exception as e:
             logging.error(f"Error sending Pushover message: {e}")
             return False
-        finally:
-            conn.close()
 
 
 if __name__ == "__main__":

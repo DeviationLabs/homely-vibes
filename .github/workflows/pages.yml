@@ -1,9 +1,7 @@
-name: Deploy to GitHub Pages
+name: Deploy README to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
@@ -23,21 +21,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.1'
-          bundler-cache: true
-          
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
         
-      - name: Build with Jekyll
+      - name: Create simple HTML from README
         run: |
-          bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
-        env:
-          JEKYLL_ENV: production
+          mkdir -p _site
+          echo '<!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Homely Vibes - IoT Home Automation</title>
+              <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css">
+              <style>
+                  .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 45px; }
+                  .btn-group { margin: 20px 0; }
+                  .btn-custom { 
+                      display: inline-block; 
+                      padding: 10px 20px; 
+                      background-color: #0366d6; 
+                      color: white; 
+                      text-decoration: none; 
+                      border-radius: 6px; 
+                      font-weight: 600;
+                  }
+                  .btn-custom:hover { background-color: #0256cc; color: white; text-decoration: none; }
+              </style>
+          </head>
+          <body class="markdown-body">
+          ' > _site/index.html
+          
+          # Convert README.md to HTML and append
+          python3 -c "
+          import markdown
+          with open('README.md', 'r') as f:
+              content = f.read()
+          html = markdown.markdown(content, extensions=['tables', 'fenced_code'])
+          print(html)
+          " >> _site/index.html
+          
+          echo '</body></html>' >> _site/index.html
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -59,8 +59,11 @@ colima: ## Start colima if not already running
 
 test: ## Run the tests
 	@echo "🧪 Running the tests"
-	@uv run pytest
-	@echo "${GREEN}Tests completed successfully.${RESET}"
+	@echo "📦 Running main test suite..."
+	@uv run pytest Tesla RachioFlume August
+	@echo "🔧 Running NodeCheck tests in isolation..."
+	@uv run pytest NodeCheck
+	@echo "${GREEN}All tests completed successfully.${RESET}"
 
 coverage: ## Run the tests with coverage
 	@echo "🧪 Running the tests with coverage"

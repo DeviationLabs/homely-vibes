@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 import re
 import time
 import traceback
-from lib import Constants
 from lib import NetHelpers
+import lib.Constants as Constants
 from lib.logger import SystemLogger
 
 logger = SystemLogger.get_logger(__name__)

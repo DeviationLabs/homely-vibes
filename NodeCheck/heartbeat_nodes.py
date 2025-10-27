@@ -23,7 +23,7 @@ class HeartbeatMonitor:
 
     def _create_nodes_list(self) -> List[Node]:
         """Create nodes for all node types and filter based on specific_nodes parameter"""
-        nodes = []
+        nodes: List[Node] = []
 
         for name, config in Constants.NODE_CONFIGS.items():
             if config.node_type == "foscam":

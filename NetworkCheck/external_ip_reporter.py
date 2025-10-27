@@ -7,8 +7,7 @@ Useful for monitoring IP changes when using dynamic IP addresses.
 """
 
 import sys
-import urllib.request
-import urllib.error
+import requests
 from typing import Tuple
 from lib.MyPushover import Pushover
 from lib import Mailer
@@ -27,23 +26,20 @@ def get_external_ip() -> Tuple[str, bool]:
         Tuple of (ip_address, is_error)
     """
     IP_SERVICES = [
-        "http://myip.dnsomatic.com/",
-        "http://ipv4.icanhazip.com/",
         "https://api.ipify.org/",
+        "https://ipv4.icanhazip.com/",
+        "https://checkip.amazonaws.com/",
     ]
 
     for service in IP_SERVICES:
         try:
             logger.debug(f"Trying IP service: {service}")
-            with urllib.request.urlopen(service, timeout=10) as response:
-                ip_address = response.read().decode("utf-8").strip()
-                logger.debug(f"Got IP: {ip_address}")
-                return ip_address, False
-        except (
-            urllib.error.URLError,
-            urllib.error.HTTPError,
-            TimeoutError,
-        ) as e:
+            response = requests.get(service, timeout=10)
+            response.raise_for_status()
+            ip_address = response.text.strip()
+            logger.debug(f"Got IP: {ip_address}")
+            return ip_address, False
+        except (requests.RequestException, TimeoutError) as e:
             logger.warning(f"Failed to get IP from {service}: {e}")
             continue
 
