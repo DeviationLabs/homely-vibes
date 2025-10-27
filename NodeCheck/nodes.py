@@ -18,7 +18,7 @@ class GenericNode:
     def check_state(self, desired_up: bool = True, attempts: int = 5) -> bool:
         """Check if node is in desired state (up/down) - used for reboot verification"""
         for attempt in range(attempts):
-            current_state = NetHelpers.ping_output(node=self.ip, desired_up=desired_up)
+            current_state = NetHelpers.ping_output(node=self.config.ip, desired_up=desired_up)
             logger.debug(
                 f"{attempt=} for {self.name}, {desired_up=} In desired state: {current_state}"
             )
@@ -35,16 +35,16 @@ class GenericNode:
         logger.debug(f"Ping check for {self.name}: {self.is_online}")
         return self.is_online
 
-    def reboot_node(self) -> None:
+    def reboot_node(self) -> str:
         """Reboot the node and return status message"""
-        raise NotImplementedError("Reboot not supported for generic node")
+        return "Reboot not supported for generic node"
 
 
 class FoscamNode(GenericNode):
     def reboot_node(self) -> str:
         """Reboot Foscam camera via HTTP API"""
         cmd = "http://%s:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=%s&pwd=%s" % (
-            self.ip,
+            self.config.ip,
             self.config.username,
             self.config.password,
         )
@@ -70,7 +70,7 @@ class FoscamNode(GenericNode):
         MAX_COUNT = 2
         for _ in range(MAX_COUNT):
             try:
-                myCam = FoscamImager(self.ip, False)
+                myCam = FoscamImager(self.config.ip, False)
                 if myCam.getImage() is not None:
                     logger.info(f"Got image from node: {self.name}")
                     return True
@@ -88,7 +88,9 @@ class WindowsNode(GenericNode):
     def reboot_node(self) -> str:
         """Reboot Windows machine via SSH"""
         winCmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
-        return str(NetHelpers.ssh_cmd(self.ip, self.config.username, self.config.password, winCmd))
+        return str(
+            NetHelpers.ssh_cmd(self.config.ip, self.config.username, self.config.password, winCmd)
+        )
 
     def heartbeat(self) -> bool:
         """Check Windows health: ping + uptime statistics"""
@@ -99,7 +101,7 @@ class WindowsNode(GenericNode):
         # Then do Windows-specific uptime check
         winCmd = "net statistics workstation"
         output = str(
-            NetHelpers.ssh_cmd(self.ip, self.config.username, self.config.password, winCmd)
+            NetHelpers.ssh_cmd(self.config.ip, self.config.username, self.config.password, winCmd)
         )
         if "successful" in output:
             match = re.search("Statistics since (.*)", output)
@@ -108,4 +110,3 @@ class WindowsNode(GenericNode):
                 logger.info(f"{self.name} is up since {foundStr}")
                 return True
         return False
-
