@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 from dataclasses import dataclass
+from typing import Dict
 
 MY_EXTERNAL_IP = "1234"
 SECONDS_IN_DAY = 86400
@@ -58,14 +59,20 @@ ALERT_THRESH = 1.18  # ie: 18% higher than average
 PUMP_ALERT = 22  # If pump cycles off faster than this in seconds, then alert.
 PUMP_TOGGLES_COUNT = 25
 
-# Nodes
-FOSCAM_NODES = {"Frontyard": "192.168.1.A", "Garage": "192.168.1.B"}
-FOSCAM_USERNAME = "user_from"
-FOSCAM_PASSWORD = "YYY"
 
-WINDOWS_NODES = {"Alpha": "192.168.1.C", "OtterBox": "192.168.1.D"}
-WINDOWS_USERNAME = "user_from"
-WINDOWS_PASSWORD = "YYY"
+@dataclass
+class NodeConfig:
+    ip: str
+    node_type: str
+    username: str | None = None
+    password: str | None = None
+
+
+NODE_CONFIGS: Dict[str, NodeConfig] = {
+    "Frontyard": NodeConfig("192.168.1.A", "foscam", "user", "pass"),
+    "OtterBox": NodeConfig("192.168.1.D", "windows", "user", "pass"),
+    "some_node": NodeConfig("192.168.1.E", "generic"),
+}
 
 # Foscam file purge settings
 FOSCAM_DIR = "/path/to/foscam"  # Update this to actual foscam directory path

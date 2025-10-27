@@ -46,7 +46,8 @@ if __name__ == "__main__":
     send_email = args.always_email
     model = None
     msg = ""
-    mycam = FoscamImager(Constants.FOSCAM_NODES["Garage"], args.display_image)
+    garage_node = Constants.NODE_CONFIGS["Garage Backup"]
+    mycam = FoscamImager(garage_node.ip, args.display_image)
 
     if args.model_file and os.path.isfile(args.model_file):
         from . import TFOneShot
