@@ -262,13 +262,16 @@ class AugustMonitor:
         if status.lock_status == LockStatus.LOCKED:
             if lock_id in self.unlock_start_times:
                 unlock_duration = current_time - self.unlock_start_times[lock_id]
-                self.logger.info(
+                message = (
                     f"Lock {status.lock_name} secured after {unlock_duration / 60:.1f} minutes"
                 )
+                self.logger.info(message)
 
-                # Send simple recovery notification if we had sent an alert for this lock
-                if lock_id in self.last_unlock_alerts:
-                    await self._send_all_healthy_notification()
+                self.pushover.send_message(
+                    message,
+                    title="August Lock Secured",
+                    priority=0,
+                )
 
                 del self.unlock_start_times[lock_id]
         else:
@@ -286,13 +289,9 @@ class AugustMonitor:
         if status.door_state == LockDoorStatus.CLOSED:
             if lock_id in self.ajar_start_times:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
-                self.logger.info(
-                    f"Door {status.lock_name} closed after {ajar_duration / 60:.1f} minutes"
-                )
-
-                # Send simple recovery notification if we had sent an alert for this door
-                if lock_id in self.last_ajar_alerts:
-                    await self._send_all_healthy_notification()
+                message = f"Door {status.lock_name} closed after {ajar_duration / 60:.1f} minutes"
+                self.logger.info(message)
+                self.pushover.send_message(message, title="August Door Closed", priority=0)
 
                 del self.ajar_start_times[lock_id]
         else:
@@ -334,16 +333,6 @@ class AugustMonitor:
             self.logger.warning(f"Sent door ajar alert: {message}")
         except Exception as e:
             self.logger.error(f"Failed to send door ajar alert: {e}")
-
-    async def _send_all_healthy_notification(self) -> None:
-        title = "✅ August All Healthy"
-        message = "All locks and doors are now secure"
-
-        try:
-            self.pushover.send_message(message, title=title, priority=0)
-            self.logger.info(f"Sent all healthy notification: {message}")
-        except Exception as e:
-            self.logger.error(f"Failed to send all healthy notification: {e}")
 
     async def _check_battery_level(
         self, lock_id: str, status: LockState, current_time: float
