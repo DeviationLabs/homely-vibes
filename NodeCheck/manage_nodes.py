@@ -7,7 +7,7 @@ from lib import Constants
 from lib.logger import SystemLogger
 from lib import Mailer
 from lib.MyPushover import Pushover
-from .nodes import Node, FoscamNode, WindowsNode
+from .nodes import GenericNode, FoscamNode, WindowsNode
 
 if TYPE_CHECKING:
     pass
@@ -19,7 +19,7 @@ pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeChec
 class NodeChecker:
     def __init__(self, mode: str):
         self.mode = mode
-        self.nodes: List[Node] = []
+        self.nodes: List[GenericNode] = []
         self.messages: List[str] = []
 
         # Create nodes based on mode

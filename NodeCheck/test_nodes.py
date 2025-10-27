@@ -4,17 +4,18 @@
 import pytest
 from unittest.mock import patch
 from typing import Any
-from NodeCheck.nodes import Node, FoscamNode, WindowsNode, GenericNode
+from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
 from lib.Constants import NodeConfig
 
 
 class TestNode:
     """Test the abstract Node base class"""
 
-    def test_node_cannot_be_instantiated(self) -> None:
-        """Test that Node abstract class cannot be instantiated directly"""
-        with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            Node("test", "192.168.1.1")  # type: ignore
+    def test_node_can_be_instantiated(self) -> None:
+        """Test that GenericNode can be instantiated directly"""
+        node = GenericNode("test", NodeConfig("192.168.1.1", "generic"))
+        assert node.name == "test"
+        assert node.config.ip == "192.168.1.1"
 
 
 class TestFoscamNode:
@@ -31,7 +32,7 @@ class TestFoscamNode:
     def test_init(self, foscam_node: FoscamNode, foscam_config: NodeConfig) -> None:
         """Test FoscamNode initialization"""
         assert foscam_node.name == "TestCam"
-        assert foscam_node.ip == "192.168.1.51"
+        assert foscam_node.config.ip == "192.168.1.51"
         assert foscam_node.config == foscam_config
         assert foscam_node.is_online is False
 
@@ -118,7 +119,7 @@ class TestWindowsNode:
     def test_init(self, windows_node: WindowsNode, windows_config: NodeConfig) -> None:
         """Test WindowsNode initialization"""
         assert windows_node.name == "TestPC"
-        assert windows_node.ip == "192.168.1.100"
+        assert windows_node.config.ip == "192.168.1.100"
         assert windows_node.config == windows_config
         assert windows_node.is_online is False
 
@@ -187,7 +188,7 @@ class TestGenericNode:
     def test_init(self, generic_node: GenericNode, generic_config: NodeConfig) -> None:
         """Test GenericNode initialization"""
         assert generic_node.name == "TestDevice"
-        assert generic_node.ip == "192.168.1.200"
+        assert generic_node.config.ip == "192.168.1.200"
         assert generic_node.config == generic_config
         assert generic_node.is_online is False
 
@@ -195,8 +196,7 @@ class TestGenericNode:
         """Test that generic nodes don't support reboot"""
         result = generic_node.reboot_node()
 
-        assert "Reboot not supported" in result
-        assert "TestDevice" in result
+        assert "Reboot not supported for generic node" == result
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
     def test_heartbeat_success(self, mock_ping: Any, generic_node: GenericNode) -> None:

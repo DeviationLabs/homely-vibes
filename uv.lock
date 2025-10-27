@@ -874,6 +874,7 @@ dependencies = [
     { name = "langchain" },
     { name = "langchain-openai" },
     { name = "libpyfoscam" },
+    { name = "markdown" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "openai" },
@@ -927,6 +928,7 @@ requires-dist = [
     { name = "langchain", specifier = ">=0.2.5" },
     { name = "langchain-openai", specifier = ">=0.1.0" },
     { name = "libpyfoscam", specifier = ">=1.2.2" },
+    { name = "markdown", specifier = ">=3.4.0" },
     { name = "matplotlib", specifier = ">=3.10.5" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=1.24.0" },
@@ -1267,6 +1269,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/df/d6/03ac4173fcea8cb5462277d47db6c41c72dc438336735cd16bdf39c40a35/libpyfoscam-1.2.2.tar.gz", hash = "sha256:14b3dead5cf1dbeddfe5b8a2aadd091c98c1b8c21a95406463e6c66f64a155aa", size = 20929, upload-time = "2022-10-31T19:37:43.977Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/f5/8a181cb6179c984b1ec75e5b4f5a2bc4c39e5221cb52b5c919d3efe3373a/libpyfoscam-1.2.2-py3-none-any.whl", hash = "sha256:c1a5f040c5f951bdad9275a22e8551f6f7669f6ab0641bec507ac7f5e9f04707", size = 20294, upload-time = "2022-10-31T19:37:42.032Z" },
+]
+
+[[package]]
+name = "markdown"
+version = "3.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/37/02347f6d6d8279247a5837082ebc26fc0d5aaeaf75aa013fcbb433c777ab/markdown-3.9.tar.gz", hash = "sha256:d2900fe1782bd33bdbbd56859defef70c2e78fc46668f8eb9df3128138f2cb6a", size = 364585, upload-time = "2025-09-04T20:25:22.885Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/ae/44c4a6a4cbb496d93c6257954260fe3a6e91b7bed2240e5dad2a717f5111/markdown-3.9-py3-none-any.whl", hash = "sha256:9f4d91ed810864ea88a6f32c07ba8bee1346c0cc1f6b1f9f6c822f2a9667d280", size = 107441, upload-time = "2025-09-04T20:25:21.784Z" },
 ]
 
 [[package]]
