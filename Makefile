@@ -99,7 +99,7 @@ codespell: ## Run codespell against the project and fix any errors found
 
 deptry: ## Run deptry on the project
 	@echo "🔎 Running deptry"
-	@uv run deptry . || echo "${YELLOW}⚠️  deptry found issues${RESET}"
+	@uv run deptry .
 	@echo "${GREEN}deptry completed successfully.${RESET}"
 
 ruff: ## Use ruff on the project
@@ -110,17 +110,17 @@ ruff: ## Use ruff on the project
 
 mypy: ## Run mypy on the project
 	@echo "🔎 Running mypy"
-	@uv run mypy . || echo "${YELLOW}⚠️  mypy found issues${RESET}"
+	@uv run mypy .
 	@echo "${GREEN}mypy completed successfully.${RESET}"
 
 vulture: ## Run vulture on the project to detect dead code
 	@echo "🔎 Running vulture"
-	@uv run vulture . --min-confidence 95 --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
+	@uv run vulture . --min-confidence 95 --exclude=.venv
 	@echo "${GREEN}vulture completed successfully.${RESET}"
 
 semgrep: ## Run semgrep security analysis
 	@echo "🔒 Running semgrep"
-	@uv run semgrep --config=auto . || echo "${YELLOW}⚠️  semgrep found issues${RESET}"
+	@uv run semgrep --config=auto .
 	@echo "${GREEN}semgrep completed successfully.${RESET}"
 
 ## Hooks:
