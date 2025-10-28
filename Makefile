@@ -85,11 +85,11 @@ coverage-html: coverage ## Run the tests with coverage and generate HTML report
 ## Linting:
 lint: ## Run all the linters
 	@make ruff
-	@make mypy-strict
-	@make vulture-strict
-	@make semgrep-strict
+	@make mypy
+	@make vulture
+	@make semgrep
 	@make codespell
-	@make deptry-strict
+	@make deptry
 	@echo "${GREEN}All linters completed successfully.${RESET}"
 
 codespell: ## Run codespell against the project and fix any errors found
@@ -98,11 +98,6 @@ codespell: ## Run codespell against the project and fix any errors found
 	@echo "${GREEN}Codespell completed successfully.${RESET}"
 
 deptry: ## Run deptry on the project
-	@echo "🔎 Running deptry"
-	@uv run deptry . || echo "${YELLOW}⚠️  deptry found issues${RESET}"
-	@echo "${GREEN}deptry completed successfully.${RESET}"
-
-deptry-strict: ## Run deptry on the project (strict mode - fails on issues)
 	@echo "🔎 Running deptry"
 	@uv run deptry .
 	@echo "${GREEN}deptry completed successfully.${RESET}"
@@ -115,30 +110,15 @@ ruff: ## Use ruff on the project
 
 mypy: ## Run mypy on the project
 	@echo "🔎 Running mypy"
-	@uv run mypy . || echo "${YELLOW}⚠️  mypy found issues${RESET}"
-	@echo "${GREEN}mypy completed successfully.${RESET}"
-
-mypy-strict: ## Run mypy on the project (strict mode - fails on issues)
-	@echo "🔎 Running mypy"
 	@uv run mypy .
 	@echo "${GREEN}mypy completed successfully.${RESET}"
 
 vulture: ## Run vulture on the project to detect dead code
 	@echo "🔎 Running vulture"
-	@uv run vulture . --min-confidence 95 --exclude=.venv || echo "${YELLOW}⚠️  vulture found dead code${RESET}"
-	@echo "${GREEN}vulture completed successfully.${RESET}"
-
-vulture-strict: ## Run vulture on the project to detect dead code (strict mode - fails on issues)
-	@echo "🔎 Running vulture"
 	@uv run vulture . --min-confidence 95 --exclude=.venv
 	@echo "${GREEN}vulture completed successfully.${RESET}"
 
 semgrep: ## Run semgrep security analysis
-	@echo "🔒 Running semgrep"
-	@uv run semgrep --config=auto . || echo "${YELLOW}⚠️  semgrep found issues${RESET}"
-	@echo "${GREEN}semgrep completed successfully.${RESET}"
-
-semgrep-strict: ## Run semgrep security analysis (strict mode - fails on issues)
 	@echo "🔒 Running semgrep"
 	@uv run semgrep --config=auto .
 	@echo "${GREEN}semgrep completed successfully.${RESET}"
@@ -185,8 +165,8 @@ validate-jobs-yaml:
 .PHONY: all \
 	setup \
 	test coverage coverage-lcov coverage-html \
-	lint lint-fix codespell deptry deptry-strict \
-	ruff mypy mypy-strict vulture vulture-strict semgrep semgrep-strict \
+	lint lint-fix codespell deptry \
+	ruff mypy vulture semgrep \
 	hooks clean \
 	colima \
 	yamllint validate-jobs-yaml \
