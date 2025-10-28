@@ -450,16 +450,9 @@ class AugustMonitor:
                     else:
                         self.logger.error(f"Failed to send unlock command for {status.lock_name}")
         else:
-            # Lock status is known - clear unknown tracking
-            if lock_id in self.unknown_status_start_times:
-                unknown_duration = current_time - self.unknown_status_start_times[lock_id]
-                self.logger.info(
-                    f"Lock {status.lock_name} status resolved after {unknown_duration / 60:.1f} minutes"
-                )
-                del self.unknown_status_start_times[lock_id]
-
-            if lock_id in self.unknown_recovery_attempted:
-                del self.unknown_recovery_attempted[lock_id]
+            # Clear unknown tracking
+            self.unknown_status_start_times.pop(lock_id, None)
+            self.unknown_recovery_attempted.pop(lock_id, None)
 
     async def run_continuous_monitoring(self, check_interval_seconds: int = 60) -> None:
         self.logger.info(
