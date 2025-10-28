@@ -137,7 +137,7 @@ class AugustClient:
             self.logger.error(f"Error retrieving locks: {e}")
             raise
 
-    async def get_lock_status(self, lock_id: str, retry: int = 3) -> Optional[LockState]:
+    async def get_lock_status(self, lock_id: str) -> Optional[LockState]:
         try:
             assert self.api is not None
             assert self.access_token is not None
