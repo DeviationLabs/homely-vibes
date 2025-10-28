@@ -453,25 +453,15 @@ class AugustMonitor:
             # Lock status is known - reset unknown tracking if it was previously unknown
             if lock_id in self.unknown_status_start_times:
                 unknown_duration = current_time - self.unknown_status_start_times[lock_id]
-                recovery_was_attempted = self.unknown_recovery_attempted.get(lock_id, False)
-
                 self.logger.info(
-                    f"Lock {status.lock_name} status resolved after {unknown_duration / 60:.1f} minutes "
-                    f"(recovery attempted: {recovery_was_attempted}). Current status: {status.lock_status}"
+                    f"Lock {status.lock_name} status resolved after {unknown_duration / 60:.1f} minutes. "
+                    f"Current status: {status.lock_status}"
                 )
 
-                # Reset state only after lock is confirmed as LOCKED
-                if status.lock_status == LockStatus.LOCKED and recovery_was_attempted:
-                    del self.unknown_status_start_times[lock_id]
+                # Clear tracking state
+                del self.unknown_status_start_times[lock_id]
+                if lock_id in self.unknown_recovery_attempted:
                     del self.unknown_recovery_attempted[lock_id]
-                    self.logger.info(
-                        f"Reset unknown status tracking for {status.lock_name} - confirmed LOCKED"
-                    )
-                elif not recovery_was_attempted:
-                    # If no recovery was attempted and status is now known, just clear tracking
-                    del self.unknown_status_start_times[lock_id]
-                    if lock_id in self.unknown_recovery_attempted:
-                        del self.unknown_recovery_attempted[lock_id]
 
     async def run_continuous_monitoring(self, check_interval_seconds: int = 60) -> None:
         self.logger.info(

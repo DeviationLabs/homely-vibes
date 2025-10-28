@@ -400,7 +400,7 @@ class TestAugustMonitor:
 
         await monitor._handle_unknown_status(lock_id, status, current_time)
 
-        # Should reset state since status resolved after recovery
+        # Should clear tracking state since status is resolved
         assert lock_id not in monitor.unknown_status_start_times
         assert lock_id not in monitor.unknown_recovery_attempted
 
@@ -427,7 +427,7 @@ class TestAugustMonitor:
 
         await monitor._handle_unknown_status(lock_id, status, current_time)
 
-        # Should clear tracking since resolved before recovery
+        # Should clear tracking state since status is resolved
         assert lock_id not in monitor.unknown_status_start_times
         assert lock_id not in monitor.unknown_recovery_attempted
 
