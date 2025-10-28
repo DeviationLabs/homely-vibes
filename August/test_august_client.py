@@ -318,6 +318,153 @@ class TestAugustMonitor:
             # Should not send notification for good battery
             mock_send.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_initial(self, monitor: AugustMonitor) -> None:
+        """Test initial handling of unknown status."""
+        status = LockState(
+            lock_id="lock123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.UNKNOWN,
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        await monitor._handle_unknown_status("lock123", status, 1234567890.0)
+
+        # Should start tracking unknown status
+        assert "lock123" in monitor.unknown_status_start_times
+        assert monitor.unknown_status_start_times["lock123"] == 1234567890.0
+        assert monitor.unknown_recovery_attempted["lock123"] is False
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_recovery_sequence(self, monitor: AugustMonitor) -> None:
+        """Test unknown status recovery after 30+ minutes."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (31 * 60)  # 31 minutes later
+
+        # Pre-populate unknown status start time
+        monitor.unknown_status_start_times[lock_id] = start_time
+        monitor.unknown_recovery_attempted[lock_id] = False
+
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.UNKNOWN,
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        with (
+            patch.object(
+                monitor.client, "unlock_lock", new=AsyncMock(return_value=True)
+            ) as mock_unlock,
+            patch.object(
+                monitor.client, "lock_lock", new=AsyncMock(return_value=True)
+            ) as mock_lock,
+            patch.object(monitor.pushover, "send_message") as mock_pushover,
+            patch("asyncio.sleep"),
+        ):
+            await monitor._handle_unknown_status(lock_id, status, current_time)
+
+            # Should attempt recovery sequence
+            mock_unlock.assert_called_once_with(lock_id)
+            mock_lock.assert_called_once_with(lock_id)
+            mock_pushover.assert_called_once()
+            assert monitor.unknown_recovery_attempted[lock_id] is True
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_resolved_after_recovery(
+        self, monitor: AugustMonitor
+    ) -> None:
+        """Test state reset after status resolves following recovery attempt."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (35 * 60)  # 35 minutes later
+
+        # Pre-populate state as if recovery was attempted
+        monitor.unknown_status_start_times[lock_id] = start_time
+        monitor.unknown_recovery_attempted[lock_id] = True
+
+        # Status is now resolved as LOCKED
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.LOCKED,  # Now resolved
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        await monitor._handle_unknown_status(lock_id, status, current_time)
+
+        # Should clear tracking state since status is resolved
+        assert lock_id not in monitor.unknown_status_start_times
+        assert lock_id not in monitor.unknown_recovery_attempted
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_resolved_no_recovery(self, monitor: AugustMonitor) -> None:
+        """Test state reset when status resolves before recovery attempt."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (10 * 60)  # 10 minutes later (< 30 min threshold)
+
+        # Pre-populate state as unknown but no recovery attempted yet
+        monitor.unknown_status_start_times[lock_id] = start_time
+        monitor.unknown_recovery_attempted[lock_id] = False
+
+        # Status is now resolved
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.LOCKED,  # Now resolved
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        await monitor._handle_unknown_status(lock_id, status, current_time)
+
+        # Should clear tracking state since status is resolved
+        assert lock_id not in monitor.unknown_status_start_times
+        assert lock_id not in monitor.unknown_recovery_attempted
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_no_duplicate_recovery(
+        self, monitor: AugustMonitor
+    ) -> None:
+        """Test that recovery is only attempted once."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (35 * 60)  # 35 minutes later
+
+        # Pre-populate state as if recovery was already attempted
+        monitor.unknown_status_start_times[lock_id] = start_time
+        monitor.unknown_recovery_attempted[lock_id] = True  # Already attempted
+
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.UNKNOWN,  # Still unknown
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        with (
+            patch.object(monitor.client, "unlock_lock", new=AsyncMock()) as mock_unlock,
+            patch.object(monitor.client, "lock_lock", new=AsyncMock()) as mock_lock,
+            patch.object(monitor.pushover, "send_message") as mock_pushover,
+        ):
+            await monitor._handle_unknown_status(lock_id, status, current_time)
+
+            # Should NOT attempt recovery again
+            mock_unlock.assert_not_called()
+            mock_lock.assert_not_called()
+            mock_pushover.assert_not_called()
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
