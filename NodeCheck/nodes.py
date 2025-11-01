@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import re
 import time
-import traceback
 from lib import NetHelpers
 import lib.Constants as Constants
 from lib.logger import SystemLogger
@@ -61,31 +60,33 @@ class FoscamNode(GenericNode):
     def heartbeat(self) -> bool:
         """Check Foscam health: ping + image capture"""
         if not super().heartbeat():
-                return False
-
-        try:
-            # Then do Foscam-specific image capture test
-            from lib.FoscamImager import FoscamImager
-
-            MAX_COUNT = 2
-            for attempt in range(MAX_COUNT):
-                try:
-                    myCam = FoscamImager(self.config.ip, False)
-                    image = myCam.getImage()
-                    if image is not None:
-                        logger.info(f"Got image from node: {self.name}")
-                        return True
-                except Exception as e:
-                    logger.error(f"Attempt {attempt + 1}/{MAX_COUNT} failed for {self.name}: {e}")
-                    logger.debug(traceback.format_exc())
-                    if attempt < MAX_COUNT - 1:
-                        time.sleep(30)
-
-            logger.error(f"Failed to get image after {MAX_COUNT} attempts from: {self.name}")
             return False
-        except Exception as e:
-            pass
-    
+
+        # TODO: Odroid is sigsegv on matplotlib
+        # try:
+        #     # Then do Foscam-specific image capture test
+        #     from lib.FoscamImager import FoscamImager
+
+        #     MAX_COUNT = 2
+        #     for attempt in range(MAX_COUNT):
+        #         try:
+        #             myCam = FoscamImager(self.config.ip, False)
+        #             image = myCam.getImage()
+        #             if image is not None:
+        #                 logger.info(f"Got image from node: {self.name}")
+        #                 return True
+        #         except Exception as e:
+        #             logger.error(f"Attempt {attempt + 1}/{MAX_COUNT} failed for {self.name}: {e}")
+        #             logger.debug(traceback.format_exc())
+        #             if attempt < MAX_COUNT - 1:
+        #                 time.sleep(30)
+
+        #     logger.error(f"Failed to get image after {MAX_COUNT} attempts from: {self.name}")
+        #     return False
+        # except Exception:
+        #     # not supported on this platform
+        #     pass
+
         return True
 
 
