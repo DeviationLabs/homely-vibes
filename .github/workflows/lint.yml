@@ -36,5 +36,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Copy sample constants
+        run: cp lib/Constants_sample.py lib/Constants.py
+
       - name: Run Make lint
         run: make lint
