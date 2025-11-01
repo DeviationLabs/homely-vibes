@@ -60,28 +60,33 @@ class FoscamNode(GenericNode):
 
     def heartbeat(self) -> bool:
         """Check Foscam health: ping + image capture"""
-        # First do base ping check
         if not super().heartbeat():
+                return False
+
+        try:
+            # Then do Foscam-specific image capture test
+            from lib.FoscamImager import FoscamImager
+
+            MAX_COUNT = 2
+            for attempt in range(MAX_COUNT):
+                try:
+                    myCam = FoscamImager(self.config.ip, False)
+                    image = myCam.getImage()
+                    if image is not None:
+                        logger.info(f"Got image from node: {self.name}")
+                        return True
+                except Exception as e:
+                    logger.error(f"Attempt {attempt + 1}/{MAX_COUNT} failed for {self.name}: {e}")
+                    logger.debug(traceback.format_exc())
+                    if attempt < MAX_COUNT - 1:
+                        time.sleep(30)
+
+            logger.error(f"Failed to get image after {MAX_COUNT} attempts from: {self.name}")
             return False
-
-        # Then do Foscam-specific image capture test
-        from lib.FoscamImager import FoscamImager
-
-        MAX_COUNT = 2
-        for _ in range(MAX_COUNT):
-            try:
-                myCam = FoscamImager(self.config.ip, False)
-                if myCam.getImage() is not None:
-                    logger.info(f"Got image from node: {self.name}")
-                    return True
-            except Exception:
-                temp = "\n%s" % traceback.format_exc()
-                logger.error(temp)
-                time.sleep(30)
-
-        logger.error(f"Got image, but failed to preview from: {self.name}")
-        # Note: Pushover notifications should be handled by the calling code
-        return False
+        except Exception as e:
+            pass
+    
+        return True
 
 
 class WindowsNode(GenericNode):

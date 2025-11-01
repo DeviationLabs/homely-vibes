@@ -18,13 +18,17 @@ def print_ipinfo(returncode, params):
 
 class FoscamImager:
     def __init__(self, nodeIP, display_images=False):
-        self.nodeIP = nodeIP
-        self.mycam = FoscamCamera(nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
-        self.display_images = display_images
-        self.err_count = 0
-        if display_images:
-            plt.ion()
-            plt.tight_layout()
+        try:
+            self.nodeIP = nodeIP
+            self.mycam = FoscamCamera(nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
+            self.display_images = display_images
+            self.err_count = 0
+            if display_images:
+                plt.ion()
+                plt.tight_layout()
+        except Exception as e:
+            logging.error(f"Failed to initialize FoscamImager for {nodeIP}: {e}")
+            raise
 
     def reset_errcount(self):
         self.err_count = 0
