@@ -7,7 +7,7 @@ from lib import Constants
 from lib.logger import SystemLogger
 from lib import Mailer
 from lib.MyPushover import Pushover
-from .nodes import GenericNode, FoscamNode, WindowsNode
+from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
 
 if TYPE_CHECKING:
     pass

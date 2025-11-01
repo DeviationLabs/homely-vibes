@@ -44,9 +44,7 @@ MAX_ZONES = 16
 MAX_NEW_FILES = 2  # Number of recent raw log files that are reprocessed into summary json
 LOGROTATE_PER_DAY = 4
 DAYS_LOOKBACK = 90  # Days of data to store in the pumprates file. Perf penalty if too large
-START_FROM_EPOCH = (
-    1539161991  # 2018-10-10-01-59-51 # Data prior in summary file, but is very corrupt
-)
+START_FROM_EPOCH = 1539161991  # 2018-10-10-01-59-51
 RACHIO_EVENTS_CMD = "{}/bin/WaterLogging/get_rachio_events.js".format(HOME)
 
 # WaterMonitor: Alerting
