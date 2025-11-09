@@ -93,9 +93,11 @@ class NodeChecker:
 
         return all_recovered
 
-    def generate_report(self, system_healthy: bool, always_email: bool = False) -> None:
+    def generate_report(
+        self, is_healthy: bool, always_email: bool = False, was_rebooted: bool = False
+    ) -> None:
         """Generate and send final report"""
-        if not system_healthy:
+        if not is_healthy:
             self.log_message(">> ERROR: Node check failed!")
             failed_nodes = [node.name for node in self.nodes if not node.is_online]
             pushover.send_message(
@@ -105,6 +107,11 @@ class NodeChecker:
             )
         else:
             self.log_message("All is well")
+            if was_rebooted:
+                pushover.send_message(
+                    f"{self.mode.title()} node reboot completed successfully",
+                    title=f"{self.mode.title()} Reboot Complete",
+                )
 
         Mailer.sendmail(
             topic=f"[NodeCheck-{self.mode}]",
@@ -158,5 +165,7 @@ if __name__ == "__main__":
         system_healthy = system_healthy and final_health
 
     # Generate final report
-    checker.generate_report(system_healthy, args.always_email)
+    checker.generate_report(
+        is_healthy=system_healthy, always_email=args.always_email, was_rebooted=args.reboot
+    )
     print("Done!")
