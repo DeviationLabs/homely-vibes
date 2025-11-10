@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.reddit.com)",
-      "WebFetch(domain:community.home-assistant.io)"
+      "WebFetch(domain:community.home-assistant.io)",
+      "WebFetch(domain:aws.amazon.com)"
     ],
     "deny": [],
     "ask": []
