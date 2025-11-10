@@ -48,7 +48,19 @@ const defaultConfig = {
     contact: ["abutala+pensieves-contact@gmail.com"],
     admin: ["abutala+pensieves-admin@gmail.com"],
     support: ["abutala+pensieves-support@gmail.com"],
-    
+
+    mamata: ["mamatadesai@yahoo.com"],
+    abutala: ["abutala@gmail.com"],
+    rb: ["rianbutala@gmail.com"],
+    rian: ["rianbutala@gmail.com"],
+    rianbutala: ["rianbutala@gmail.com"],
+
+    // exceptions ...
+    "ab.*": ["abutala+pensieves-ab@gmail.com"],
+    "rb.*": ["rianbutala+rb@gmail.com"],
+    "rian.*": ["rianbutala+default@gmail.com"],
+    "ma.*": ["mamatadesai@yahoo.com"],
+
     // Domain catch-all
     "@pensieves.org": ["abutala+pensieves@gmail.com"],
     "@www.pensieves.org": ["abutala+pensieves-www@gmail.com"],
@@ -370,6 +382,7 @@ exports.sendMessage = function(data) {
  * configuration, SES object, and S3 object.
  */
 exports.handler = function(event, context, callback, overrides) {
+  console.log("LAMBDA STARTED - Event received:", JSON.stringify(event, null, 2));
   var steps = overrides && overrides.steps ? overrides.steps :
     [
       exports.parseEvent,

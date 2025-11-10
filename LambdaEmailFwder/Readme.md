@@ -312,16 +312,20 @@ const defaultConfig = {
 - Verify DKIM CNAME records match SES requirements
 
 **Emails Not Forwarding:**
-- Check CloudWatch logs for Lambda errors
-- Verify SES rule set is active
+- **Domain Mismatch**: Verify SES identity matches your target domain exactly (e.g., `.org` vs `.com`)
+- **Lambda Not Invoked**: Check CloudWatch logs - no logs means Lambda isn't being called
+- Check SES receipt rule order - rules process in sequence, first match wins
+- Verify SES rule set is active and enabled
 - Confirm S3 bucket policy allows SES writes
-- Ensure sender email is verified in SES
+- Ensure sender email address is verified in SES
 
 **Lambda Execution Errors:**
-- Verify IAM role has required permissions
+- Verify IAM role has required permissions (S3 read/write access needed)
 - Check S3 bucket exists and is accessible
 - Confirm Lambda function is in us-east-1 region
 - Review function timeout and memory settings
+- **ES Module Error**: If you see "require is not defined in ES module scope", rename Lambda file from `index.mjs` to `index.js`
+- **S3 Access Denied**: Add S3 permissions to Lambda IAM role or update bucket policy to allow Lambda role access
 
 **Forwarded Emails Going to Spam:**
 - Ensure DKIM records are properly configured
