@@ -37,7 +37,7 @@ console.log("AWS Lambda SES Forwarder // @arithmetic // Version 5.0.0 - Pensieve
 //
 //   To match all email addresses matching no other mapping, use "@" as a key.
 const defaultConfig = {
-  fromEmail: "lambda_forwarder@pensieves.com",
+  fromEmail: "lambda_forwarder@pensieves.org",
   subjectPrefix: "",
   emailBucket: "pensieves-email-bucket",
   emailKeyPrefix: "emailsPrefix/",
@@ -50,8 +50,9 @@ const defaultConfig = {
     support: ["abutala+pensieves-support@gmail.com"],
     
     // Domain catch-all
-    "@pensieves.com": ["abutala+pensieves@gmail.com"],
-    "@www.pensieves.com": ["abutala+pensieves-www@gmail.com"],
+    "@pensieves.org": ["abutala+pensieves@gmail.com"],
+    "@www.pensieves.org": ["abutala+pensieves-www@gmail.com"],
+
     
     // Default fallback
     "@": ["abutala+pensieves-default@gmail.com"],
