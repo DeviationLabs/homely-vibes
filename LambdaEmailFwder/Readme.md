@@ -336,15 +336,6 @@ const defaultConfig = {
 3. **DNS Issues:** Verify Route 53 records match SES requirements
 4. **Email Deliverability:** Monitor SES sending statistics
 
-## File Structure
-
-```
-LambdaEmailFwder/
-├── index-deviation.js          # Template/example configuration
-├── index-yourdomain.js         # Your customized configuration
-├── test_event.json            # Sample SES event for testing
-└── README.md                  # This file
-```
 
 ## Next Steps
 
