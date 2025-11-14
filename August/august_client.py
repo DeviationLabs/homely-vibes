@@ -215,7 +215,7 @@ class AugustMonitor:
         # Track unknown status for recovery
         self.unknown_status_start_times: Dict[str, float] = {}
         self.unknown_recovery_attempted: Dict[str, bool] = {}
-        self.unknown_threshold = 30 * 60  # 30 minutes
+        self.unknown_threshold = 60 * 60  # 60 minutes
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
 
@@ -404,7 +404,6 @@ class AugustMonitor:
             # Start tracking unknown status if not already tracked
             if lock_id not in self.unknown_status_start_times:
                 self.unknown_status_start_times[lock_id] = current_time
-                self.unknown_recovery_attempted[lock_id] = False
                 self.logger.warning(f"Lock {status.lock_name} status is UNKNOWN - starting timer")
             else:
                 unknown_duration = current_time - self.unknown_status_start_times[lock_id]
@@ -412,22 +411,16 @@ class AugustMonitor:
                 # If unknown for > 30 minutes and recovery not yet attempted
                 if (
                     unknown_duration >= self.unknown_threshold
-                    and not self.unknown_recovery_attempted[lock_id]
                 ):
                     self.logger.warning(
                         f"Lock {status.lock_name} has been UNKNOWN for {unknown_duration / 60:.1f} minutes. "
                         f"Attempting unlock/lock recovery sequence."
                     )
 
-                    # Mark recovery as attempted to prevent repeated attempts
-                    self.unknown_recovery_attempted[lock_id] = True
-
                     # Attempt unlock then lock sequence
-                    unlock_success = await self.client.unlock_lock(lock_id)
+#                    unlock_success = await self.client.unlock_lock(lock_id)
+                    unlock_success = True # just lock without an unlock attempt
                     if unlock_success:
-                        self.logger.info(f"Successfully sent unlock command for {status.lock_name}")
-                        # Wait a moment then lock
-                        await asyncio.sleep(3)
                         lock_success = await self.client.lock_lock(lock_id)
                         if lock_success:
                             self.logger.info(
@@ -452,7 +445,6 @@ class AugustMonitor:
         else:
             # Clear unknown tracking
             self.unknown_status_start_times.pop(lock_id, None)
-            self.unknown_recovery_attempted.pop(lock_id, None)
 
     async def run_continuous_monitoring(self, check_interval_seconds: int = 60) -> None:
         self.logger.info(
