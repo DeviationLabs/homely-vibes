@@ -30,6 +30,7 @@ dependencies = [
     "paramiko>=2.8.0",
     "libpyfoscam>=1.2.2",
     "requests-oauthlib>=2.0.0",
+    "websocket>=0.2.1",
 ]
 
 [project.optional-dependencies]

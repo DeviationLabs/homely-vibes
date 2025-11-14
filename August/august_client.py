@@ -214,7 +214,6 @@ class AugustMonitor:
         self.last_lock_failure_alerts: Dict[str, float] = {}
         # Track unknown status for recovery
         self.unknown_status_start_times: Dict[str, float] = {}
-        self.unknown_recovery_attempted: Dict[str, bool] = {}
         self.unknown_threshold = 60 * 60  # 60 minutes
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
@@ -230,7 +229,6 @@ class AugustMonitor:
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
                 self.last_lock_failure_alerts = state.get("last_lock_failure_alerts", {})
                 self.unknown_status_start_times = state.get("unknown_status_start_times", {})
-                self.unknown_recovery_attempted = state.get("unknown_recovery_attempted", {})
             self.logger.debug("Loaded monitor state from file")
         except (FileNotFoundError, json.JSONDecodeError):
             self.logger.debug("No existing state file found, starting fresh")
@@ -245,7 +243,6 @@ class AugustMonitor:
                 "last_battery_alerts": self.last_battery_alerts,
                 "last_lock_failure_alerts": self.last_lock_failure_alerts,
                 "unknown_status_start_times": self.unknown_status_start_times,
-                "unknown_recovery_attempted": self.unknown_recovery_attempted,
             }
             with open(self.state_file, "w") as f:
                 json.dump(state, f)
@@ -285,9 +282,6 @@ class AugustMonitor:
             }
             self.unknown_status_start_times = {
                 k: v for k, v in self.unknown_status_start_times.items() if k in existing_locks
-            }
-            self.unknown_recovery_attempted = {
-                k: v for k, v in self.unknown_recovery_attempted.items() if k in existing_locks
             }
 
             self._save_state()
@@ -409,17 +403,15 @@ class AugustMonitor:
                 unknown_duration = current_time - self.unknown_status_start_times[lock_id]
 
                 # If unknown for > 30 minutes and recovery not yet attempted
-                if (
-                    unknown_duration >= self.unknown_threshold
-                ):
+                if unknown_duration >= self.unknown_threshold:
                     self.logger.warning(
                         f"Lock {status.lock_name} has been UNKNOWN for {unknown_duration / 60:.1f} minutes. "
-                        f"Attempting unlock/lock recovery sequence."
+                        f"Attempting lock recovery sequence."
                     )
 
                     # Attempt unlock then lock sequence
-#                    unlock_success = await self.client.unlock_lock(lock_id)
-                    unlock_success = True # just lock without an unlock attempt
+                    #                    unlock_success = await self.client.unlock_lock(lock_id)
+                    unlock_success = True  # just lock without an unlock attempt
                     if unlock_success:
                         lock_success = await self.client.lock_lock(lock_id)
                         if lock_success:
@@ -427,19 +419,16 @@ class AugustMonitor:
                                 f"Successfully sent lock command for {status.lock_name}"
                             )
                             # Send notification about recovery attempt
-                            try:
-                                message = (
-                                    f"Attempted recovery for {status.lock_name} "
-                                    f"(unknown status for {unknown_duration / 60:.1f} min). "
-                                    f"Sent unlock/lock sequence."
-                                )
-                                self.pushover.send_message(
-                                    message, title="🔧 August Lock Recovery", priority=1
-                                )
-                            except Exception as e:
-                                self.logger.error(f"Failed to send recovery notification: {e}")
+                            message = (
+                                f"Attempted recovery for {status.lock_name} "
+                                f"(unknown status for {unknown_duration / 60:.1f} min). "
+                                f"Sent unlock/lock sequence."
+                            )
                         else:
-                            self.logger.error(f"Failed to send lock command for {status.lock_name}")
+                            message = f"Failed to send lock command for {status.lock_name}"
+                        self.pushover.send_message(
+                            message, title="🔧 August Lock Recovery", priority=1
+                        )
                     else:
                         self.logger.error(f"Failed to send unlock command for {status.lock_name}")
         else:
