@@ -214,7 +214,6 @@ class AugustMonitor:
         self.last_lock_failure_alerts: Dict[str, float] = {}
         # Track unknown status for recovery
         self.unknown_status_start_times: Dict[str, float] = {}
-        self.unknown_recovery_attempted: Dict[str, bool] = {}
         self.unknown_threshold = 30 * 60  # 30 minutes
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
@@ -230,7 +229,6 @@ class AugustMonitor:
                 self.last_battery_alerts = state.get("last_battery_alerts", {})
                 self.last_lock_failure_alerts = state.get("last_lock_failure_alerts", {})
                 self.unknown_status_start_times = state.get("unknown_status_start_times", {})
-                self.unknown_recovery_attempted = state.get("unknown_recovery_attempted", {})
             self.logger.debug("Loaded monitor state from file")
         except (FileNotFoundError, json.JSONDecodeError):
             self.logger.debug("No existing state file found, starting fresh")
@@ -245,7 +243,6 @@ class AugustMonitor:
                 "last_battery_alerts": self.last_battery_alerts,
                 "last_lock_failure_alerts": self.last_lock_failure_alerts,
                 "unknown_status_start_times": self.unknown_status_start_times,
-                "unknown_recovery_attempted": self.unknown_recovery_attempted,
             }
             with open(self.state_file, "w") as f:
                 json.dump(state, f)
@@ -285,9 +282,6 @@ class AugustMonitor:
             }
             self.unknown_status_start_times = {
                 k: v for k, v in self.unknown_status_start_times.items() if k in existing_locks
-            }
-            self.unknown_recovery_attempted = {
-                k: v for k, v in self.unknown_recovery_attempted.items() if k in existing_locks
             }
 
             self._save_state()
@@ -404,55 +398,36 @@ class AugustMonitor:
             # Start tracking unknown status if not already tracked
             if lock_id not in self.unknown_status_start_times:
                 self.unknown_status_start_times[lock_id] = current_time
-                self.unknown_recovery_attempted[lock_id] = False
                 self.logger.warning(f"Lock {status.lock_name} status is UNKNOWN - starting timer")
             else:
                 unknown_duration = current_time - self.unknown_status_start_times[lock_id]
 
-                # If unknown for > 30 minutes and recovery not yet attempted
-                if (
-                    unknown_duration >= self.unknown_threshold
-                    and not self.unknown_recovery_attempted[lock_id]
-                ):
+                # If unknown for > 30 minutes, attempt recovery
+                if unknown_duration >= self.unknown_threshold:
                     self.logger.warning(
                         f"Lock {status.lock_name} has been UNKNOWN for {unknown_duration / 60:.1f} minutes. "
-                        f"Attempting unlock/lock recovery sequence."
+                        f"Attempting lock recovery sequence."
                     )
 
-                    # Mark recovery as attempted to prevent repeated attempts
-                    self.unknown_recovery_attempted[lock_id] = True
-
-                    # Attempt unlock then lock sequence
-                    unlock_success = await self.client.unlock_lock(lock_id)
-                    if unlock_success:
-                        self.logger.info(f"Successfully sent unlock command for {status.lock_name}")
-                        # Wait a moment then lock
-                        await asyncio.sleep(3)
-                        lock_success = await self.client.lock_lock(lock_id)
-                        if lock_success:
-                            self.logger.info(
-                                f"Successfully sent lock command for {status.lock_name}"
-                            )
-                            # Send notification about recovery attempt
-                            try:
-                                message = (
-                                    f"Attempted recovery for {status.lock_name} "
-                                    f"(unknown status for {unknown_duration / 60:.1f} min). "
-                                    f"Sent unlock/lock sequence."
-                                )
-                                self.pushover.send_message(
-                                    message, title="🔧 August Lock Recovery", priority=1
-                                )
-                            except Exception as e:
-                                self.logger.error(f"Failed to send recovery notification: {e}")
-                        else:
-                            self.logger.error(f"Failed to send lock command for {status.lock_name}")
+                    # Attempt lock command (unlock was commented out)
+                    lock_success = await self.client.lock_lock(lock_id)
+                    if lock_success:
+                        self.logger.info(f"Successfully sent lock command for {status.lock_name}")
+                        # Send notification about recovery attempt
+                        message = (
+                            f"Attempted recovery for {status.lock_name} "
+                            f"(unknown status for {unknown_duration / 60:.1f} min). "
+                            f"Sent lock command."
+                        )
                     else:
-                        self.logger.error(f"Failed to send unlock command for {status.lock_name}")
+                        message = f"Failed to send lock command for {status.lock_name}"
+                    self.pushover.send_message(message, title="🔧 August Lock Recovery", priority=1)
+
+                    # Clear tracking after recovery attempt to prevent repeated attempts
+                    self.unknown_status_start_times.pop(lock_id, None)
         else:
-            # Clear unknown tracking
+            # Clear unknown tracking when status is resolved
             self.unknown_status_start_times.pop(lock_id, None)
-            self.unknown_recovery_attempted.pop(lock_id, None)
 
     async def run_continuous_monitoring(self, check_interval_seconds: int = 60) -> None:
         self.logger.info(

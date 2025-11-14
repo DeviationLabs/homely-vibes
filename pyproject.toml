@@ -28,7 +28,9 @@ dependencies = [
     "gpxpy>=1.5.0",
     "click>=8.0.0",
     "paramiko>=2.8.0",
-    "libpyfoscam>=1.2.2"
+    "libpyfoscam>=1.2.2",
+    "requests-oauthlib>=2.0.0",
+    "websocket>=0.2.1",
 ]
 
 [project.optional-dependencies]
@@ -120,6 +122,9 @@ DEP002 = [
     "types-requests",
     "types-paramiko", 
     "pandas-stubs",
+    # Dependencies that may be used indirectly or for future use
+    "requests-oauthlib",
+    "websocket",
 ]
 DEP003 = ["google", "streamlit", "BimpopAI"]
 
