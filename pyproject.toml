@@ -122,6 +122,9 @@ DEP002 = [
     "types-requests",
     "types-paramiko", 
     "pandas-stubs",
+    # Dependencies that may be used indirectly or for future use
+    "requests-oauthlib",
+    "websocket",
 ]
 DEP003 = ["google", "streamlit", "BimpopAI"]
 
