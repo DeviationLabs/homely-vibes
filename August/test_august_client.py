@@ -367,6 +367,8 @@ class TestAugustMonitor:
             # Should attempt recovery by sending lock command
             mock_lock.assert_called_once_with(lock_id)
             mock_pushover.assert_called_once()
+            # Tracking should be cleared after recovery attempt
+            assert lock_id not in monitor.unknown_status_start_times
 
     @pytest.mark.asyncio
     async def test_handle_unknown_status_resolved_after_recovery(
@@ -424,13 +426,12 @@ class TestAugustMonitor:
     async def test_handle_unknown_status_no_duplicate_recovery(
         self, monitor: AugustMonitor
     ) -> None:
-        """Test that recovery is only attempted once."""
+        """Test that after recovery attempt, tracking restarts fresh."""
         lock_id = "lock123"
-        start_time = 1234567890.0
-        current_time = start_time + (35 * 60)  # 35 minutes later
+        current_time = 1234567890.0
 
-        # Pre-populate state as if recovery was already attempted
-        monitor.unknown_status_start_times[lock_id] = start_time
+        # Don't pre-populate unknown_status_start_times to simulate that recovery was already attempted
+        # (it gets cleared after recovery attempt)
 
         status = LockState(
             lock_id=lock_id,
@@ -441,18 +442,17 @@ class TestAugustMonitor:
             door_state=LockDoorStatus.CLOSED,
         )
 
-        # Mark that recovery was already attempted
-        monitor.unknown_recovery_times[lock_id] = start_time + (31 * 60)
-
         with (
             patch.object(monitor.client, "lock_lock", new=AsyncMock()) as mock_lock,
             patch.object(monitor.pushover, "send_message") as mock_pushover,
         ):
             await monitor._handle_unknown_status(lock_id, status, current_time)
 
-            # Should NOT attempt recovery again
+            # Should start fresh tracking (not attempt recovery yet since it just started tracking again)
             mock_lock.assert_not_called()
             mock_pushover.assert_not_called()
+            # Should have started tracking again
+            assert lock_id in monitor.unknown_status_start_times
 
 
 if __name__ == "__main__":

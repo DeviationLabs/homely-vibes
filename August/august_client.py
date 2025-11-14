@@ -214,7 +214,6 @@ class AugustMonitor:
         self.last_lock_failure_alerts: Dict[str, float] = {}
         # Track unknown status for recovery
         self.unknown_status_start_times: Dict[str, float] = {}
-        self.unknown_recovery_times: Dict[str, float] = {}  # Track when recovery was attempted
         self.unknown_threshold = 30 * 60  # 30 minutes
         self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
         self._load_state()
@@ -403,18 +402,12 @@ class AugustMonitor:
             else:
                 unknown_duration = current_time - self.unknown_status_start_times[lock_id]
 
-                # If unknown for > 30 minutes and recovery not yet attempted
-                if (
-                    unknown_duration >= self.unknown_threshold
-                    and lock_id not in self.unknown_recovery_times
-                ):
+                # If unknown for > 30 minutes, attempt recovery
+                if unknown_duration >= self.unknown_threshold:
                     self.logger.warning(
                         f"Lock {status.lock_name} has been UNKNOWN for {unknown_duration / 60:.1f} minutes. "
                         f"Attempting lock recovery sequence."
                     )
-
-                    # Mark recovery as attempted
-                    self.unknown_recovery_times[lock_id] = current_time
 
                     # Attempt lock command (unlock was commented out)
                     lock_success = await self.client.lock_lock(lock_id)
@@ -429,10 +422,12 @@ class AugustMonitor:
                     else:
                         message = f"Failed to send lock command for {status.lock_name}"
                     self.pushover.send_message(message, title="🔧 August Lock Recovery", priority=1)
+
+                    # Clear tracking after recovery attempt to prevent repeated attempts
+                    self.unknown_status_start_times.pop(lock_id, None)
         else:
-            # Clear unknown tracking
+            # Clear unknown tracking when status is resolved
             self.unknown_status_start_times.pop(lock_id, None)
-            self.unknown_recovery_times.pop(lock_id, None)
 
     async def run_continuous_monitoring(self, check_interval_seconds: int = 60) -> None:
         self.logger.info(
