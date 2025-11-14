@@ -335,7 +335,6 @@ class TestAugustMonitor:
         # Should start tracking unknown status
         assert "lock123" in monitor.unknown_status_start_times
         assert monitor.unknown_status_start_times["lock123"] == 1234567890.0
-        assert monitor.unknown_recovery_attempted["lock123"] is False
 
     @pytest.mark.asyncio
     async def test_handle_unknown_status_recovery_sequence(self, monitor: AugustMonitor) -> None:
@@ -346,7 +345,6 @@ class TestAugustMonitor:
 
         # Pre-populate unknown status start time
         monitor.unknown_status_start_times[lock_id] = start_time
-        monitor.unknown_recovery_attempted[lock_id] = False
 
         status = LockState(
             lock_id=lock_id,
@@ -359,9 +357,6 @@ class TestAugustMonitor:
 
         with (
             patch.object(
-                monitor.client, "unlock_lock", new=AsyncMock(return_value=True)
-            ) as mock_unlock,
-            patch.object(
                 monitor.client, "lock_lock", new=AsyncMock(return_value=True)
             ) as mock_lock,
             patch.object(monitor.pushover, "send_message") as mock_pushover,
@@ -369,11 +364,9 @@ class TestAugustMonitor:
         ):
             await monitor._handle_unknown_status(lock_id, status, current_time)
 
-            # Should attempt recovery sequence
-            mock_unlock.assert_called_once_with(lock_id)
+            # Should attempt recovery by sending lock command
             mock_lock.assert_called_once_with(lock_id)
             mock_pushover.assert_called_once()
-            assert monitor.unknown_recovery_attempted[lock_id] is True
 
     @pytest.mark.asyncio
     async def test_handle_unknown_status_resolved_after_recovery(
@@ -386,7 +379,6 @@ class TestAugustMonitor:
 
         # Pre-populate state as if recovery was attempted
         monitor.unknown_status_start_times[lock_id] = start_time
-        monitor.unknown_recovery_attempted[lock_id] = True
 
         # Status is now resolved as LOCKED
         status = LockState(
@@ -402,7 +394,6 @@ class TestAugustMonitor:
 
         # Should clear tracking state since status is resolved
         assert lock_id not in monitor.unknown_status_start_times
-        assert lock_id not in monitor.unknown_recovery_attempted
 
     @pytest.mark.asyncio
     async def test_handle_unknown_status_resolved_no_recovery(self, monitor: AugustMonitor) -> None:
@@ -413,7 +404,6 @@ class TestAugustMonitor:
 
         # Pre-populate state as unknown but no recovery attempted yet
         monitor.unknown_status_start_times[lock_id] = start_time
-        monitor.unknown_recovery_attempted[lock_id] = False
 
         # Status is now resolved
         status = LockState(
@@ -429,7 +419,6 @@ class TestAugustMonitor:
 
         # Should clear tracking state since status is resolved
         assert lock_id not in monitor.unknown_status_start_times
-        assert lock_id not in monitor.unknown_recovery_attempted
 
     @pytest.mark.asyncio
     async def test_handle_unknown_status_no_duplicate_recovery(
@@ -442,7 +431,6 @@ class TestAugustMonitor:
 
         # Pre-populate state as if recovery was already attempted
         monitor.unknown_status_start_times[lock_id] = start_time
-        monitor.unknown_recovery_attempted[lock_id] = True  # Already attempted
 
         status = LockState(
             lock_id=lock_id,
@@ -453,15 +441,16 @@ class TestAugustMonitor:
             door_state=LockDoorStatus.CLOSED,
         )
 
+        # Mark that recovery was already attempted
+        monitor.unknown_recovery_times[lock_id] = start_time + (31 * 60)
+
         with (
-            patch.object(monitor.client, "unlock_lock", new=AsyncMock()) as mock_unlock,
             patch.object(monitor.client, "lock_lock", new=AsyncMock()) as mock_lock,
             patch.object(monitor.pushover, "send_message") as mock_pushover,
         ):
             await monitor._handle_unknown_status(lock_id, status, current_time)
 
             # Should NOT attempt recovery again
-            mock_unlock.assert_not_called()
             mock_lock.assert_not_called()
             mock_pushover.assert_not_called()
 
