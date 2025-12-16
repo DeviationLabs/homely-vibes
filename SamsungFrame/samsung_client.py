@@ -375,6 +375,61 @@ class SamsungFrameClient:
             self.logger.error(f"Error starting slideshow: {e}")
             return False
 
+    def cycle_images(self, period: int = 15, user_photos_only: bool = True) -> None:
+        """Cycle through images on TV with specified period.
+
+        Args:
+            period: Time in seconds between image changes (default: 15)
+            user_photos_only: Only cycle through user-uploaded photos (default: True)
+
+        Raises:
+            RuntimeError: If not connected to TV
+            KeyboardInterrupt: When user stops the cycle
+        """
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        art_list = self.get_available_art()
+        if not art_list:
+            self.logger.warning("No art found on TV")
+            return
+
+        if user_photos_only:
+            art_list = [art for art in art_list if art.get("content_id", "").startswith("MY_F")]
+            self.logger.info(f"Cycling through {len(art_list)} user-uploaded photos")
+        else:
+            self.logger.info(f"Cycling through {len(art_list)} art items")
+
+        if not art_list:
+            self.logger.warning("No art items to cycle through")
+            return
+
+        self.enable_art_mode()
+        self.logger.info(f"Starting image cycle with {period} second period")
+        self.logger.info("Press Ctrl+C to stop")
+
+        try:
+            cycle_count = 0
+            while True:
+                for art_item in art_list:
+                    content_id = art_item.get("content_id")
+                    if not content_id:
+                        continue
+
+                    try:
+                        self.tv.art().select_image(content_id)
+                        self.logger.info(f"Displaying: {content_id}")
+                        time.sleep(period)
+                    except Exception as e:
+                        self.logger.error(f"Failed to display {content_id}: {e}")
+                        continue
+
+                cycle_count += 1
+                self.logger.info(f"Completed cycle {cycle_count}")
+
+        except KeyboardInterrupt:
+            self.logger.info(f"Image cycling stopped after {cycle_count} complete cycles")
+
     def download_thumbnails(self, output_dir: str, user_photos_only: bool = True) -> Dict[str, int]:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")

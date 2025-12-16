@@ -339,3 +339,59 @@ class TestSamsungFrameClient:
 
         assert len(art_list) == 2
         assert art_list[0]["content_id"] == "art1"
+
+    def test_cycle_images_not_connected(self) -> None:
+        """Test cycle_images fails when not connected."""
+        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+
+        with pytest.raises(RuntimeError, match="Not connected to TV"):
+            client.cycle_images()
+
+    @patch("SamsungFrame.samsung_client.SamsungTVWS")
+    @patch("time.sleep")
+    def test_cycle_images_user_photos_only(self, mock_sleep: Mock, mock_tv: Mock) -> None:
+        """Test cycling through user photos only."""
+        mock_tv_instance = Mock()
+        mock_tv_instance.art().available.return_value = [
+            {"content_id": "MY_F0001"},
+            {"content_id": "MY_F0002"},
+            {"content_id": "ART_12345"},
+        ]
+        mock_tv_instance.art().set_artmode.return_value = None
+
+        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client.tv = mock_tv_instance
+
+        # Simulate KeyboardInterrupt after 2 image displays
+        mock_sleep.side_effect = [None, KeyboardInterrupt()]
+
+        client.cycle_images(period=15, user_photos_only=True)
+
+        # Should only call select_image for MY_F photos
+        assert mock_tv_instance.art().select_image.call_count == 2
+        mock_tv_instance.art().select_image.assert_any_call("MY_F0001")
+        mock_tv_instance.art().select_image.assert_any_call("MY_F0002")
+
+    @patch("SamsungFrame.samsung_client.SamsungTVWS")
+    @patch("time.sleep")
+    def test_cycle_images_all_art(self, mock_sleep: Mock, mock_tv: Mock) -> None:
+        """Test cycling through all art."""
+        mock_tv_instance = Mock()
+        mock_tv_instance.art().available.return_value = [
+            {"content_id": "MY_F0001"},
+            {"content_id": "ART_12345"},
+        ]
+        mock_tv_instance.art().set_artmode.return_value = None
+
+        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client.tv = mock_tv_instance
+
+        # Simulate KeyboardInterrupt after 2 image displays
+        mock_sleep.side_effect = [None, KeyboardInterrupt()]
+
+        client.cycle_images(period=10, user_photos_only=False)
+
+        # Should call select_image for all art
+        assert mock_tv_instance.art().select_image.call_count == 2
+        mock_tv_instance.art().select_image.assert_any_call("MY_F0001")
+        mock_tv_instance.art().select_image.assert_any_call("ART_12345")
