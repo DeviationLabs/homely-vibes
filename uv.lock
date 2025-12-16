@@ -913,10 +913,12 @@ dependencies = [
     { name = "openai" },
     { name = "pandas" },
     { name = "paramiko" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "pytest" },
     { name = "requests" },
     { name = "requests-oauthlib" },
+    { name = "samsungtvws" },
     { name = "tiktoken" },
     { name = "tld" },
     { name = "uvicorn" },
@@ -970,6 +972,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "paramiko", specifier = ">=2.8.0" },
+    { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
@@ -980,6 +983,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0" },
     { name = "requests-oauthlib", specifier = ">=2.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.13.0" },
+    { name = "samsungtvws", specifier = ">=2.6.0" },
     { name = "semgrep", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "streamlit", marker = "extra == 'streamlit'", specifier = ">=1.0.0" },
     { name = "tiktoken", specifier = ">=0.8.0" },
@@ -2535,6 +2539,19 @@ wheels = [
 ]
 
 [[package]]
+name = "samsungtvws"
+version = "2.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "websocket-client" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/c7/aa95581ad09e0ec2628f9fc5f80fbf6556b2a96af40937479bb252ed890b/samsungtvws-2.7.2.tar.gz", hash = "sha256:106d89df70c9fff8a23089af223244c077260e83326ef8b2e5c9fa8d2706f25f", size = 28851, upload-time = "2024-12-06T10:15:00.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/2e/80f1fce8cc05b8a05f9fbbbbab104edc13eb4ab9a1fb850966831717637d/samsungtvws-2.7.2-py3-none-any.whl", hash = "sha256:3c903eeffc6239e32adba55b7f01ff061458f12b6b3c86bac91e9f25f511c994", size = 30217, upload-time = "2024-12-06T10:14:59.449Z" },
+]
+
+[[package]]
 name = "semgrep"
 version = "1.133.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2899,6 +2916,15 @@ dependencies = [
     { name = "greenlet" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f2/6d/a60d620ea575c885510c574909d2e3ed62129b121fa2df00ca1c81024c87/websocket-0.2.1.tar.gz", hash = "sha256:42b506fae914ac5ed654e23ba9742e6a342b1a1c3eb92632b6166c65256469a4", size = 195339, upload-time = "2010-12-03T11:51:30.867Z" }
+
+[[package]]
+name = "websocket-client"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/41/aa4bf9664e4cda14c3b39865b12251e8e7d239f4cd0e3cc1b6c2ccde25c1/websocket_client-1.9.0.tar.gz", hash = "sha256:9e813624b6eb619999a97dc7958469217c3176312b3a16a4bd1bc7e08a46ec98", size = 70576, upload-time = "2025-10-07T21:16:36.495Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/34/db/b10e48aa8fff7407e67470363eac595018441cf32d5e1001567a7aeba5d2/websocket_client-1.9.0-py3-none-any.whl", hash = "sha256:af248a825037ef591efbf6ed20cc5faa03d3b47b9e5a2230a529eeee1c1fc3ef", size = 82616, upload-time = "2025-10-07T21:16:34.951Z" },
+]
 
 [[package]]
 name = "wrapt"
