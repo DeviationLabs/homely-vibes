@@ -141,7 +141,7 @@ See what matte (border) styles your TV supports:
 uv run python SamsungFrame/manage_samsung.py list-mattes
 ```
 
-Common options include: `shadowbox` (black), `none`, `modern`, `flexible`, `panoramic`
+Common options include: `shadowbox`, `none`, `modern`, `flexible`, `panoramic`
 
 ### Download Thumbnails
 

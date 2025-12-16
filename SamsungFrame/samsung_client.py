@@ -273,10 +273,7 @@ class SamsungFrameClient:
         available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]
 
         # Validate matte with optional color suffix
-        valid_colors = getattr(
-            Constants,
-            "SAMSUNG_FRAME_VALID_COLORS",
-            [
+        valid_colors = [
                 "seafoam",
                 "black",
                 "neutral",
@@ -293,8 +290,7 @@ class SamsungFrameClient:
                 "redorange",
                 "skyblue",
                 "turqoise",
-            ],
-        )
+            ]
 
         if "_" in matte:
             base_matte, color = matte.rsplit("_", 1)
