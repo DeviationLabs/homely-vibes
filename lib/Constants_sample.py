@@ -156,7 +156,7 @@ AUGUST_PHONE = "+1234567890"
 SAMSUNG_FRAME_IP = "192.168.1.4"
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port
 SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
-SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox_black"
+SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
 

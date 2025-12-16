@@ -23,7 +23,7 @@ Add your Samsung Frame TV settings to `lib/Constants.py`:
 SAMSUNG_FRAME_IP = "192.168.XX.YY"  # Your TV's IP address
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port (default: 8002)
 SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
-SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox_black"  # Black border style
+SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
 
@@ -44,19 +44,24 @@ uv sync
 
 ### First-Time Authentication
 
-On first run, the TV will display a pairing prompt:
+On first run of an **upload** command, the TV will display a pairing prompt:
 
-1. Run any command (e.g., `uv run python SamsungFrame/manage_samsung.py status`)
+1. Run upload command: `uv run python SamsungFrame/manage_samsung.py upload /path/to/images`
 2. Check your TV screen for the pairing prompt
 3. Accept the connection on your TV
-4. The authentication token will be saved to `~/logs/samsung_frame_token.txt`
-5. Subsequent runs will use the saved token
+4. The authentication token will be automatically saved to `~/logs/samsung_frame_token.txt`
+5. Subsequent uploads will use the saved token without requiring TV approval
 
-**Note**: If you need to re-pair (token not persisting), delete the token file and run the command again:
+**Important Notes:**
+
+- Token is only saved during WebSocket operations (upload). The `status` command uses REST API and won't trigger token exchange.
+- Once a token is saved, all operations (status, upload, list-art) will work without TV approval.
+
+**To re-pair:** Delete the token file and run an upload command:
 
 ```bash
 rm ~/logs/samsung_frame_token.txt
-uv run python SamsungFrame/manage_samsung.py status
+uv run python SamsungFrame/manage_samsung.py upload /path/to/images
 ```
 
 ## Usage
@@ -94,7 +99,7 @@ uv run python SamsungFrame/manage_samsung.py upload /path/to/images --notify
 
 ### Check TV Status
 
-Check connection and art mode support:
+Check TV connection and display comprehensive information:
 
 ```bash
 uv run python SamsungFrame/manage_samsung.py status
@@ -102,11 +107,23 @@ uv run python SamsungFrame/manage_samsung.py status
 
 Example output:
 ```
-Checking connection to Samsung Frame TV at 192.168.1.4...
-Connection successful!
-Art mode: Supported
-Available art: 42 items
+Connecting to Samsung Frame TV at 192.168.1.4...
+==================================================
+TV STATUS
+==================================================
+Model: QN55LS03FADXZA
+Name: 55" The Frame
+Firmware: Unknown
+Resolution: 3840x2160
+Power State: on
+OS: Tizen
+Network Type: wireless
+Frame TV Support: true
+Available Art: 42 items
+Art Mode: Supported and working
 ```
+
+**Note:** Status command uses REST API only, so it won't trigger the pairing prompt. Run an upload command first to establish authentication.
 
 ### List Available Art
 
@@ -115,6 +132,56 @@ List all art currently on the TV:
 ```bash
 uv run python SamsungFrame/manage_samsung.py list-art
 ```
+
+### List Available Matte Styles
+
+See what matte (border) styles your TV supports:
+
+```bash
+uv run python SamsungFrame/manage_samsung.py list-mattes
+```
+
+Common options include: `shadowbox`, `none`, `modern`, `flexible`, `panoramic`
+
+### Download Thumbnails
+
+Download thumbnail images for your uploaded photos:
+
+```bash
+# Download only user-uploaded photos
+uv run python SamsungFrame/manage_samsung.py download-thumbnails ~/Downloads/samsung_thumbnails
+
+# Download all art (including Samsung's pre-installed art)
+uv run python SamsungFrame/manage_samsung.py download-thumbnails ~/Downloads/samsung_thumbnails --all
+```
+
+### Update Mattes for Existing Art
+
+Change the matte (border) style for all art already on the TV:
+
+```bash
+# Update all art to default black border
+uv run python SamsungFrame/manage_samsung.py update-mattes
+
+# Update with base style only
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte shadowbox
+
+# Update with style and color (e.g., shadowbox with black color)
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte shadowbox_black
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte modern_warm
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte flexible_polar
+```
+
+**Matte Format**: `<base_style>` or `<base_style>_<color>`
+
+Valid colors: seafoam, black, neutral, antique, warm, polar, sand, sage, burgandy, navy, apricot, byzantine, lavender, redorange, skyblue, turqoise
+
+This command:
+
+- Retrieves all art currently on the TV
+- Validates matte style and optional color
+- Updates each art item to use the specified matte style
+- Reports success/failure/skipped counts
 
 ## Architecture
 
@@ -149,14 +216,18 @@ uv run python SamsungFrame/manage_samsung.py list-art
 
 ## Supported Matte Styles
 
-Common matte options (may vary by TV model):
+Use the `list-mattes` command to see what your TV supports. Common options:
 
-- `shadowbox_black` - Black border (default)
-- `modern_apricot` - Warm colored border
-- `classic_white` - White border
-- `modern_grey` - Grey border
+- `shadowbox` - Black border (default)
+- `none` - No border
+- `modern`, `modernthin`, `modernwide` - Modern border styles
+- `flexible` - Flexible border
+- `panoramic` - Panoramic layout
+- `triptych` - Three-panel layout
+- `mix` - Mixed layout
+- `squares` - Square grid layout
 
-Consult your TV's art mode settings for available options.
+Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's exact options.
 
 ## Troubleshooting
 
