@@ -70,7 +70,7 @@ class SamsungFrameClient:
                 self.tv = SamsungTVWS(
                     host=self.host, port=self.port, token_file=self.token_file, timeout=60
                 )
-
+                self.tv.open()
                 self.tv.art().supported()
                 self.logger.info(f"Connected to Samsung Frame TV at {self.host}")
 
@@ -257,9 +257,7 @@ class SamsungFrameClient:
         matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
 
         matte_list = self.tv.art().get_matte_list()
-        available_mattes = [
-            matte_type for elem in matte_list for matte_type in elem.values()
-        ]
+        available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]
 
         if matte not in available_mattes:
             raise ValueError(
@@ -280,7 +278,7 @@ class SamsungFrameClient:
             current_matte = art_item.get("matte_id")
 
             if not content_id:
-                self.logger.warning(f"Skipping art item without content_id")
+                self.logger.warning("Skipping art item without content_id")
                 failed += 1
                 continue
 
