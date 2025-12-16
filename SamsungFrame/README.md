@@ -183,6 +183,31 @@ This command:
 - Updates each art item to use the specified matte style
 - Reports success/failure/skipped counts
 
+### Cycle Through Images
+
+Manually cycle through your photos with a specified period (useful for testing or presentations):
+
+```bash
+# Cycle through user photos every 15 seconds (default)
+uv run python SamsungFrame/manage_samsung.py cycle-images
+
+# Custom period (30 seconds)
+uv run python SamsungFrame/manage_samsung.py cycle-images --period 30
+
+# Cycle through all art (including Samsung's pre-installed art)
+uv run python SamsungFrame/manage_samsung.py cycle-images --all --period 10
+```
+
+This command:
+
+- Enables art mode on the TV
+- Retrieves all available art (or only user-uploaded photos)
+- Cycles through each image with the specified period
+- Continues indefinitely until you press Ctrl+C
+- Logs each image change for monitoring
+
+**Note**: This is different from the TV's built-in slideshow. The cycle-images command gives you precise control over timing and which images to display.
+
 ## Architecture
 
 ### Core Components
