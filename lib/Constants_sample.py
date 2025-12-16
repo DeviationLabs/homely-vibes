@@ -37,6 +37,7 @@ PUSHOVER_TOKENS = {
     "NodeCheck": "token",
     "Powerwall": "token",
     "RachioFlume": "token",
+    "SamsungFrame": "token",
 }
 
 # WaterMonitor: Processing
@@ -150,6 +151,14 @@ FLUME_PASSWORD = "some pass"
 AUGUST_EMAIL = "your_august_email@example.com"
 AUGUST_PASSWORD = "your_august_password"
 AUGUST_PHONE = "+1234567890"
+
+# Samsung Frame TV Configuration
+SAMSUNG_FRAME_IP = "192.168.1.4"
+SAMSUNG_FRAME_PORT = 8002  # WebSocket port
+SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
+SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox_black"
+SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
+SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
 
 
 @dataclass
