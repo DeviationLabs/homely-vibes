@@ -72,10 +72,13 @@ class SamsungFrameClient:
                     self.logger.info("TV will display pairing prompt - accept on TV screen")
                     self.logger.info(f"Token will be saved to: {self.token_file}")
 
-                self.tv = SamsungTVWS(host=self.host, port=self.port, token_file=self.token_file)
+                self.tv = SamsungTVWS(
+                    host=self.host, port=self.port, token_file=self.token_file, timeout=20
+                )
 
                 self.tv.art().supported()
                 self.logger.info(f"Connected to Samsung Frame TV at {self.host}")
+                self.logger.info(f"Token file: {self.token_file}")
 
                 if os.path.exists(self.token_file):
                     os.chmod(self.token_file, 0o600)
@@ -230,6 +233,11 @@ class SamsungFrameClient:
 
         try:
             art_list = self.tv.art().available()
+            if isinstance(art_list, dict) and art_list.get("event") == "ms.channel.timeOut":
+                self.logger.warning(
+                    "TV art list request timed out - TV may be busy or slow to respond"
+                )
+                return []
             self.logger.info(f"Retrieved {len(art_list)} art items from TV")
             return cast(List[Dict[str, Any]], art_list)
         except Exception as e:
@@ -262,3 +270,12 @@ class SamsungFrameClient:
         except Exception as e:
             self.logger.error(f"Error starting slideshow: {e}")
             return False
+
+    def close(self) -> None:
+        """Close connection to TV."""
+        if self.tv:
+            try:
+                self.tv.close()
+                self.logger.info("Closed connection to TV")
+            except Exception as e:
+                self.logger.warning(f"Error closing TV connection: {e}")

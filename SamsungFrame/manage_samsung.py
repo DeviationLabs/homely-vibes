@@ -121,6 +121,7 @@ def run_upload(args: argparse.Namespace) -> int:
             return 1
 
         logger.info("Upload workflow complete!")
+        client.close()
         return 0
 
     except KeyboardInterrupt:
@@ -142,6 +143,9 @@ def run_upload(args: argparse.Namespace) -> int:
             priority=1,
         )
         return 1
+    finally:
+        if "client" in locals():
+            client.close()
 
 
 def show_status(_args: argparse.Namespace) -> int:
@@ -170,11 +174,15 @@ def show_status(_args: argparse.Namespace) -> int:
         except Exception as e:
             logger.warning(f"Could not retrieve art list: {e}")
 
+        client.close()
         return 0
 
     except Exception as e:
         logger.error(f"Error checking status: {e}")
         return 1
+    finally:
+        if "client" in locals():
+            client.close()
 
 
 def list_art(_args: argparse.Namespace) -> int:
@@ -200,11 +208,15 @@ def list_art(_args: argparse.Namespace) -> int:
             art_id = art.get("content_id", "Unknown ID")
             logger.info(f"  {i}. ID: {art_id}")
 
+        client.close()
         return 0
 
     except Exception as e:
         logger.error(f"Error listing art: {e}")
         return 1
+    finally:
+        if "client" in locals():
+            client.close()
 
 
 def send_upload_notification(summary: ImageUploadSummary, matte: str) -> None:
