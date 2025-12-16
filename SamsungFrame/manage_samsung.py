@@ -59,6 +59,19 @@ def main() -> int:
         help=f"Matte style (default: {Constants.SAMSUNG_FRAME_DEFAULT_MATTE})",
     )
 
+    cycle_parser = subparsers.add_parser(
+        "cycle-images", help="Cycle through images with specified period"
+    )
+    cycle_parser.add_argument(
+        "--period",
+        type=int,
+        default=15,
+        help="Time in seconds between image changes (default: 15)",
+    )
+    cycle_parser.add_argument(
+        "--all", action="store_true", help="Cycle through all art (not just user photos)"
+    )
+
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -80,6 +93,8 @@ def main() -> int:
         return download_thumbnails(args)
     elif args.command == "update-mattes":
         return update_mattes(args)
+    elif args.command == "cycle-images":
+        return cycle_images(args)
 
     return 0
 
@@ -355,6 +370,34 @@ def update_mattes(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Error updating mattes: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def cycle_images(args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        user_photos_only = not args.all
+        client.cycle_images(period=args.period, user_photos_only=user_photos_only)
+
+        client.close()
+        return 0
+
+    except KeyboardInterrupt:
+        logger.info("Image cycling stopped by user")
+        return 0
+    except Exception as e:
+        logger.error(f"Error cycling images: {e}")
         return 1
     finally:
         if "client" in locals():
