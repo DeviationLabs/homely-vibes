@@ -264,11 +264,10 @@ def update_mattes(args: argparse.Namespace) -> int:
         result = client.update_all_mattes(matte)
 
         logger.info(
-            f"Updated {result['updated']}/{result['total']} art items to matte '{matte}'"
+            f"Results: {result['updated']} updated, "
+            f"{result['skipped']} skipped, "
+            f"{result['failed']} failed (Total: {result['total']})"
         )
-
-        if result["failed"] > 0:
-            logger.warning(f"Failed to update {result['failed']} art items")
 
         client.close()
         return 0 if result["failed"] == 0 else 1

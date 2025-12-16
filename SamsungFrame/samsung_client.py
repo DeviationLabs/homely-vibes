@@ -256,23 +256,43 @@ class SamsungFrameClient:
 
         matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
 
+        matte_list = self.tv.art().get_matte_list()
+        available_mattes = [
+            matte_type for elem in matte_list for matte_type in elem.values()
+        ]
+
+        if matte not in available_mattes:
+            raise ValueError(
+                f"Invalid matte type: {matte}. Supported: {', '.join(available_mattes)}"
+            )
+
         art_list = self.get_available_art()
         if not art_list:
             self.logger.warning("No art found on TV to update")
-            return {"total": 0, "updated": 0, "failed": 0}
+            return {"total": 0, "updated": 0, "skipped": 0, "failed": 0}
 
         updated = 0
+        skipped = 0
         failed = 0
 
         for art_item in art_list:
             content_id = art_item.get("content_id")
+            current_matte = art_item.get("matte_id")
+
             if not content_id:
-                self.logger.warning(f"Skipping art item without content_id: {art_item}")
+                self.logger.warning(f"Skipping art item without content_id")
                 failed += 1
                 continue
 
+            if current_matte == matte:
+                self.logger.info(f"Art {content_id} already has matte '{matte}', skipping")
+                skipped += 1
+                continue
+
             try:
-                self.logger.info(f"Updating matte for art ID {content_id} to '{matte}'")
+                self.logger.info(
+                    f"Changing matte for {content_id} from '{current_matte}' to '{matte}'"
+                )
                 self.tv.art().change_matte(content_id, matte)
                 updated += 1
             except Exception as e:
@@ -280,9 +300,9 @@ class SamsungFrameClient:
                 failed += 1
 
         self.logger.info(
-            f"Matte update complete: {updated}/{len(art_list)} successful, {failed} failed"
+            f"Matte update complete: {updated} updated, {skipped} skipped, {failed} failed"
         )
-        return {"total": len(art_list), "updated": updated, "failed": failed}
+        return {"total": len(art_list), "updated": updated, "skipped": skipped, "failed": failed}
 
     def enable_art_mode(self) -> bool:
         if not self.tv:
