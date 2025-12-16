@@ -20,7 +20,7 @@ Add your Samsung Frame TV settings to `lib/Constants.py`:
 
 ```python
 # Samsung Frame TV Configuration
-SAMSUNG_FRAME_IP = "192.168.1.4"  # Your TV's IP address
+SAMSUNG_FRAME_IP = "192.168.XX.YY"  # Your TV's IP address
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port (default: 8002)
 SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
 SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox_black"  # Black border style
