@@ -31,6 +31,8 @@ dependencies = [
     "libpyfoscam>=1.2.2",
     "requests-oauthlib>=2.0.0",
     "websocket>=0.2.1",
+    "samsungtvws>=2.6.0",
+    "Pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
@@ -129,7 +131,7 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI"]
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August"]
+testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 
