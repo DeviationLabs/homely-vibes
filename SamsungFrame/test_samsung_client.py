@@ -46,7 +46,7 @@ class TestSamsungFrameClient:
     def test_connect_success(
         self,
         mock_open: Mock,
-        mock_chmod: Mock,
+        _mock_chmod: Mock,
         _mock_makedirs: Mock,
         mock_exists: Mock,
         mock_tv: Mock,
@@ -55,7 +55,6 @@ class TestSamsungFrameClient:
         mock_exists.return_value = True
         mock_tv_instance = Mock()
         mock_tv_instance.art().supported.return_value = True
-        mock_tv_instance._get_token.return_value = "test-token-123"
         mock_tv.return_value = mock_tv_instance
 
         client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
@@ -64,9 +63,6 @@ class TestSamsungFrameClient:
         assert result is True
         assert client.tv is not None
         mock_tv.assert_called_once()
-        mock_open.assert_called_once_with("/tmp/token.txt", "w")
-        assert mock_chmod.call_count >= 1
-        mock_chmod.assert_any_call("/tmp/token.txt", 0o600)
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("os.path.exists")
@@ -77,7 +73,7 @@ class TestSamsungFrameClient:
         self,
         mock_open: Mock,
         mock_sleep: Mock,
-        mock_chmod: Mock,
+        _mock_chmod: Mock,
         mock_exists: Mock,
         mock_tv: Mock,
     ) -> None:
@@ -89,7 +85,6 @@ class TestSamsungFrameClient:
 
         mock_tv_instance_success = Mock()
         mock_tv_instance_success.art().supported.return_value = True
-        mock_tv_instance_success._get_token.return_value = "test-token-456"
 
         mock_tv.side_effect = [
             mock_tv_instance_fail,

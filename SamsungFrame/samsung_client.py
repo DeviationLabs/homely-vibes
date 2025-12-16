@@ -68,24 +68,11 @@ class SamsungFrameClient:
                     self.logger.info(f"Token will be saved to: {self.token_file}")
 
                 self.tv = SamsungTVWS(
-                    host=self.host, port=self.port, token_file=self.token_file, timeout=20
+                    host=self.host, port=self.port, token_file=self.token_file, timeout=60
                 )
-
+                self.tv.open()
                 self.tv.art().supported()
                 self.logger.info(f"Connected to Samsung Frame TV at {self.host}")
-
-                if hasattr(self.tv, "_get_token") and callable(self.tv._get_token):
-                    try:
-                        token = self.tv._get_token()
-                        if token:
-                            with open(self.token_file, "w") as f:
-                                f.write(token)
-                            os.chmod(self.token_file, 0o600)
-                            self.logger.info(f"Token saved to: {self.token_file}")
-                        else:
-                            self.logger.warning("Token retrieved but empty")
-                    except Exception as e:
-                        self.logger.warning(f"Could not extract token: {e}")
 
                 if os.path.exists(self.token_file):
                     os.chmod(self.token_file, 0o600)
@@ -118,6 +105,18 @@ class SamsungFrameClient:
         except Exception as e:
             self.logger.error(f"Error checking art mode support: {e}")
             return False
+
+    def get_device_info(self) -> Optional[Dict[str, Any]]:
+        if not self.tv:
+            self.logger.error("Not connected to TV - call connect() first")
+            return None
+
+        try:
+            device_info = self.tv.rest_device_info()
+            return device_info
+        except Exception as e:
+            self.logger.error(f"Error getting device info: {e}")
+            return None
 
     def validate_image_file(self, file_path: str) -> bool:
         try:
@@ -251,6 +250,101 @@ class SamsungFrameClient:
             self.logger.error(f"Error getting available art: {e}")
             return []
 
+    def get_available_mattes(self) -> List[str]:
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        try:
+            matte_list = self.tv.art().get_matte_list()
+            available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]
+            self.logger.info(f"Retrieved {len(available_mattes)} available matte types")
+            return available_mattes
+        except Exception as e:
+            self.logger.error(f"Error getting matte list: {e}")
+            return []
+
+    def update_all_mattes(self, matte: Optional[str] = None) -> Dict[str, int]:
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+
+        matte_list = self.tv.art().get_matte_list()
+        available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]
+
+        # Validate matte with optional color suffix
+        valid_colors = [
+            "seafoam",
+            "black",
+            "neutral",
+            "antique",
+            "warm",
+            "polar",
+            "sand",
+            "sage",
+            "burgandy",
+            "navy",
+            "apricot",
+            "byzantine",
+            "lavender",
+            "redorange",
+            "skyblue",
+            "turqoise",
+        ]
+
+        if "_" in matte:
+            base_matte, color = matte.rsplit("_", 1)
+            if base_matte not in available_mattes:
+                raise ValueError(
+                    f"Invalid base matte type: {base_matte}. "
+                    f"Supported: {', '.join(available_mattes)}"
+                )
+            if color not in valid_colors:
+                raise ValueError(f"Invalid color: {color}. Supported: {', '.join(valid_colors)}")
+        else:
+            if matte not in available_mattes:
+                raise ValueError(
+                    f"Invalid matte type: {matte}. Supported: {', '.join(available_mattes)}"
+                )
+
+        art_list = self.get_available_art()
+        if not art_list:
+            self.logger.warning("No art found on TV to update")
+            return {"total": 0, "updated": 0, "skipped": 0, "failed": 0}
+
+        updated = 0
+        skipped = 0
+        failed = 0
+
+        for art_item in art_list:
+            content_id = art_item.get("content_id")
+            current_matte = art_item.get("matte_id")
+
+            if not content_id:
+                self.logger.warning("Skipping art item without content_id")
+                failed += 1
+                continue
+
+            if current_matte == matte:
+                self.logger.info(f"Art {content_id} already has matte '{matte}', skipping")
+                skipped += 1
+                continue
+
+            try:
+                self.logger.info(
+                    f"Changing matte for {content_id} from '{current_matte}' to '{matte}'"
+                )
+                self.tv.art().change_matte(content_id, matte)
+                updated += 1
+            except Exception as e:
+                self.logger.error(f"Failed to update matte for art ID {content_id}: {e}")
+                failed += 1
+
+        self.logger.info(
+            f"Matte update complete: {updated} updated, {skipped} skipped, {failed} failed"
+        )
+        return {"total": len(art_list), "updated": updated, "skipped": skipped, "failed": failed}
+
     def enable_art_mode(self) -> bool:
         if not self.tv:
             self.logger.error("Not connected to TV - call connect() first")
@@ -277,6 +371,50 @@ class SamsungFrameClient:
         except Exception as e:
             self.logger.error(f"Error starting slideshow: {e}")
             return False
+
+    def download_thumbnails(self, output_dir: str, user_photos_only: bool = True) -> Dict[str, int]:
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+            self.logger.info(f"Created output directory: {output_dir}")
+
+        art_list = self.get_available_art()
+        if not art_list:
+            self.logger.warning("No art found on TV")
+            return {"total": 0, "downloaded": 0, "failed": 0}
+
+        if user_photos_only:
+            art_list = [art for art in art_list if art.get("content_id", "").startswith("MY_F")]
+            self.logger.info(f"Filtering to {len(art_list)} user-uploaded photos")
+
+        downloaded = 0
+        failed = 0
+
+        for art_item in art_list:
+            content_id = art_item.get("content_id")
+            if not content_id:
+                self.logger.warning("Skipping art item without content_id")
+                failed += 1
+                continue
+
+            try:
+                self.logger.info(f"Downloading thumbnail for {content_id}...")
+                thumbnail_data = self.tv.art().get_thumbnail(content_id)
+
+                output_path = os.path.join(output_dir, f"{content_id}.jpg")
+                with open(output_path, "wb") as f:
+                    f.write(thumbnail_data)
+
+                self.logger.info(f"Saved thumbnail to {output_path}")
+                downloaded += 1
+            except Exception as e:
+                self.logger.error(f"Failed to download thumbnail for {content_id}: {e}")
+                failed += 1
+
+        self.logger.info(f"Thumbnail download complete: {downloaded} downloaded, {failed} failed")
+        return {"total": len(art_list), "downloaded": downloaded, "failed": failed}
 
     def close(self) -> None:
         """Close connection to TV."""
