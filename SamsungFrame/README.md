@@ -99,7 +99,7 @@ uv run python SamsungFrame/manage_samsung.py upload /path/to/images --notify
 
 ### Check TV Status
 
-Check connection and art mode support:
+Check TV connection and display comprehensive information:
 
 ```bash
 uv run python SamsungFrame/manage_samsung.py status
@@ -107,11 +107,23 @@ uv run python SamsungFrame/manage_samsung.py status
 
 Example output:
 ```
-Checking connection to Samsung Frame TV at 192.168.1.4...
-Connection successful!
-Art mode: Supported
-Available art: 42 items
+Connecting to Samsung Frame TV at 192.168.1.4...
+==================================================
+TV STATUS
+==================================================
+Model: QN55LS03FADXZA
+Name: 55" The Frame
+Firmware: Unknown
+Resolution: 3840x2160
+Power State: on
+OS: Tizen
+Network Type: wireless
+Frame TV Support: true
+Available Art: 42 items
+Art Mode: Supported and working
 ```
+
+**Note:** Status command uses REST API only, so it won't trigger the pairing prompt. Run an upload command first to establish authentication.
 
 ### List Available Art
 
