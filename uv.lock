@@ -950,10 +950,20 @@ streamlit = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "codespell" },
+    { name = "deptry" },
+    { name = "flake8" },
     { name = "mypy" },
     { name = "pandas-stubs" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
     { name = "pytest-forked" },
+    { name = "pytest-mock" },
+    { name = "ruff" },
+    { name = "semgrep" },
+    { name = "types-paramiko" },
     { name = "types-requests" },
+    { name = "vulture" },
 ]
 
 [package.metadata]
@@ -1002,10 +1012,20 @@ provides-extras = ["iot", "streamlit", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "codespell", specifier = ">=2.0.0" },
+    { name = "deptry", specifier = ">=0.23.1" },
+    { name = "flake8", specifier = ">=5.0.0" },
     { name = "mypy", specifier = ">=1.17.1" },
     { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
+    { name = "pytest-asyncio", specifier = ">=0.21.0" },
+    { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "pytest-forked", specifier = ">=1.6.0" },
+    { name = "pytest-mock", specifier = ">=3.10.0" },
+    { name = "ruff", specifier = ">=0.13.0" },
+    { name = "semgrep", specifier = ">=1.0.0" },
+    { name = "types-paramiko", specifier = ">=3.4.0" },
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
+    { name = "vulture", specifier = ">=2.0.0" },
 ]
 
 [[package]]
