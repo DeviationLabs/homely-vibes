@@ -304,9 +304,7 @@ class SamsungFrameClient:
                     f"Supported: {', '.join(available_mattes)}"
                 )
             if color not in valid_colors:
-                raise ValueError(
-                    f"Invalid color: {color}. " f"Supported: {', '.join(valid_colors)}"
-                )
+                raise ValueError(f"Invalid color: {color}. Supported: {', '.join(valid_colors)}")
         else:
             if matte not in available_mattes:
                 raise ValueError(
