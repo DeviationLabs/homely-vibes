@@ -272,10 +272,46 @@ class SamsungFrameClient:
         matte_list = self.tv.art().get_matte_list()
         available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]
 
-        if matte not in available_mattes:
-            raise ValueError(
-                f"Invalid matte type: {matte}. Supported: {', '.join(available_mattes)}"
-            )
+        # Validate matte with optional color suffix
+        valid_colors = getattr(
+            Constants,
+            "SAMSUNG_FRAME_VALID_COLORS",
+            [
+                "seafoam",
+                "black",
+                "neutral",
+                "antique",
+                "warm",
+                "polar",
+                "sand",
+                "sage",
+                "burgandy",
+                "navy",
+                "apricot",
+                "byzantine",
+                "lavender",
+                "redorange",
+                "skyblue",
+                "turqoise",
+            ],
+        )
+
+        if "_" in matte:
+            base_matte, color = matte.rsplit("_", 1)
+            if base_matte not in available_mattes:
+                raise ValueError(
+                    f"Invalid base matte type: {base_matte}. "
+                    f"Supported: {', '.join(available_mattes)}"
+                )
+            if color not in valid_colors:
+                raise ValueError(
+                    f"Invalid color: {color}. " f"Supported: {', '.join(valid_colors)}"
+                )
+        else:
+            if matte not in available_mattes:
+                raise ValueError(
+                    f"Invalid matte type: {matte}. Supported: {', '.join(available_mattes)}"
+                )
 
         art_list = self.get_available_art()
         if not art_list:

@@ -163,15 +163,25 @@ Change the matte (border) style for all art already on the TV:
 # Update all art to default black border
 uv run python SamsungFrame/manage_samsung.py update-mattes
 
-# Update all art to a specific matte style
-uv run python SamsungFrame/manage_samsung.py update-mattes --matte modern_apricot
+# Update with base style only
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte shadowbox
+
+# Update with style and color (e.g., shadowbox with black color)
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte shadowbox_black
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte modern_warm
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte flexible_polar
 ```
+
+**Matte Format**: `<base_style>` or `<base_style>_<color>`
+
+Valid colors: seafoam, black, neutral, antique, warm, polar, sand, sage, burgandy, navy, apricot, byzantine, lavender, redorange, skyblue, turqoise
 
 This command:
 
 - Retrieves all art currently on the TV
+- Validates matte style and optional color
 - Updates each art item to use the specified matte style
-- Reports success/failure counts
+- Reports success/failure/skipped counts
 
 ## Architecture
 

@@ -159,6 +159,24 @@ SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
 SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
+SAMSUNG_FRAME_VALID_COLORS = [
+    "seafoam",
+    "black",
+    "neutral",
+    "antique",
+    "warm",
+    "polar",
+    "sand",
+    "sage",
+    "burgandy",
+    "navy",
+    "apricot",
+    "byzantine",
+    "lavender",
+    "redorange",
+    "skyblue",
+    "turqoise",
+]
 
 
 @dataclass
