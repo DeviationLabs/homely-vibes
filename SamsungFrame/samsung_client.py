@@ -113,7 +113,7 @@ class SamsungFrameClient:
 
         try:
             device_info = self.tv.rest_device_info()
-            return device_info  # type: ignore[return-value]
+            return device_info
         except Exception as e:
             self.logger.error(f"Error getting device info: {e}")
             return None
@@ -274,23 +274,23 @@ class SamsungFrameClient:
 
         # Validate matte with optional color suffix
         valid_colors = [
-                "seafoam",
-                "black",
-                "neutral",
-                "antique",
-                "warm",
-                "polar",
-                "sand",
-                "sage",
-                "burgandy",
-                "navy",
-                "apricot",
-                "byzantine",
-                "lavender",
-                "redorange",
-                "skyblue",
-                "turqoise",
-            ]
+            "seafoam",
+            "black",
+            "neutral",
+            "antique",
+            "warm",
+            "polar",
+            "sand",
+            "sage",
+            "burgandy",
+            "navy",
+            "apricot",
+            "byzantine",
+            "lavender",
+            "redorange",
+            "skyblue",
+            "turqoise",
+        ]
 
         if "_" in matte:
             base_matte, color = matte.rsplit("_", 1)

@@ -950,7 +950,10 @@ streamlit = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "mypy" },
+    { name = "pandas-stubs" },
     { name = "pytest-forked" },
+    { name = "types-requests" },
 ]
 
 [package.metadata]
@@ -998,7 +1001,12 @@ requires-dist = [
 provides-extras = ["iot", "streamlit", "dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest-forked", specifier = ">=1.6.0" }]
+dev = [
+    { name = "mypy", specifier = ">=1.17.1" },
+    { name = "pandas-stubs", specifier = ">=2.3.2.250926" },
+    { name = "pytest-forked", specifier = ">=1.6.0" },
+    { name = "types-requests", specifier = ">=2.32.4.20250913" },
+]
 
 [[package]]
 name = "httpcore"

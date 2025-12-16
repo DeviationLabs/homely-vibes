@@ -229,7 +229,10 @@ ignore_errors = true
 
 [dependency-groups]
 dev = [
+    "mypy>=1.17.1",
+    "pandas-stubs>=2.3.2.250926",
     "pytest-forked>=1.6.0",
+    "types-requests>=2.32.4.20250913",
 ]
 
 
