@@ -43,7 +43,7 @@ class TestSamsungFrameClient:
     @patch("os.makedirs")
     @patch("os.chmod")
     def test_connect_success(
-        self, mock_chmod: Mock, mock_makedirs: Mock, mock_exists: Mock, mock_tv: Mock
+        self, mock_chmod: Mock, _mock_makedirs: Mock, mock_exists: Mock, mock_tv: Mock
     ) -> None:
         """Test successful connection to TV."""
         # Setup mocks
