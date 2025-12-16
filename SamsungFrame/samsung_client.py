@@ -68,7 +68,7 @@ class SamsungFrameClient:
                     self.logger.info(f"Token will be saved to: {self.token_file}")
 
                 self.tv = SamsungTVWS(
-                    host=self.host, port=self.port, token_file=self.token_file, timeout=20
+                    host=self.host, port=self.port, token_file=self.token_file, timeout=60
                 )
 
                 self.tv.art().supported()
@@ -105,6 +105,18 @@ class SamsungFrameClient:
         except Exception as e:
             self.logger.error(f"Error checking art mode support: {e}")
             return False
+
+    def get_device_info(self) -> Optional[Dict[str, Any]]:
+        if not self.tv:
+            self.logger.error("Not connected to TV - call connect() first")
+            return None
+
+        try:
+            device_info = self.tv.rest_device_info()
+            return cast(Dict[str, Any], device_info)
+        except Exception as e:
+            self.logger.error(f"Error getting device info: {e}")
+            return None
 
     def validate_image_file(self, file_path: str) -> bool:
         try:

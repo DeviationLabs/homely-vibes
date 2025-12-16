@@ -166,23 +166,41 @@ def show_status(_args: argparse.Namespace) -> int:
 
     try:
         client = SamsungFrameClient()
-        logger.info(f"Checking connection to Samsung Frame TV at {client.host}...")
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
 
         if not client.connect():
             logger.error(f"Failed to connect to TV at {client.host}")
             logger.error("Verify TV is powered on and on same network")
             return 1
 
-        logger.info("Connection successful!")
+        logger.info("=" * 50)
+        logger.info("TV STATUS")
+        logger.info("=" * 50)
+
+        device_info = client.get_device_info()
+        if device_info:
+            device = device_info.get("device", {})
+            logger.info(f"Model: {device.get('modelName', 'Unknown')}")
+            logger.info(f"Name: {device.get('name', 'Unknown')}")
+            logger.info(f"Firmware: {device.get('firmwareVersion', 'Unknown')}")
+            logger.info(f"Resolution: {device.get('resolution', 'Unknown')}")
+            logger.info(f"Power State: {device.get('PowerState', 'Unknown')}")
+            logger.info(f"OS: {device.get('OS', 'Unknown')}")
+            logger.info(f"Network Type: {device.get('networkType', 'Unknown')}")
+
+            frame_tv = device.get("FrameTVSupport", "false")
+            logger.info(f"Frame TV Support: {frame_tv}")
+
+            if frame_tv == "true":
+                art_list = client.get_available_art()
+                logger.info(f"Available Art: {len(art_list)} items")
+        else:
+            logger.warning("Could not retrieve device info")
 
         if client.check_art_support():
-            logger.info("Art mode: Supported")
+            logger.info("Art Mode: Supported and working")
         else:
-            logger.warning("Art mode: Not supported or unavailable")
-            return 1
-
-        logger.info("Note: Skipping art list check - use 'list-art' command if needed")
-        logger.info("(Art list queries can be slow and timeout on some TV models)")
+            logger.warning("Art Mode: Not supported or unavailable")
 
         client.close()
         return 0
