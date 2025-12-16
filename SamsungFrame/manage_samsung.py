@@ -39,6 +39,15 @@ def main() -> int:
 
     subparsers.add_parser("status", help="Check TV connection and art mode support")
     subparsers.add_parser("list-art", help="List available art on TV")
+    subparsers.add_parser("list-mattes", help="List available matte styles")
+
+    download_parser = subparsers.add_parser(
+        "download-thumbnails", help="Download thumbnails for art on TV"
+    )
+    download_parser.add_argument("output_dir", type=str, help="Directory to save thumbnails")
+    download_parser.add_argument(
+        "--all", action="store_true", help="Download all art (not just user photos)"
+    )
 
     matte_parser = subparsers.add_parser(
         "update-mattes", help="Update matte style for all art on TV"
@@ -65,6 +74,10 @@ def main() -> int:
         return show_status(args)
     elif args.command == "list-art":
         return list_art(args)
+    elif args.command == "list-mattes":
+        return list_mattes(args)
+    elif args.command == "download-thumbnails":
+        return download_thumbnails(args)
     elif args.command == "update-mattes":
         return update_mattes(args)
 
@@ -241,6 +254,74 @@ def list_art(_args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Error listing art: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def list_mattes(_args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        logger.info("Retrieving available matte styles...")
+        mattes = client.get_available_mattes()
+
+        if not mattes:
+            logger.warning("No matte styles available")
+            return 0
+
+        logger.info(f"Available matte styles ({len(mattes)} options):")
+        for i, matte in enumerate(mattes, 1):
+            logger.info(f"  {i}. {matte}")
+
+        client.close()
+        return 0
+
+    except Exception as e:
+        logger.error(f"Error listing mattes: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def download_thumbnails(args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        user_photos_only = not args.all
+        if user_photos_only:
+            logger.info("Downloading thumbnails for user-uploaded photos only...")
+        else:
+            logger.info("Downloading thumbnails for all art on TV...")
+
+        result = client.download_thumbnails(args.output_dir, user_photos_only=user_photos_only)
+
+        logger.info(
+            f"Results: {result['downloaded']} downloaded, "
+            f"{result['failed']} failed (Total: {result['total']})"
+        )
+
+        client.close()
+        return 0 if result["failed"] == 0 else 1
+
+    except Exception as e:
+        logger.error(f"Error downloading thumbnails: {e}")
         return 1
     finally:
         if "client" in locals():

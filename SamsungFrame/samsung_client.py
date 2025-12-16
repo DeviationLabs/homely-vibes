@@ -250,6 +250,19 @@ class SamsungFrameClient:
             self.logger.error(f"Error getting available art: {e}")
             return []
 
+    def get_available_mattes(self) -> List[str]:
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        try:
+            matte_list = self.tv.art().get_matte_list()
+            available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]
+            self.logger.info(f"Retrieved {len(available_mattes)} available matte types")
+            return available_mattes
+        except Exception as e:
+            self.logger.error(f"Error getting matte list: {e}")
+            return []
+
     def update_all_mattes(self, matte: Optional[str] = None) -> Dict[str, int]:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
@@ -328,6 +341,50 @@ class SamsungFrameClient:
         except Exception as e:
             self.logger.error(f"Error starting slideshow: {e}")
             return False
+
+    def download_thumbnails(self, output_dir: str, user_photos_only: bool = True) -> Dict[str, int]:
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+            self.logger.info(f"Created output directory: {output_dir}")
+
+        art_list = self.get_available_art()
+        if not art_list:
+            self.logger.warning("No art found on TV")
+            return {"total": 0, "downloaded": 0, "failed": 0}
+
+        if user_photos_only:
+            art_list = [art for art in art_list if art.get("content_id", "").startswith("MY_F")]
+            self.logger.info(f"Filtering to {len(art_list)} user-uploaded photos")
+
+        downloaded = 0
+        failed = 0
+
+        for art_item in art_list:
+            content_id = art_item.get("content_id")
+            if not content_id:
+                self.logger.warning("Skipping art item without content_id")
+                failed += 1
+                continue
+
+            try:
+                self.logger.info(f"Downloading thumbnail for {content_id}...")
+                thumbnail_data = self.tv.art().get_thumbnail(content_id)
+
+                output_path = os.path.join(output_dir, f"{content_id}.jpg")
+                with open(output_path, "wb") as f:
+                    f.write(thumbnail_data)
+
+                self.logger.info(f"Saved thumbnail to {output_path}")
+                downloaded += 1
+            except Exception as e:
+                self.logger.error(f"Failed to download thumbnail for {content_id}: {e}")
+                failed += 1
+
+        self.logger.info(f"Thumbnail download complete: {downloaded} downloaded, {failed} failed")
+        return {"total": len(art_list), "downloaded": downloaded, "failed": failed}
 
     def close(self) -> None:
         """Close connection to TV."""

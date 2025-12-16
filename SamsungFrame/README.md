@@ -23,7 +23,7 @@ Add your Samsung Frame TV settings to `lib/Constants.py`:
 SAMSUNG_FRAME_IP = "192.168.XX.YY"  # Your TV's IP address
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port (default: 8002)
 SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
-SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox_black"  # Black border style
+SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
 
@@ -133,6 +133,28 @@ List all art currently on the TV:
 uv run python SamsungFrame/manage_samsung.py list-art
 ```
 
+### List Available Matte Styles
+
+See what matte (border) styles your TV supports:
+
+```bash
+uv run python SamsungFrame/manage_samsung.py list-mattes
+```
+
+Common options include: `shadowbox` (black), `none`, `modern`, `flexible`, `panoramic`
+
+### Download Thumbnails
+
+Download thumbnail images for your uploaded photos:
+
+```bash
+# Download only user-uploaded photos
+uv run python SamsungFrame/manage_samsung.py download-thumbnails ~/Downloads/samsung_thumbnails
+
+# Download all art (including Samsung's pre-installed art)
+uv run python SamsungFrame/manage_samsung.py download-thumbnails ~/Downloads/samsung_thumbnails --all
+```
+
 ### Update Mattes for Existing Art
 
 Change the matte (border) style for all art already on the TV:
@@ -184,14 +206,18 @@ This command:
 
 ## Supported Matte Styles
 
-Common matte options (may vary by TV model):
+Use the `list-mattes` command to see what your TV supports. Common options:
 
-- `shadowbox_black` - Black border (default)
-- `modern_apricot` - Warm colored border
-- `classic_white` - White border
-- `modern_grey` - Grey border
+- `shadowbox` - Black border (default)
+- `none` - No border
+- `modern`, `modernthin`, `modernwide` - Modern border styles
+- `flexible` - Flexible border
+- `panoramic` - Panoramic layout
+- `triptych` - Three-panel layout
+- `mix` - Mixed layout
+- `squares` - Square grid layout
 
-Consult your TV's art mode settings for available options.
+Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's exact options.
 
 ## Troubleshooting
 
