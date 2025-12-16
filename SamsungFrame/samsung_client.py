@@ -76,14 +76,6 @@ class SamsungFrameClient:
 
                 if os.path.exists(self.token_file):
                     os.chmod(self.token_file, 0o600)
-                    self.logger.info(f"Token file found at: {self.token_file}")
-                    with open(self.token_file) as f:
-                        token_preview = f.read()[:20]
-                        self.logger.debug(f"Token preview: {token_preview}...")
-                else:
-                    self.logger.warning(
-                        "Token file not created by library - will need to accept pairing on next run"
-                    )
 
                 return True
 
@@ -245,6 +237,40 @@ class SamsungFrameClient:
         except Exception as e:
             self.logger.error(f"Error getting available art: {e}")
             return []
+
+    def update_all_mattes(self, matte: Optional[str] = None) -> Dict[str, int]:
+        if not self.tv:
+            raise RuntimeError("Not connected to TV - call connect() first")
+
+        matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+
+        art_list = self.get_available_art()
+        if not art_list:
+            self.logger.warning("No art found on TV to update")
+            return {"total": 0, "updated": 0, "failed": 0}
+
+        updated = 0
+        failed = 0
+
+        for art_item in art_list:
+            content_id = art_item.get("content_id")
+            if not content_id:
+                self.logger.warning(f"Skipping art item without content_id: {art_item}")
+                failed += 1
+                continue
+
+            try:
+                self.logger.info(f"Updating matte for art ID {content_id} to '{matte}'")
+                self.tv.art().change_matte(content_id, matte)
+                updated += 1
+            except Exception as e:
+                self.logger.error(f"Failed to update matte for art ID {content_id}: {e}")
+                failed += 1
+
+        self.logger.info(
+            f"Matte update complete: {updated}/{len(art_list)} successful, {failed} failed"
+        )
+        return {"total": len(art_list), "updated": updated, "failed": failed}
 
     def enable_art_mode(self) -> bool:
         if not self.tv:

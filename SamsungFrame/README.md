@@ -44,19 +44,24 @@ uv sync
 
 ### First-Time Authentication
 
-On first run, the TV will display a pairing prompt:
+On first run of an **upload** command, the TV will display a pairing prompt:
 
-1. Run any command (e.g., `uv run python SamsungFrame/manage_samsung.py status`)
+1. Run upload command: `uv run python SamsungFrame/manage_samsung.py upload /path/to/images`
 2. Check your TV screen for the pairing prompt
 3. Accept the connection on your TV
-4. The authentication token will be saved to `~/logs/samsung_frame_token.txt`
-5. Subsequent runs will use the saved token
+4. The authentication token will be automatically saved to `~/logs/samsung_frame_token.txt`
+5. Subsequent uploads will use the saved token without requiring TV approval
 
-**Note**: If you need to re-pair (token not persisting), delete the token file and run the command again:
+**Important Notes:**
+
+- Token is only saved during WebSocket operations (upload). The `status` command uses REST API and won't trigger token exchange.
+- Once a token is saved, all operations (status, upload, list-art) will work without TV approval.
+
+**To re-pair:** Delete the token file and run an upload command:
 
 ```bash
 rm ~/logs/samsung_frame_token.txt
-uv run python SamsungFrame/manage_samsung.py status
+uv run python SamsungFrame/manage_samsung.py upload /path/to/images
 ```
 
 ## Usage
@@ -115,6 +120,24 @@ List all art currently on the TV:
 ```bash
 uv run python SamsungFrame/manage_samsung.py list-art
 ```
+
+### Update Mattes for Existing Art
+
+Change the matte (border) style for all art already on the TV:
+
+```bash
+# Update all art to default black border
+uv run python SamsungFrame/manage_samsung.py update-mattes
+
+# Update all art to a specific matte style
+uv run python SamsungFrame/manage_samsung.py update-mattes --matte modern_apricot
+```
+
+This command:
+
+- Retrieves all art currently on the TV
+- Updates each art item to use the specified matte style
+- Reports success/failure counts
 
 ## Architecture
 

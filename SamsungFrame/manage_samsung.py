@@ -39,6 +39,17 @@ def main() -> int:
 
     subparsers.add_parser("status", help="Check TV connection and art mode support")
     subparsers.add_parser("list-art", help="List available art on TV")
+
+    matte_parser = subparsers.add_parser(
+        "update-mattes", help="Update matte style for all art on TV"
+    )
+    matte_parser.add_argument(
+        "--matte",
+        type=str,
+        default=None,
+        help=f"Matte style (default: {Constants.SAMSUNG_FRAME_DEFAULT_MATTE})",
+    )
+
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -54,6 +65,8 @@ def main() -> int:
         return show_status(args)
     elif args.command == "list-art":
         return list_art(args)
+    elif args.command == "update-mattes":
+        return update_mattes(args)
 
     return 0
 
@@ -210,6 +223,40 @@ def list_art(_args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Error listing art: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def update_mattes(args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        matte = args.matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        logger.info(f"Updating all art mattes to '{matte}'...")
+
+        result = client.update_all_mattes(matte)
+
+        logger.info(
+            f"Updated {result['updated']}/{result['total']} art items to matte '{matte}'"
+        )
+
+        if result["failed"] > 0:
+            logger.warning(f"Failed to update {result['failed']} art items")
+
+        client.close()
+        return 0 if result["failed"] == 0 else 1
+
+    except Exception as e:
+        logger.error(f"Error updating mattes: {e}")
         return 1
     finally:
         if "client" in locals():
