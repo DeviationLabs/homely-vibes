@@ -113,7 +113,7 @@ class SamsungFrameClient:
 
         try:
             device_info = self.tv.rest_device_info()
-            return cast(Dict[str, Any], device_info)
+            return device_info  # type: ignore[return-value]
         except Exception as e:
             self.logger.error(f"Error getting device info: {e}")
             return None
