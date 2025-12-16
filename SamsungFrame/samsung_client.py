@@ -74,21 +74,16 @@ class SamsungFrameClient:
                 self.tv.art().supported()
                 self.logger.info(f"Connected to Samsung Frame TV at {self.host}")
 
-                if hasattr(self.tv, "_get_token") and callable(self.tv._get_token):
-                    try:
-                        token = self.tv._get_token()
-                        if token:
-                            with open(self.token_file, "w") as f:
-                                f.write(token)
-                            os.chmod(self.token_file, 0o600)
-                            self.logger.info(f"Token saved to: {self.token_file}")
-                        else:
-                            self.logger.warning("Token retrieved but empty")
-                    except Exception as e:
-                        self.logger.warning(f"Could not extract token: {e}")
-
                 if os.path.exists(self.token_file):
                     os.chmod(self.token_file, 0o600)
+                    self.logger.info(f"Token file found at: {self.token_file}")
+                    with open(self.token_file) as f:
+                        token_preview = f.read()[:20]
+                        self.logger.debug(f"Token preview: {token_preview}...")
+                else:
+                    self.logger.warning(
+                        "Token file not created by library - will need to accept pairing on next run"
+                    )
 
                 return True
 
