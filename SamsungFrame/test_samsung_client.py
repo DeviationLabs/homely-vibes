@@ -46,7 +46,7 @@ class TestSamsungFrameClient:
     def test_connect_success(
         self,
         mock_open: Mock,
-        mock_chmod: Mock,
+        _mock_chmod: Mock,
         _mock_makedirs: Mock,
         mock_exists: Mock,
         mock_tv: Mock,
@@ -73,7 +73,7 @@ class TestSamsungFrameClient:
         self,
         mock_open: Mock,
         mock_sleep: Mock,
-        mock_chmod: Mock,
+        _mock_chmod: Mock,
         mock_exists: Mock,
         mock_tv: Mock,
     ) -> None:
