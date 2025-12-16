@@ -49,8 +49,15 @@ On first run, the TV will display a pairing prompt:
 1. Run any command (e.g., `uv run python SamsungFrame/manage_samsung.py status`)
 2. Check your TV screen for the pairing prompt
 3. Accept the connection on your TV
-4. The authentication token will be automatically saved to `~/logs/samsung_frame_token.txt`
+4. The authentication token will be saved to `~/logs/samsung_frame_token.txt`
 5. Subsequent runs will use the saved token
+
+**Note**: If you need to re-pair (token not persisting), delete the token file and run the command again:
+
+```bash
+rm ~/logs/samsung_frame_token.txt
+uv run python SamsungFrame/manage_samsung.py status
+```
 
 ## Usage
 

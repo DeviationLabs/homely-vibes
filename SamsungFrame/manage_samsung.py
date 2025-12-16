@@ -168,11 +168,8 @@ def show_status(_args: argparse.Namespace) -> int:
             logger.warning("Art mode: Not supported or unavailable")
             return 1
 
-        try:
-            art_list = client.get_available_art()
-            logger.info(f"Available art: {len(art_list)} items")
-        except Exception as e:
-            logger.warning(f"Could not retrieve art list: {e}")
+        logger.info("Note: Skipping art list check - use 'list-art' command if needed")
+        logger.info("(Art list queries can be slow and timeout on some TV models)")
 
         client.close()
         return 0

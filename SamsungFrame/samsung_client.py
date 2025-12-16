@@ -78,10 +78,17 @@ class SamsungFrameClient:
 
                 self.tv.art().supported()
                 self.logger.info(f"Connected to Samsung Frame TV at {self.host}")
-                self.logger.info(f"Token file: {self.token_file}")
 
-                if os.path.exists(self.token_file):
+                if hasattr(self.tv, 'token') and self.tv.token:
+                    with open(self.token_file, 'w') as f:
+                        f.write(self.tv.token)
                     os.chmod(self.token_file, 0o600)
+                    self.logger.info(f"Token saved to: {self.token_file}")
+                elif os.path.exists(self.token_file):
+                    os.chmod(self.token_file, 0o600)
+                    self.logger.info(f"Token file exists: {self.token_file}")
+                else:
+                    self.logger.warning("No token to save - library may have handled it")
 
                 return True
 

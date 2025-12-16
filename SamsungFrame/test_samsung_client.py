@@ -42,14 +42,20 @@ class TestSamsungFrameClient:
     @patch("os.path.exists")
     @patch("os.makedirs")
     @patch("os.chmod")
+    @patch("builtins.open", create=True)
     def test_connect_success(
-        self, mock_chmod: Mock, _mock_makedirs: Mock, mock_exists: Mock, mock_tv: Mock
+        self,
+        mock_open: Mock,
+        mock_chmod: Mock,
+        _mock_makedirs: Mock,
+        mock_exists: Mock,
+        mock_tv: Mock,
     ) -> None:
         """Test successful connection to TV."""
-        # Setup mocks
         mock_exists.return_value = True
         mock_tv_instance = Mock()
         mock_tv_instance.art().supported.return_value = True
+        mock_tv_instance.token = "test-token-123"
         mock_tv.return_value = mock_tv_instance
 
         client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
@@ -58,24 +64,31 @@ class TestSamsungFrameClient:
         assert result is True
         assert client.tv is not None
         mock_tv.assert_called_once()
+        mock_open.assert_called_once_with("/tmp/token.txt", "w")
         mock_chmod.assert_called_once_with("/tmp/token.txt", 0o600)
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("os.path.exists")
     @patch("os.chmod")
     @patch("time.sleep")
+    @patch("builtins.open", create=True)
     def test_connect_with_retry(
-        self, mock_sleep: Mock, mock_chmod: Mock, mock_exists: Mock, mock_tv: Mock
+        self,
+        mock_open: Mock,
+        mock_sleep: Mock,
+        mock_chmod: Mock,
+        mock_exists: Mock,
+        mock_tv: Mock,
     ) -> None:
         """Test connection retry logic on failure."""
         mock_exists.return_value = True
 
-        # First two attempts fail, third succeeds
         mock_tv_instance_fail = Mock()
         mock_tv_instance_fail.art().supported.side_effect = ConnectionError("Connection failed")
 
         mock_tv_instance_success = Mock()
         mock_tv_instance_success.art().supported.return_value = True
+        mock_tv_instance_success.token = "test-token-456"
 
         mock_tv.side_effect = [
             mock_tv_instance_fail,
