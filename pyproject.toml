@@ -94,6 +94,7 @@ streamlit = "streamlit"
 [tool.deptry.per_rule_ignores]
 DEP001 = [
     "aiy",
+    "google",
     "google_auth_oauthlib",
     "pinecone",
     "langchain_pinecone",
