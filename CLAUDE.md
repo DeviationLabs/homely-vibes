@@ -16,19 +16,30 @@ make setup  # Installs Python 3.13.7, dependencies, Git submodules, and pre-comm
 # Development workflow
 make test           # Run all tests with pytest
 make lint           # Run all linters (ruff, mypy, vulture, semgrep, codespell, deptry)
-make lint-fix       # Auto-fix linting issues where possible
+make hooks          # Set up pre-commit hooks
+make clean          # Clean build artifacts and caches
 
 # Individual tools
 make ruff           # Code formatting and fixes
-make ruff-check     # Check code style without fixes
 make mypy           # Type checking
 make vulture        # Dead code detection
 make semgrep        # Security analysis
 make deptry         # Dependency analysis
+make codespell      # Spell checking
+
+# Test coverage
+make coverage       # Run tests with coverage report
+make coverage-html  # Generate HTML coverage report and open in browser
+make coverage-lcov  # Generate lcov coverage report
+
+# Docker environment (if needed)
+make colima         # Start colima Docker environment with disk space checks
 
 # Run specific modules
 uv run python Tesla/manage_power_clean.py
 uv run python RachioFlume/rfmanager.py
+uv run python August/august_manager.py monitor
+uv run python SamsungFrame/manage_samsung.py status
 ```
 
 ## Architecture Overview
@@ -37,8 +48,8 @@ uv run python RachioFlume/rfmanager.py
 This is a **modular IoT home automation system** with independent components that share common utilities:
 
 - **`lib/`**: Shared utilities (networking, notifications, logging, constants)
-- **Component modules**: Tesla, RachioFlume, NetworkCheck, NodeCheck, BrowserAlert, etc.
-- **AI/ML modules**: Bimpop.ai (RAG system), GarageCheck (computer vision)
+- **Component modules**: Tesla, RachioFlume, NetworkCheck, NodeCheck, BrowserAlert, August, SamsungFrame, etc.
+- **AI/ML modules**: BimpopAI (RAG system), GarageCheck (computer vision)
 - **Data processing**: WaterParser, WaterLogging
 
 ### Key Architectural Patterns
@@ -67,7 +78,8 @@ This is a **modular IoT home automation system** with independent components tha
 **Test Organization**:
 - Tests are co-located with source files (e.g., `Tesla/test_manage_power.py`)
 - Use pytest with asyncio support for async components
-- Test paths configured in pyproject.toml: `["Tesla", "WaterParser", "Bimpop.ai"]`
+- Test paths configured in pyproject.toml: `["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame"]`
+- **Note**: NodeCheck tests run in isolation (separate pytest invocation) due to subprocess management patterns
 
 **Running Tests**:
 ```bash
@@ -76,17 +88,32 @@ make test
 
 # Specific module tests
 uv run python -m pytest Tesla/test_manage_power.py -v
+uv run python -m pytest August/test_august_client.py -v
+uv run python -m pytest SamsungFrame/test_samsung_client.py -v
+
+# Specific test class
 uv run python -m pytest RachioFlume/test_integration.py::TestFlumeClient -v
+
+# Specific test function
+uv run python -m pytest Tesla/test_manage_power.py::test_powerwall_manager -v
+
+# NodeCheck runs in isolation (uses pytest-forked)
+uv run pytest NodeCheck
 ```
 
 ## Code Quality Standards
 
-**Linting Pipeline**: Pre-commit hooks run ruff formatting and secret scanning.
+**Linting Pipeline**: Pre-commit hooks automatically run on every commit:
+- `make ruff` - Code formatting and linting
+- `make test` - Full test suite execution
+- `scripts/secret-scan.sh` - Secret scanning
+- Conventional commit message format enforcement (e.g., `feat:`, `fix:`, `docs:`)
+
 **Type Checking**: mypy with strict configuration (Python 3.13 target)
 **Security**: semgrep for security analysis, secret-scan.sh for credential detection
 
 **Code Style**:
-- Black formatting (88 char line length)
+- ruff formatting (100 char line length)
 - ruff for linting and import sorting
 - Exclude `lib/TeslaPy/` from linting (external submodule)
 
@@ -97,12 +124,32 @@ uv run python -m pytest RachioFlume/test_integration.py::TestFlumeClient -v
 - **Main Features**: Powerwall monitoring, intelligent power management, battery history tracking
 - **Key Classes**: PowerwallManager, BatteryHistory, DecisionPoint
 
+### August Module (`August/`)
+- **Authentication**: Requires 2FA via phone/email, tokens cached for ~7 days
+- **Main Features**: Smart lock monitoring, unlock duration alerts, door ajar detection, battery warnings, lock failure detection
+- **Initial Setup**: Run `august_manager.py test` to trigger 2FA, then use `validate_2fa.py` with verification code
+- **Key Classes**: AugustManager with state persistence for alert tracking
+- **Alert Thresholds**: Configurable via CLI (default: 5min unlock, 10min ajar, 20% battery)
+
+### SamsungFrame Module (`SamsungFrame/`)
+- **Authentication**: WebSocket token-based auth, saved to `~/logs/samsung_frame_token.txt`
+- **Main Features**: Image upload to Frame TV, matte/border management, slideshow control, art inventory management
+- **Initial Setup**: First upload command triggers TV pairing prompt, token auto-saved for future use
+- **Key Classes**: SamsungFrameClient, UploadResult (Pydantic), ImageUploadSummary
+- **CLI Commands**: upload, status, list-art, list-mattes, download-thumbnails, update-mattes, cycle-images
+- **Image Requirements**: JPG/PNG format, <10MB, validated before upload
+
+### NodeCheck Module (`NodeCheck/`)
+- **Purpose**: System node monitoring with continuous heartbeat tracking and automated device management
+- **Testing**: Runs in isolation due to subprocess management patterns (uses pytest-forked)
+- **Architecture**: Multi-process design requiring forked test execution to avoid state interference
+
 ### RachioFlume Module (`RachioFlume/`)
 - **Integration**: Connects Rachio irrigation with Flume water monitoring
 - **Architecture**: RachioClient, FlumeClient, WaterTrackingDB (SQLite), collector/reporter pattern
 - **Usage**: `rfmanager.py` CLI with collect/status/report commands
 
-### Bimpop.ai Module (`Bimpop.ai/`)
+### BimpopAI Module (`BimpopAI/`)
 - **Architecture**: FastAPI backend + Streamlit frontend
 - **Features**: RAG system with document indexing, conversational AI
 - **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
@@ -115,8 +162,10 @@ uv run python -m pytest RachioFlume/test_integration.py::TestFlumeClient -v
 ## Development Workflow
 
 1. **Start with setup**: `make setup` to ensure environment is consistent
-2. **Run linters before commits**: Pre-commit hooks enforce formatting
-3. **Test locally**: `make test` before pushing changes  
+2. **Pre-commit automation**: Pre-commit hooks automatically run `make ruff` and `make test` on every commit
+   - Hooks also enforce conventional commit message format
+   - Use `git commit -m "type: description"` format (e.g., `feat:`, `fix:`, `docs:`)
+3. **Test locally**: `make test` before pushing changes
 4. **Module isolation**: Each component can be developed independently
 5. **Shared utilities**: Prefer extending `lib/` utilities over duplicating code
 
