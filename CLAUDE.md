@@ -132,7 +132,7 @@ uv run pytest NodeCheck
 - **Alert Thresholds**: Configurable via CLI (default: 5min unlock, 10min ajar, 20% battery)
 
 ### SamsungFrame Module (`SamsungFrame/`)
-- **Authentication**: WebSocket token-based auth, saved to `~/logs/samsung_frame_token.txt`
+- **Authentication**: WebSocket token-based auth, saved to `Constants.SAMSUNG_FRAME_TOKEN_FILE`
 - **Main Features**: Image upload to Frame TV, matte/border management, slideshow control, art inventory management
 - **Initial Setup**: First upload command triggers TV pairing prompt, token auto-saved for future use
 - **Key Classes**: SamsungFrameClient, UploadResult (Pydantic), ImageUploadSummary

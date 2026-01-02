@@ -9,6 +9,7 @@ SECONDS_IN_DAY = 86400
 # Directories
 HOME = os.environ["HOME"]
 LOGGING_DIR = "{}/logs".format(HOME)
+TOKENS_DIR = f"{HOME}/lib/tokens"
 TUYA_LOG_BASE = "{}/tuya_logs/tuya_logs.csv".format(HOME)
 JSON_SUMMARY_FILE = "{}/tuya_logs/summary.json".format(HOME)
 JSON_SUMMARY_PATCH_FILE = "{}/tuya_logs/summary.json".format(
@@ -136,6 +137,7 @@ POWERWALL_POLL_TIME = 180  # Setting this too high can result in PW dumping more
 
 TESLA_EMAIL = "a@aa.aa"
 TESLA_PASSWORD = "XTZA"
+TESLA_TOKEN_FILE = f"{TOKENS_DIR}/tesla_tokens.json"
 
 # Rachio API
 RACHIO_API_KEY = "some_key"
@@ -151,11 +153,12 @@ FLUME_PASSWORD = "some pass"
 AUGUST_EMAIL = "your_august_email@example.com"
 AUGUST_PASSWORD = "your_august_password"
 AUGUST_PHONE = "+1234567890"
+AUGUST_TOKEN_FILE = f"{TOKENS_DIR}/august_auth_token.json"
 
 # Samsung Frame TV Configuration
 SAMSUNG_FRAME_IP = "192.168.1.4"
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port
-SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
+SAMSUNG_FRAME_TOKEN_FILE = f"{TOKENS_DIR}/samsung_frame_token.txt"
 SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10

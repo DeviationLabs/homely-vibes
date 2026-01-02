@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 
 import requests
 
+from lib import Constants
 from lib.logger import get_logger
 
 
@@ -38,8 +39,9 @@ class TeslaAPIClient:
     TOKEN_URL = "https://auth.tesla.com/oauth2/v3/token"
     TOKEN_REFRESH_BUFFER = 300  # Refresh 5 minutes before expiry
 
-    def __init__(self, token_file: str = "~/logs/tesla_tokens.json"):
-        self.token_file = os.path.expanduser(token_file)
+    def __init__(self, token_file: Optional[str] = None):
+        self.token_file = os.path.expanduser(token_file or Constants.TESLA_TOKEN_FILE)
+        os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
         self.session = requests.Session()
         self.session.headers.update(
             {"Content-Type": "application/json", "User-Agent": "TeslaApp/4.10.0"}
