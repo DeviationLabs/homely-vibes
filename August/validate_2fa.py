@@ -2,6 +2,7 @@
 """Quick script to validate 2FA code for August authentication."""
 
 import asyncio
+import os
 import aiohttp
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
 from yalexs.api_async import ApiAsync
@@ -12,7 +13,8 @@ async def complete_2fa() -> bool:
     session = aiohttp.ClientSession()
     try:
         api = ApiAsync(session)
-        cache_file = f"{Constants.LOGGING_DIR}/august_auth_token.json"
+        cache_file = Constants.AUGUST_TOKEN_FILE
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         auth = AuthenticatorAsync(
             api,
             "email",
