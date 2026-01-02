@@ -24,3 +24,6 @@ report.html
 ext_lib*
 .env
 *.db
+
+# Token storage
+lib/tokens/

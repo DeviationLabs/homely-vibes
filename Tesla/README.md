@@ -52,7 +52,7 @@ uv run python Tesla/tesla_auth_manual.py
 
 This will print an auth URL. Open it in your regular browser, complete login + hCaptcha, then paste the callback URL back. Text-only, no display required on server.
 
-**Token Storage**: Tokens saved to `~/logs/tesla_tokens.json` with 0o600 permissions. Auto-refresh without browser after initial auth.
+**Token Storage**: Tokens saved to `Constants.TESLA_TOKEN_FILE` with 0o600 permissions. Auto-refresh without browser after initial auth.
 
 ## Usage
 

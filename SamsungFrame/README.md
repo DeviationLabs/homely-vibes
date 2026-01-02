@@ -22,7 +22,7 @@ Add your Samsung Frame TV settings to `lib/Constants.py`:
 # Samsung Frame TV Configuration
 SAMSUNG_FRAME_IP = "192.168.XX.YY"  # Your TV's IP address
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port (default: 8002)
-SAMSUNG_FRAME_TOKEN_FILE = f"{HOME}/logs/samsung_frame_token.txt"
+SAMSUNG_FRAME_TOKEN_FILE = f"{TOKENS_DIR}/samsung_frame_token.txt"
 SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
@@ -49,7 +49,7 @@ On first run of an **upload** command, the TV will display a pairing prompt:
 1. Run upload command: `uv run python SamsungFrame/manage_samsung.py upload /path/to/images`
 2. Check your TV screen for the pairing prompt
 3. Accept the connection on your TV
-4. The authentication token will be automatically saved to `~/logs/samsung_frame_token.txt`
+4. The authentication token will be automatically saved to `Constants.SAMSUNG_FRAME_TOKEN_FILE`
 5. Subsequent uploads will use the saved token without requiring TV approval
 
 **Important Notes:**
@@ -57,10 +57,11 @@ On first run of an **upload** command, the TV will display a pairing prompt:
 - Token is only saved during WebSocket operations (upload). The `status` command uses REST API and won't trigger token exchange.
 - Once a token is saved, all operations (status, upload, list-art) will work without TV approval.
 
-**To re-pair:** Delete the token file and run an upload command:
+**To re-pair:** Delete the token file (check `Constants.SAMSUNG_FRAME_TOKEN_FILE` for location) and run an upload command:
 
 ```bash
-rm ~/logs/samsung_frame_token.txt
+# Token file location defined in Constants.SAMSUNG_FRAME_TOKEN_FILE
+rm lib/tokens/samsung_frame_token.txt
 uv run python SamsungFrame/manage_samsung.py upload /path/to/images
 ```
 
@@ -271,7 +272,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 **Symptoms**: Connection works but commands fail with auth errors
 
 **Solutions**:
-- Delete token file: `rm ~/logs/samsung_frame_token.txt`
+- Delete token file (check `Constants.SAMSUNG_FRAME_TOKEN_FILE`): `rm lib/tokens/samsung_frame_token.txt`
 - Run status command again and accept pairing prompt on TV
 - Ensure token file has correct permissions (600)
 
@@ -298,10 +299,10 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 
 ### Token File Permissions
 
-If you see permission errors, ensure token file has restrictive permissions:
+If you see permission errors, ensure token file (from `Constants.SAMSUNG_FRAME_TOKEN_FILE`) has restrictive permissions:
 
 ```bash
-chmod 600 ~/logs/samsung_frame_token.txt
+chmod 600 lib/tokens/samsung_frame_token.txt
 ```
 
 ## Development

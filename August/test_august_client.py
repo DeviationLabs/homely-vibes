@@ -55,7 +55,9 @@ class TestAugustClient:
             patch("August.august_client.aiohttp.ClientSession") as mock_session,
             patch("August.august_client.ApiAsync") as mock_api,
             patch("August.august_client.AuthenticatorAsync") as mock_auth,
-            patch("August.august_client.Constants.LOGGING_DIR", "/tmp"),
+            patch(
+                "August.august_client.Constants.AUGUST_TOKEN_FILE", "/tmp/august_auth_token.json"
+            ),
         ):
             mock_session_instance = Mock()
             mock_session.return_value = mock_session_instance
@@ -178,7 +180,9 @@ class TestAugustMonitor:
             patch("August.august_client.Pushover"),
             patch("August.august_client.Constants.PUSHOVER_USER", "user123"),
             patch("August.august_client.Constants.PUSHOVER_TOKENS", {"August": "token123"}),
-            patch("August.august_client.Constants.LOGGING_DIR", "/tmp"),
+            patch(
+                "August.august_client.Constants.AUGUST_TOKEN_FILE", "/tmp/august_auth_token.json"
+            ),
         ):
             return AugustMonitor("test@example.com", "password123")
 
@@ -217,7 +221,9 @@ class TestAugustMonitor:
             patch("August.august_client.Pushover"),
             patch("August.august_client.Constants.PUSHOVER_USER", "user123"),
             patch("August.august_client.Constants.PUSHOVER_TOKENS", {"August": "token123"}),
-            patch("August.august_client.Constants.LOGGING_DIR", "/tmp"),
+            patch(
+                "August.august_client.Constants.AUGUST_TOKEN_FILE", "/tmp/august_auth_token.json"
+            ),
         ):
             monitor = AugustMonitor("test@example.com", "password123")
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import os
 import time
 from typing import Optional, Dict
 import json
@@ -69,7 +70,8 @@ class AugustClient:
             self.session = aiohttp.ClientSession()
             self.api = ApiAsync(self.session)
             # Use token caching to persist authentication across restarts
-            cache_file = f"{Constants.LOGGING_DIR}/august_auth_token.json"
+            cache_file = Constants.AUGUST_TOKEN_FILE
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             self.authenticator = AuthenticatorAsync(
                 self.api,
                 "email",
