@@ -42,21 +42,21 @@ This will:
 
 ### Tesla Authentication
 
-The system uses a custom headless OAuth2 implementation for Tesla API access. You'll need to authenticate once:
+The system uses a custom OAuth2 implementation with undetected-chromedriver for Tesla API access. You'll need to authenticate once:
 
 ```bash
-# Run authentication script (uses headless Chrome)
+# Run authentication script (opens visible Chrome window)
 uv run python Tesla/tesla_auth.py
 ```
 
 This will:
-- Launch headless Chrome via Selenium
+- Launch Chrome browser (visible window)
 - Navigate to Tesla's OAuth login page
-- Authenticate using credentials from `lib/Constants.py` (TESLA_EMAIL and TESLA_PASSWORD)
-- Handle MFA if required (you'll be prompted to enter a verification code)
+- Automatically fill credentials from `lib/Constants.py` (TESLA_EMAIL and TESLA_PASSWORD)
+- Handle MFA if required (you'll be prompted in terminal to enter verification code)
 - Save tokens to `~/logs/tesla_tokens.json`
 
-The authentication works completely headless - no GUI required. If MFA is required, the script will pause and prompt you to enter the verification code from your phone/email.
+**Note**: Tesla blocks headless browsers, so a visible Chrome window is required for initial authentication. After successful auth, tokens auto-refresh without needing the browser.
 
 **Token Storage**: Tokens are saved to `~/logs/tesla_tokens.json` with 0o600 permissions (owner read/write only). Tokens are automatically refreshed when they expire.
 
@@ -159,18 +159,25 @@ uv run python Tesla/tesla_auth.py
 
 This will re-authenticate and refresh your Tesla tokens.
 
-### Selenium/Chrome Issues
+### Chrome/Display Issues
 
 The authentication script requires:
 - Chrome or Chromium browser
-- ChromeDriver (automatically managed by webdriver-manager)
+- Display/X11 for visible browser window (Tesla blocks headless)
+- ChromeDriver (automatically managed by undetected-chromedriver)
 
-If you encounter issues with ChromeDriver, ensure Chrome/Chromium is installed:
+If you encounter issues:
 
 ```bash
-# Ubuntu/Debian
+# Ubuntu/Debian - Install Chrome
 sudo apt-get install chromium-browser
 
-# macOS
-brew install chromium
+# macOS - Install Chrome
+brew install --cask google-chrome
+
+# If running on headless server via SSH, use X11 forwarding:
+ssh -X user@server
+# Or use VNC/remote desktop to get display access
 ```
+
+**For headless servers**: You must have a display available (X11, VNC, or remote desktop session) for initial authentication. After tokens are generated, the monitoring script runs without display requirements.
