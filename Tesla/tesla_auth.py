@@ -12,9 +12,11 @@ import time
 from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlencode, urlparse
 
-import undetected_chromedriver as uc
+from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -60,9 +62,9 @@ def build_authorization_url(email: str, code_challenge: str, state: str) -> str:
     return f"{base_url}?{urlencode(params)}"
 
 
-def setup_chrome_driver(headless: bool = False) -> uc.Chrome:
-    """Configure and create undetected Chrome driver."""
-    options = uc.ChromeOptions()
+def setup_chrome_driver(headless: bool = False) -> webdriver.Chrome:
+    """Configure and create Chrome driver."""
+    options = Options()
 
     if headless:
         # Tesla likely blocks headless - only use if explicitly requested
@@ -72,29 +74,20 @@ def setup_chrome_driver(headless: bool = False) -> uc.Chrome:
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
 
-    # Prevent Chrome from closing
+    # Anti-detection measures
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    # Use undetected-chromedriver which bypasses bot detection
-    # Keep driver alive with suppress_welcome and no version check
-    driver = uc.Chrome(
-        options=options,
-        use_subprocess=False,
-        suppress_welcome=True,
-        no_sandbox=True,
-    )
-
-    # Keep driver alive - prevent garbage collection
-    import time
-    time.sleep(1)
+    # Use regular Selenium - more stable than undetected-chromedriver
+    # Window stays open if automation fails, allowing manual completion
+    driver = webdriver.Chrome(options=options)
 
     return driver
 
 
 def handle_login_flow(
-    driver: uc.Chrome, auth_url: str, email: str, password: str, timeout: int = 30
+    driver: webdriver.Chrome, auth_url: str, email: str, password: str, timeout: int = 30
 ) -> str:
     """Handle Tesla login flow with optional MFA."""
     try:
@@ -259,7 +252,7 @@ def get_credentials() -> Tuple[str, str]:
 
 def authenticate_tesla(token_file: str = "~/logs/tesla_tokens.json") -> bool:
     """Complete OAuth2 + PKCE authentication flow."""
-    driver: Optional[uc.Chrome] = None
+    driver: Optional[webdriver.Chrome] = None
 
     try:
         # Get credentials
@@ -275,14 +268,32 @@ def authenticate_tesla(token_file: str = "~/logs/tesla_tokens.json") -> bool:
         auth_url = build_authorization_url(email, code_challenge, state)
 
         # Setup Chrome driver (visible browser - Tesla blocks headless)
-        logger.warning("Launching visible Chrome browser (Tesla blocks headless)")
+        logger.warning("Launching Chrome browser - complete auth manually if automation fails")
         driver = setup_chrome_driver(headless=False)
 
         # Handle login flow (with MFA if needed)
-        callback_url = handle_login_flow(driver, auth_url, email, password)
+        try:
+            callback_url = handle_login_flow(driver, auth_url, email, password)
+            # Extract authorization code
+            auth_code = extract_authorization_code(callback_url, state)
+        except TeslaAuthError as e:
+            # Automation failed - wait for manual completion
+            print("\n" + "=" * 60)
+            print("AUTOMATION FAILED - COMPLETE MANUALLY")
+            print("=" * 60)
+            print(f"Error: {e}")
+            print("\nPlease complete the login in the browser window.")
+            print("After successful login, you'll be redirected to a page")
+            print("with a URL like: https://auth.tesla.com/void/callback?code=...")
+            print("\nWait for redirect, then press Enter here...")
+            input()
 
-        # Extract authorization code
-        auth_code = extract_authorization_code(callback_url, state)
+            # Get callback URL from current browser URL
+            callback_url = driver.current_url
+            if "void/callback" not in callback_url:
+                raise TeslaAuthError("Not redirected to callback URL - auth may have failed")
+
+            auth_code = extract_authorization_code(callback_url, state)
 
         # Exchange code for tokens
         tokens = exchange_code_for_tokens(auth_code, code_verifier)
