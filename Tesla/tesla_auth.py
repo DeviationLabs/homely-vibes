@@ -73,7 +73,8 @@ def setup_chrome_driver(headless: bool = False) -> uc.Chrome:
     options.add_argument("--window-size=1920,1080")
 
     # Use undetected-chromedriver which bypasses bot detection
-    driver = uc.Chrome(options=options, use_subprocess=True, version_main=None)
+    # Don't use subprocess mode - it's more stable
+    driver = uc.Chrome(options=options, use_subprocess=False)
 
     return driver
 
