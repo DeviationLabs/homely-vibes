@@ -58,7 +58,7 @@ def manual_auth_flow(email: str, token_file: str = "~/logs/tesla_tokens.json") -
 
     # Build authorization URL
     base_url = "https://auth.tesla.com/oauth2/v3/authorize"
-    params = {
+    auth_params = {
         "client_id": "ownerapi",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
@@ -68,7 +68,7 @@ def manual_auth_flow(email: str, token_file: str = "~/logs/tesla_tokens.json") -
         "state": state,
         "login_hint": email,
     }
-    auth_url = f"{base_url}?{urlencode(params)}"
+    auth_url = f"{base_url}?{urlencode(auth_params)}"
 
     print("\n" + "=" * 70)
     print("MANUAL TESLA AUTHENTICATION")
@@ -95,7 +95,7 @@ def manual_auth_flow(email: str, token_file: str = "~/logs/tesla_tokens.json") -
     # Parse authorization code
     try:
         parsed = urlparse(callback_url)
-        params = parse_qs(parsed.query)
+        params: dict[str, list[str]] = parse_qs(parsed.query)
 
         if "error" in params:
             error = params["error"][0]

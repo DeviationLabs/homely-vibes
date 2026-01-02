@@ -52,7 +52,8 @@ class TeslaAPIClient:
         """Load tokens from file."""
         try:
             with open(self.token_file) as f:
-                return json.load(f)
+                tokens: Dict[str, Any] = json.load(f)
+                return tokens
         except FileNotFoundError:
             raise TeslaTokenExpiredError(
                 f"Token file not found: {self.token_file}. Run: python Tesla/tesla_auth.py"
@@ -72,7 +73,8 @@ class TeslaAPIClient:
         """Check if access token is expired or will expire soon."""
         if not self._tokens:
             return True
-        return self._tokens["expires_at"] < time.time() + self.TOKEN_REFRESH_BUFFER
+        expires_at: float = self._tokens["expires_at"]
+        return expires_at < time.time() + self.TOKEN_REFRESH_BUFFER
 
     def _refresh_access_token(self) -> None:
         """Refresh access token using refresh token."""
@@ -124,10 +126,11 @@ class TeslaAPIClient:
             self._refresh_access_token()
 
     def _request(
-        self, method: str, endpoint: str, retry_on_401: bool = True, **kwargs
+        self, method: str, endpoint: str, retry_on_401: bool = True, **kwargs: Any
     ) -> Dict[str, Any]:
         """Make authenticated API request with auto-retry on 401."""
         self._ensure_valid_token()
+        assert self._tokens is not None  # guaranteed by _ensure_valid_token
 
         url = urljoin(self.BASE_URL, endpoint)
         headers = {"Authorization": f"Bearer {self._tokens['access_token']}"}
@@ -141,11 +144,13 @@ class TeslaAPIClient:
             if response.status_code == 401 and retry_on_401:
                 self.logger.warning("Got 401, refreshing token and retrying")
                 self._refresh_access_token()
+                assert self._tokens is not None
                 headers = {"Authorization": f"Bearer {self._tokens['access_token']}"}
                 response = self.session.request(method, url, headers=headers, timeout=30, **kwargs)
 
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()
+            return result
 
         except requests.HTTPError as e:
             if e.response.status_code == 429:
@@ -170,19 +175,23 @@ class TeslaAPIClient:
     def get_site_info(self, site_id: int) -> Dict[str, Any]:
         """Get site configuration."""
         response = self._request("GET", f"api/1/energy_sites/{site_id}/site_info")
-        return response["response"]
+        site_info: Dict[str, Any] = response["response"]
+        return site_info
 
     def get_site_data(self, site_id: int) -> Dict[str, Any]:
         """Get live site status."""
         response = self._request("GET", f"api/1/energy_sites/{site_id}/live_status")
-        return response["response"]
+        site_data: Dict[str, Any] = response["response"]
+        return site_data
 
     def set_operation_mode(self, site_id: int, mode: str) -> str:
         """Set operation mode (self_consumption, backup, autonomous)."""
         response = self._request(
             "POST", f"api/1/energy_sites/{site_id}/operation", json={"default_real_mode": mode}
         )
-        return response["response"].get("message", "Updated")
+        result: Dict[str, Any] = response["response"]
+        message: str = result.get("message", "Updated")
+        return message
 
     def set_backup_reserve(self, site_id: int, percent: int) -> str:
         """Set backup reserve percentage."""
@@ -191,7 +200,9 @@ class TeslaAPIClient:
             f"api/1/energy_sites/{site_id}/backup",
             json={"backup_reserve_percent": int(percent)},
         )
-        return response["response"].get("message", "Updated")
+        result: Dict[str, Any] = response["response"]
+        message: str = result.get("message", "Updated")
+        return message
 
 
 class BatteryProduct:
