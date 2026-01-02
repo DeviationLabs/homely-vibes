@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any, Tuple
 import importlib
 from lib import Constants
 from lib.MyPushover import Pushover
-from lib.TeslaPy.teslapy import Tesla as TeslaClient
+from Tesla.tesla_client import TeslaAPIClient, BatteryProduct
 from lib.logger import get_logger
 
 
@@ -248,59 +248,60 @@ class PowerwallManager:
 
     def run_monitoring_loop(self) -> None:
         """Main monitoring loop."""
-        with TeslaClient(self.email, verify=False) as client:
-            product = client.battery_list()[0]
-            site_name = product["site_name"]
-            self.logger.info(f"Connected to site: {site_name}")
-            self.pushover.send_message(
-                f"Powerwall monitoring started for: {site_name}",
-                title="Powerwall Alert",
-                priority=0,
-            )
+        client = TeslaAPIClient()
+        sites = client.get_energy_sites()
+        if not sites:
+            raise ValueError("No energy sites found")
+        product = BatteryProduct(sites[0], client)
+        site_name = product["site_name"]
+        self.logger.info(f"Connected to site: {site_name}")
+        self.pushover.send_message(
+            f"Powerwall monitoring started for: {site_name}",
+            title="Powerwall Alert",
+            priority=0,
+        )
 
-            sleep_time = 0
+        sleep_time = 0
 
-            while True:
-                self.loop_count += 1
-                time.sleep(sleep_time)
+        while True:
+            self.loop_count += 1
+            time.sleep(sleep_time)
 
-                importlib.reload(Constants)  # hot refresh on config.
+            importlib.reload(Constants)  # hot refresh on config.
 
-                current_time = time.localtime()
-                poll_time = Constants.POWERWALL_POLL_TIME
+            current_time = time.localtime()
+            poll_time = Constants.POWERWALL_POLL_TIME
 
-                self.logger.info(f"Loop {self.loop_count}")
+            self.logger.info(f"Loop {self.loop_count}")
 
-                try:
-                    data = self.get_powerwall_data(product)
+            try:
+                data = self.get_powerwall_data(product)
 
-                    # Sanitize battery percentage
-                    data["battery_percent"] = self.sanitize_battery_percentage(
-                        data["battery_percent"], sleep_time / poll_time
-                    )
+                # Sanitize battery percentage
+                data["battery_percent"] = self.sanitize_battery_percentage(
+                    data["battery_percent"], sleep_time / poll_time
+                )
 
-                    self.logger.info(
-                        f"Battery: {data['battery_percent']:.2f}%, "
-                        f"Mode: {data['operation_mode']}, "
-                        f"Export: {data['can_export']}, "
-                        f"Grid charge: {data['can_grid_charge']}"
-                    )
+                self.logger.info(
+                    f"Battery: {data['battery_percent']:.2f}%, "
+                    f"Mode: {data['operation_mode']}, "
+                    f"Export: {data['can_export']}, "
+                    f"Grid charge: {data['can_grid_charge']}"
+                )
 
-                    # Process decision points
-                    sleep_time = self.process_decision_points(
-                        product, data, current_time, poll_time
-                    )
-                    self.fail_count = 0
+                # Process decision points
+                sleep_time = self.process_decision_points(product, data, current_time, poll_time)
+                self.fail_count = 0
 
-                except Exception as e:
-                    self.fail_count += 1
-                    self.logger.warning(f"Attempt {self.fail_count} failed: {e}")
+            except Exception as e:
+                self.fail_count += 1
+                self.logger.warning(f"Attempt {self.fail_count} failed: {e}")
 
-                    if self.fail_count > 10:
-                        raise RuntimeError(f"Too many consecutive failures: {e}")
+                if self.fail_count > 10:
+                    raise RuntimeError(f"Too many consecutive failures: {e}")
 
-                    sleep_time = min(poll_time, 30)  # Quick retry
-                    continue
+                sleep_time = min(poll_time, 30)  # Quick retry
+                continue
 
 
 def main() -> None:
@@ -331,11 +332,11 @@ def main() -> None:
         manager.run_monitoring_loop()
 
     except EnvironmentError as e:
-        error_msg = f"Tesla token expired? Run TeslaPy gui.py. Error: {e}"
+        error_msg = f"Tesla token expired? Run: python Tesla/tesla_auth.py. Error: {e}"
         logger = get_logger(__name__)
         logger.error(error_msg)
         manager.pushover.send_message(
-            "Tesla token expired - run TeslaPy gui.py",
+            "Tesla token expired - run: python Tesla/tesla_auth.py",
             title="Powerwall Alert",
             priority=2,
         )

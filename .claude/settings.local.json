@@ -4,7 +4,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.reddit.com)",
       "WebFetch(domain:community.home-assistant.io)",
-      "WebFetch(domain:aws.amazon.com)"
+      "WebFetch(domain:aws.amazon.com)",
+      "Skill(makepr)",
+      "Skill(makepr:*)"
     ],
     "deny": [],
     "ask": []

@@ -22,7 +22,6 @@ make setup
 This will:
 
 - Install project dependencies with `uv sync`
-- Initialize Git submodules (including TeslaPy)
 - Set up pre-commit hooks
 - Configure the development environment
 
@@ -43,14 +42,23 @@ This will:
 
 ### Tesla Authentication
 
-The system uses TeslaPy for Tesla API access. You'll need to authenticate once:
+The system uses a custom headless OAuth2 implementation for Tesla API access. You'll need to authenticate once:
 
 ```bash
-# Script will automatically run the following command for initial authentication
-uv run lib/TeslaPy/tesla/gui.py
+# Run authentication script (uses headless Chrome)
+uv run python Tesla/tesla_auth.py
 ```
 
-This will open a browser window for Tesla OAuth authentication, but if you are on a machine without a browser,  you can just copy the authURL and authenticate on some other machine
+This will:
+- Launch headless Chrome via Selenium
+- Navigate to Tesla's OAuth login page
+- Authenticate using credentials from `lib/Constants.py` (TESLA_EMAIL and TESLA_PASSWORD)
+- Handle MFA if required (you'll be prompted to enter a verification code)
+- Save tokens to `~/logs/tesla_tokens.json`
+
+The authentication works completely headless - no GUI required. If MFA is required, the script will pause and prompt you to enter the verification code from your phone/email.
+
+**Token Storage**: Tokens are saved to `~/logs/tesla_tokens.json` with 0o600 permissions (owner read/write only). Tokens are automatically refreshed when they expire.
 
 ## Usage
 
@@ -146,8 +154,23 @@ uv run python -m pytest Tesla/test_manage_power.py -v
 If you see "Tesla token expired" errors:
 
 ```bash
-cd lib/TeslaPy
-python gui.py
+uv run python Tesla/tesla_auth.py
 ```
 
-This will refresh your Tesla authentication token.
+This will re-authenticate and refresh your Tesla tokens.
+
+### Selenium/Chrome Issues
+
+The authentication script requires:
+- Chrome or Chromium browser
+- ChromeDriver (automatically managed by webdriver-manager)
+
+If you encounter issues with ChromeDriver, ensure Chrome/Chromium is installed:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install chromium-browser
+
+# macOS
+brew install chromium
+```
