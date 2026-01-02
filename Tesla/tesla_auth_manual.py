@@ -148,7 +148,9 @@ def manual_auth_flow(email: str, token_file: str = "~/logs/tesla_tokens.json") -
         print("✓ AUTHENTICATION SUCCESSFUL")
         print("=" * 70)
         print(f"Tokens saved to: {os.path.expanduser(token_file)}")
-        print(f"Expires: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time()) + tokens['expires_in']))}")
+        print(
+            f"Expires: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(time.time()) + tokens['expires_in']))}"
+        )
         print("\nYou can now run: python Tesla/manage_power.py")
         print("=" * 70)
 

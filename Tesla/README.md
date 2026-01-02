@@ -44,21 +44,13 @@ This will:
 
 The system uses custom OAuth2 + PKCE for Tesla API access. You'll need to authenticate once.
 
-**Recommended: Manual Authentication** (Tesla uses hCaptcha):
+**Manual Authentication** (Tesla uses hCaptcha):
 
 ```bash
 uv run python Tesla/tesla_auth_manual.py
 ```
 
 This will print an auth URL. Open it in your regular browser, complete login + hCaptcha, then paste the callback URL back. Text-only, no display required on server.
-
-**Alternative: Semi-Automated** (requires display):
-
-```bash
-uv run python Tesla/tesla_auth.py
-```
-
-Opens Chrome via Selenium, attempts automation, falls back to manual if hCaptcha appears. Requires display/X11.
 
 **Token Storage**: Tokens saved to `~/logs/tesla_tokens.json` with 0o600 permissions. Auto-refresh without browser after initial auth.
 
@@ -156,15 +148,7 @@ uv run python -m pytest Tesla/test_manage_power.py -v
 If you see "Tesla token expired" errors, re-authenticate:
 
 ```bash
-# Recommended - text-only
 uv run python Tesla/tesla_auth_manual.py
-
-# Or with display
-uv run python Tesla/tesla_auth.py
 ```
 
-### Chrome/Display Issues
-
-**Manual auth** (`tesla_auth_manual.py`): No display required - authenticate in any browser on any machine.
-
-**Selenium auth** (`tesla_auth.py`): Requires Chrome and display (X11/VNC). Use manual auth for headless servers.
+No display required - authenticate in any browser on any machine, then paste the callback URL.
