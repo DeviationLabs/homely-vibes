@@ -61,7 +61,7 @@ On first run of an **upload** command, the TV will display a pairing prompt:
 
 ```bash
 # Token file location defined in Constants.SAMSUNG_FRAME_TOKEN_FILE
-rm ~/lib/tokens/samsung_frame_token.txt
+rm lib/tokens/samsung_frame_token.txt
 uv run python SamsungFrame/manage_samsung.py upload /path/to/images
 ```
 
@@ -272,7 +272,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 **Symptoms**: Connection works but commands fail with auth errors
 
 **Solutions**:
-- Delete token file (check `Constants.SAMSUNG_FRAME_TOKEN_FILE`): `rm ~/lib/tokens/samsung_frame_token.txt`
+- Delete token file (check `Constants.SAMSUNG_FRAME_TOKEN_FILE`): `rm lib/tokens/samsung_frame_token.txt`
 - Run status command again and accept pairing prompt on TV
 - Ensure token file has correct permissions (600)
 
@@ -302,7 +302,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 If you see permission errors, ensure token file (from `Constants.SAMSUNG_FRAME_TOKEN_FILE`) has restrictive permissions:
 
 ```bash
-chmod 600 ~/lib/tokens/samsung_frame_token.txt
+chmod 600 lib/tokens/samsung_frame_token.txt
 ```
 
 ## Development

@@ -9,7 +9,7 @@ SECONDS_IN_DAY = 86400
 # Directories
 HOME = os.environ["HOME"]
 LOGGING_DIR = "{}/logs".format(HOME)
-TOKENS_DIR = f"{HOME}/lib/tokens"
+TOKENS_DIR = "lib/tokens"
 TUYA_LOG_BASE = "{}/tuya_logs/tuya_logs.csv".format(HOME)
 JSON_SUMMARY_FILE = "{}/tuya_logs/summary.json".format(HOME)
 JSON_SUMMARY_PATCH_FILE = "{}/tuya_logs/summary.json".format(
