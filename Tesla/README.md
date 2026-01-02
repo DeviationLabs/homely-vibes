@@ -42,23 +42,25 @@ This will:
 
 ### Tesla Authentication
 
-The system uses a custom OAuth2 implementation with undetected-chromedriver for Tesla API access. You'll need to authenticate once:
+The system uses custom OAuth2 + PKCE for Tesla API access. You'll need to authenticate once.
+
+**Recommended: Manual Authentication** (Tesla uses hCaptcha):
 
 ```bash
-# Run authentication script (opens visible Chrome window)
+uv run python Tesla/tesla_auth_manual.py
+```
+
+This will print an auth URL. Open it in your regular browser, complete login + hCaptcha, then paste the callback URL back. Text-only, no display required on server.
+
+**Alternative: Semi-Automated** (requires display):
+
+```bash
 uv run python Tesla/tesla_auth.py
 ```
 
-This will:
-- Launch Chrome browser (visible window)
-- Navigate to Tesla's OAuth login page
-- Automatically fill credentials from `lib/Constants.py` (TESLA_EMAIL and TESLA_PASSWORD)
-- Handle MFA if required (you'll be prompted in terminal to enter verification code)
-- Save tokens to `~/logs/tesla_tokens.json`
+Opens Chrome via Selenium, attempts automation, falls back to manual if hCaptcha appears. Requires display/X11.
 
-**Note**: Tesla blocks headless browsers, so a visible Chrome window is required for initial authentication. After successful auth, tokens auto-refresh without needing the browser.
-
-**Token Storage**: Tokens are saved to `~/logs/tesla_tokens.json` with 0o600 permissions (owner read/write only). Tokens are automatically refreshed when they expire.
+**Token Storage**: Tokens saved to `~/logs/tesla_tokens.json` with 0o600 permissions. Auto-refresh without browser after initial auth.
 
 ## Usage
 
@@ -151,33 +153,18 @@ uv run python -m pytest Tesla/test_manage_power.py -v
 
 ### Authentication Issues
 
-If you see "Tesla token expired" errors:
+If you see "Tesla token expired" errors, re-authenticate:
 
 ```bash
+# Recommended - text-only
+uv run python Tesla/tesla_auth_manual.py
+
+# Or with display
 uv run python Tesla/tesla_auth.py
 ```
 
-This will re-authenticate and refresh your Tesla tokens.
-
 ### Chrome/Display Issues
 
-The authentication script requires:
-- Chrome or Chromium browser
-- Display/X11 for visible browser window (Tesla blocks headless)
-- ChromeDriver (automatically managed by undetected-chromedriver)
+**Manual auth** (`tesla_auth_manual.py`): No display required - authenticate in any browser on any machine.
 
-If you encounter issues:
-
-```bash
-# Ubuntu/Debian - Install Chrome
-sudo apt-get install chromium-browser
-
-# macOS - Install Chrome
-brew install --cask google-chrome
-
-# If running on headless server via SSH, use X11 forwarding:
-ssh -X user@server
-# Or use VNC/remote desktop to get display access
-```
-
-**For headless servers**: You must have a display available (X11, VNC, or remote desktop session) for initial authentication. After tokens are generated, the monitoring script runs without display requirements.
+**Selenium auth** (`tesla_auth.py`): Requires Chrome and display (X11/VNC). Use manual auth for headless servers.
