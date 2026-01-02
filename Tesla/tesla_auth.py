@@ -60,16 +60,20 @@ def build_authorization_url(email: str, code_challenge: str, state: str) -> str:
     return f"{base_url}?{urlencode(params)}"
 
 
-def setup_chrome_driver() -> uc.Chrome:
+def setup_chrome_driver(headless: bool = False) -> uc.Chrome:
     """Configure and create undetected Chrome driver."""
     options = uc.ChromeOptions()
-    options.add_argument("--headless=new")
+
+    if headless:
+        # Tesla likely blocks headless - only use if explicitly requested
+        options.add_argument("--headless=new")
+
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
 
     # Use undetected-chromedriver which bypasses bot detection
-    driver = uc.Chrome(options=options, use_subprocess=True)
+    driver = uc.Chrome(options=options, use_subprocess=True, version_main=None)
 
     return driver
 
@@ -255,8 +259,9 @@ def authenticate_tesla(token_file: str = "~/logs/tesla_tokens.json") -> bool:
         # Build authorization URL
         auth_url = build_authorization_url(email, code_challenge, state)
 
-        # Setup Chrome driver
-        driver = setup_chrome_driver()
+        # Setup Chrome driver (visible browser - Tesla blocks headless)
+        logger.warning("Launching visible Chrome browser (Tesla blocks headless)")
+        driver = setup_chrome_driver(headless=False)
 
         # Handle login flow (with MFA if needed)
         callback_url = handle_login_flow(driver, auth_url, email, password)
