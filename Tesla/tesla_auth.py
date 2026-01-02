@@ -72,9 +72,23 @@ def setup_chrome_driver(headless: bool = False) -> uc.Chrome:
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
 
+    # Prevent Chrome from closing
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
     # Use undetected-chromedriver which bypasses bot detection
-    # Don't use subprocess mode - it's more stable
-    driver = uc.Chrome(options=options, use_subprocess=False)
+    # Keep driver alive with suppress_welcome and no version check
+    driver = uc.Chrome(
+        options=options,
+        use_subprocess=False,
+        suppress_welcome=True,
+        no_sandbox=True,
+    )
+
+    # Keep driver alive - prevent garbage collection
+    import time
+    time.sleep(1)
 
     return driver
 
