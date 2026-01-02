@@ -86,7 +86,7 @@ known_first_party = [
     "TuyaLogParser",
     "utils",  # for Bimpop.ai/fe/utils.py
 ]
-exclude = ["tests", ".venv", "backups", "lib/TeslaPy"]
+exclude = ["tests", ".venv", "backups"]
 
 [tool.deptry.package_module_name_map]
 streamlit = "streamlit"
@@ -143,7 +143,6 @@ exclude = [
     ".git",
     ".venv", 
     "__pycache__",
-    "lib/TeslaPy/**",  # Exclude TeslaPy submodule from ruff checks
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -167,16 +166,13 @@ strict_equality = true
 namespace_packages = true
 explicit_package_bases = true
 exclude = [
-    "lib/TeslaPy/",  # Third-party submodule
 ]
 
 [[tool.mypy.overrides]]
 module = [
     "Constants",
-    "TeslaPy.*",
     "yalexs.*",
     "twilio.*",
-    "teslapy.*",
     "webview.*",
     "selenium.*",
     "geopy.*",

@@ -22,7 +22,6 @@ make setup
 This will:
 
 - Install project dependencies with `uv sync`
-- Initialize Git submodules (including TeslaPy)
 - Set up pre-commit hooks
 - Configure the development environment
 
@@ -43,14 +42,17 @@ This will:
 
 ### Tesla Authentication
 
-The system uses TeslaPy for Tesla API access. You'll need to authenticate once:
+The system uses custom OAuth2 + PKCE for Tesla API access. You'll need to authenticate once.
+
+**Manual Authentication** (Tesla uses hCaptcha):
 
 ```bash
-# Script will automatically run the following command for initial authentication
-uv run lib/TeslaPy/tesla/gui.py
+uv run python Tesla/tesla_auth_manual.py
 ```
 
-This will open a browser window for Tesla OAuth authentication, but if you are on a machine without a browser,  you can just copy the authURL and authenticate on some other machine
+This will print an auth URL. Open it in your regular browser, complete login + hCaptcha, then paste the callback URL back. Text-only, no display required on server.
+
+**Token Storage**: Tokens saved to `~/logs/tesla_tokens.json` with 0o600 permissions. Auto-refresh without browser after initial auth.
 
 ## Usage
 
@@ -143,11 +145,10 @@ uv run python -m pytest Tesla/test_manage_power.py -v
 
 ### Authentication Issues
 
-If you see "Tesla token expired" errors:
+If you see "Tesla token expired" errors, re-authenticate:
 
 ```bash
-cd lib/TeslaPy
-python gui.py
+uv run python Tesla/tesla_auth_manual.py
 ```
 
-This will refresh your Tesla authentication token.
+No display required - authenticate in any browser on any machine, then paste the callback URL.
