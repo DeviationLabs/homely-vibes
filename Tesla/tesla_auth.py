@@ -12,20 +12,11 @@ import time
 from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-
-try:
-    from webdriver_manager.chrome import ChromeDriverManager
-
-    WEBDRIVER_MANAGER_AVAILABLE = True
-except ImportError:
-    WEBDRIVER_MANAGER_AVAILABLE = False
 
 import requests
 
@@ -69,30 +60,22 @@ def build_authorization_url(email: str, code_challenge: str, state: str) -> str:
     return f"{base_url}?{urlencode(params)}"
 
 
-def setup_chrome_driver() -> webdriver.Chrome:
-    """Configure and create headless Chrome driver."""
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option("useAutomationExtension", False)
+def setup_chrome_driver() -> uc.Chrome:
+    """Configure and create undetected Chrome driver."""
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
 
-    if WEBDRIVER_MANAGER_AVAILABLE:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-    else:
-        # Assume chromedriver is in PATH
-        driver = webdriver.Chrome(options=chrome_options)
+    # Use undetected-chromedriver which bypasses bot detection
+    driver = uc.Chrome(options=options, use_subprocess=True)
 
     return driver
 
 
 def handle_login_flow(
-    driver: webdriver.Chrome, auth_url: str, email: str, password: str, timeout: int = 30
+    driver: uc.Chrome, auth_url: str, email: str, password: str, timeout: int = 30
 ) -> str:
     """Handle Tesla login flow with optional MFA."""
     try:
@@ -257,7 +240,7 @@ def get_credentials() -> Tuple[str, str]:
 
 def authenticate_tesla(token_file: str = "~/logs/tesla_tokens.json") -> bool:
     """Complete OAuth2 + PKCE authentication flow."""
-    driver: Optional[webdriver.Chrome] = None
+    driver: Optional[uc.Chrome] = None
 
     try:
         # Get credentials
