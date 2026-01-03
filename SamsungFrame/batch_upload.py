@@ -14,6 +14,7 @@ from typing import List, Dict, Optional
 import pillow_heif
 from PIL import Image
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
@@ -422,16 +423,29 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             if len(all_errors) > 5:
                 logger.error(f"  ... and {len(all_errors) - 5} more")
 
-        # Enable art mode (may timeout after heavy upload - TV needs recovery)
+        # Enable art mode with exponential backoff retry
         if summary.upload_summary.successful_uploads > 0:
-            logger.info("Reconnecting to TV for art mode...")
-            client.close()
-            time.sleep(5)
-            if client.connect():
+
+            @retry(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                reraise=False,
+            )
+            def enable_with_retry():
+                logger.info("Reconnecting to TV for art mode...")
+                client.close()
+                time.sleep(2)
+                if not client.connect():
+                    raise ConnectionError("Failed to reconnect")
                 logger.info("Enabling art mode...")
-                client.enable_art_mode()  # May timeout, that's OK
-            else:
-                logger.warning("Failed to reconnect for art mode")
+                if not client.enable_art_mode():
+                    raise RuntimeError("Art mode enable failed")
+
+            try:
+                enable_with_retry()
+                logger.info("Art mode enabled successfully")
+            except Exception:
+                logger.warning("Failed to enable art mode after retries")
 
         # Send notification
         send_batch_notification(summary)
