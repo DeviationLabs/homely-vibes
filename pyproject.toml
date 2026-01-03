@@ -197,6 +197,7 @@ module = [
     "utils.*",
     "streamlit.*",
     "pillow_heif.*",
+    "tqdm.*",
 ]
 ignore_missing_imports = true
 
