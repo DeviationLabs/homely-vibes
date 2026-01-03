@@ -60,7 +60,7 @@ class BatchUploadSummary(BaseModel):
 
 
 class ImageConverter:
-    """Convert HEIC to JPG, resize to 4K, compress to <10MB."""
+    """Convert HEIC to JPG; pass through JPG/PNG unchanged."""
 
     MAX_WIDTH = 3840
     MAX_HEIGHT = 2160
@@ -72,12 +72,12 @@ class ImageConverter:
         self.logger = get_logger(f"{__name__}.ImageConverter")
 
     def convert_if_needed(self, image_path: Path) -> ConversionResult:
-        """Convert HEIC/PNG to JPG; pass through JPG unchanged."""
+        """Convert HEIC to JPG; pass through JPG and PNG unchanged."""
         original_size_mb = image_path.stat().st_size / (1024 * 1024)
 
-        # Pass through JPG unchanged
+        # Pass through JPG and PNG unchanged
         ext = image_path.suffix.lower()
-        if ext in [".jpg", ".jpeg"]:
+        if ext in [".jpg", ".jpeg", ".png"]:
             return ConversionResult(
                 source_path=str(image_path),
                 converted_path=None,
@@ -86,7 +86,7 @@ class ImageConverter:
                 converted_size_mb=None,
             )
 
-        # Convert HEIC/PNG to JPG
+        # Convert HEIC to JPG
         try:
             with Image.open(image_path) as img:
                 # Convert to RGB (HEIC may have transparency)
