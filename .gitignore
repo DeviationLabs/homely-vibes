@@ -26,4 +26,4 @@ ext_lib*
 *.db
 
 # Token storage
-lib/tokens/
+lib/tokens

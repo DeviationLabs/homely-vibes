@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, cast
 from pydantic import BaseModel
 from PIL import Image
+from tqdm import tqdm
 
 from lib.logger import get_logger
 from lib import Constants
@@ -176,17 +177,16 @@ class SamsungFrameClient:
 
         matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
 
-        try:
-            if not self.validate_image_file(image_path):
-                return None
+        if not self.validate_image_file(image_path):
+            return None
 
+        try:
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
             self.logger.info(f"Uploading {image_path} with matte '{matte}'...")
             image_id = self.tv.art().upload(image_data, matte=matte)
             self.logger.info(f"Successfully uploaded {image_path} -> ID: {image_id}")
-
             return str(image_id) if image_id else None
 
         except Exception as e:
@@ -283,7 +283,9 @@ class SamsungFrameClient:
             self.logger.error(f"Error getting matte list: {e}")
             return []
 
-    def update_all_mattes(self, matte: Optional[str] = None) -> Dict[str, int]:
+    def update_all_mattes(
+        self, matte: Optional[str] = None, user_photos_only: bool = True
+    ) -> Dict[str, int]:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
@@ -311,6 +313,11 @@ class SamsungFrameClient:
                 )
 
         art_list = self.get_available_art()
+
+        # Filter for user-uploaded art only if requested
+        if user_photos_only:
+            art_list = [art for art in art_list if art.get("content_id", "").startswith("MY_F")]
+
         if not art_list:
             self.logger.warning("No art found on TV to update")
             return {"total": 0, "updated": 0, "skipped": 0, "failed": 0}
@@ -319,7 +326,7 @@ class SamsungFrameClient:
         skipped = 0
         failed = 0
 
-        for art_item in art_list:
+        for art_item in tqdm(art_list, desc="Updating mattes", unit="art"):
             content_id = art_item.get("content_id")
             current_matte = art_item.get("matte_id")
 

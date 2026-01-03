@@ -59,6 +59,7 @@ uv run python RachioFlume/main.py
 | 🖥️ **NodeCheck** | System node monitoring with continuous heartbeat tracking and automated device management. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/NodeCheck/README.md) |
 | 🔧 **OpenAIAdmin** | OpenAI project management and administration tools for API governance and usage tracking. | - |
 | 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RachioFlume/README.md) |
+| 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/SamsungFrame/README.md) |
 | ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | - |
 | 📊 **WaterLogging** | Comprehensive data collection scripts for Rachio, Flume, and Tuya smart water devices. | - |
 | 📈 **WaterParser** | Advanced water usage data processing, statistical analysis, and interactive HTML report generation. | - |
