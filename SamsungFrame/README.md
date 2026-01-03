@@ -46,25 +46,28 @@ uv sync
 
 ### First-Time Authentication
 
-On first run of **batch_upload.py**, the TV will display a pairing prompt:
+On first run, any command that connects to the TV will display a pairing prompt:
 
-1. Run batch upload: `uv run python SamsungFrame/batch_upload.py /path/to/images`
+```bash
+# Option 1: Use status command to pair without uploading
+uv run python SamsungFrame/manage_samsung.py status
+
+# Option 2: Pair during first upload
+uv run python SamsungFrame/batch_upload.py /path/to/images
+```
+
+**Pairing Steps:**
+1. Run any command that connects to TV (status, batch upload, list-art, etc.)
 2. Check your TV screen for the pairing prompt
 3. Accept the connection on your TV
 4. The authentication token will be automatically saved to `Constants.SAMSUNG_FRAME_TOKEN_FILE`
-5. Subsequent uploads will use the saved token without requiring TV approval
+5. Subsequent operations will use the saved token without requiring TV approval
 
-**Important Notes:**
-
-- Token is only saved during WebSocket operations (upload). The `status` command uses REST API and won't trigger token exchange.
-- Once a token is saved, all operations (status, batch upload, list-art) will work without TV approval.
-
-**To re-pair:** Delete the token file (check `Constants.SAMSUNG_FRAME_TOKEN_FILE` for location) and run batch upload:
+**To re-pair:** Delete the token file and run any connection command:
 
 ```bash
-# Token file location defined in Constants.SAMSUNG_FRAME_TOKEN_FILE
 rm lib/tokens/samsung_frame_token.txt
-uv run python SamsungFrame/batch_upload.py /path/to/images
+uv run python SamsungFrame/manage_samsung.py status
 ```
 
 ## Usage
