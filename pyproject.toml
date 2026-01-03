@@ -23,6 +23,7 @@ dependencies = [
     "langchain-openai>=0.1.0",
     "tiktoken>=0.8.0",
     "tqdm>=4.66.0",
+    "tenacity>=8.0.0",
     "uvicorn>=0.23.0",
     "matplotlib>=3.10.5",
     "tld>=0.13.1",
