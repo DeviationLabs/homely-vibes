@@ -184,8 +184,13 @@ class SamsungFrameClient:
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
-            self.logger.info(f"Uploading {image_path} with matte '{matte}'...")
-            image_id = self.tv.art().upload(image_data, matte=matte)
+            # Detect file type from extension
+            file_ext = Path(image_path).suffix.lower().lstrip(".")
+            if file_ext == "jpeg":
+                file_ext = "jpg"
+
+            self.logger.info(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
+            image_id = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
             self.logger.info(f"Successfully uploaded {image_path} -> ID: {image_id}")
             return str(image_id) if image_id else None
 
