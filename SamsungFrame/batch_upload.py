@@ -278,22 +278,19 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error(f"Source directory not found: {args.source_dir}")
         return 1
 
-    # Connect to TV (skip in dry-run mode)
-    client = None
-    if not args.dry_run:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to TV at {client.host}:{client.port}...")
-        if not client.connect():
-            logger.error("Failed to connect to TV")
-            return 1
+    # Connect to TV
+    client = SamsungFrameClient()
+    logger.info(f"Connecting to TV at {client.host}:{client.port}...")
+    if not client.connect():
+        logger.error("Failed to connect to TV")
+        return 1
 
     # Delete existing art (if requested)
     art_deleted = 0
     art_delete_failures = 0
-    if args.delete_existing and not args.dry_run:
+    if args.purge:
         try:
-            assert client is not None
-            result = delete_all_art(client, force=args.force)
+            result = delete_all_art(client, force=True)
             art_deleted = result["deleted"]
             art_delete_failures = result["failed"]
         except Exception as e:
@@ -302,7 +299,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
     # Discover images
     try:
-        images = discover_images(args.source_dir, min_size_mb=args.min_size_mb)
+        images = discover_images(args.source_dir, min_size_mb=1.0)
     except ValueError as e:
         logger.error(str(e))
         return 1
@@ -344,16 +341,8 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             logger.error("All conversions failed")
             return 1
 
-        # Dry run mode - stop here
-        if args.dry_run:
-            logger.info("=" * 50)
-            logger.info("DRY RUN - No upload performed")
-            logger.info(f"Would upload {len(processed_images)} images")
-            return 0
-
         # Upload images
         logger.info(f"Uploading {len(processed_images)} images...")
-        assert client is not None
         matte = args.matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
 
         uploaded_ids: List[str] = []
@@ -425,8 +414,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                 logger.warning("Failed to enable art mode")
 
         # Send notification
-        if args.notify:
-            send_batch_notification(summary)
+        send_batch_notification(summary)
 
         # Close TV connection
         if client:
@@ -476,28 +464,9 @@ def main() -> int:
     )
 
     parser.add_argument(
-        "--delete-existing",
+        "--purge",
         action="store_true",
-        help="Delete all existing TV art before upload",
-    )
-
-    parser.add_argument(
-        "--force", action="store_true", help="Skip confirmation (with --delete-existing)"
-    )
-
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Scan and convert only, no TV operations"
-    )
-
-    parser.add_argument(
-        "--notify", action="store_true", help="Send Pushover notification on completion"
-    )
-
-    parser.add_argument(
-        "--min-size-mb",
-        type=float,
-        default=1.0,
-        help="Minimum file size in MB (default: 1.0)",
+        help="Delete all user-uploaded art before upload (no confirmation)",
     )
 
     args = parser.parse_args()

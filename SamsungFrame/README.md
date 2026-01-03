@@ -110,15 +110,10 @@ For iPhone/iOS users with HEIC photos, use the batch upload script which handles
 uv run python SamsungFrame/batch_upload.py ~/Photos/Favorites
 
 # Replace all existing user-uploaded art
-uv run python SamsungFrame/batch_upload.py ~/Photos/Vacation \
-    --delete-existing --force --notify
+uv run python SamsungFrame/batch_upload.py ~/Photos/Vacation --purge
 
-# Custom matte and minimum file size
-uv run python SamsungFrame/batch_upload.py ~/Photos \
-    --matte shadowbox_black --min-size-mb 2.0
-
-# Dry run (preview without uploading)
-uv run python SamsungFrame/batch_upload.py ~/Photos --dry-run
+# Custom matte
+uv run python SamsungFrame/batch_upload.py ~/Photos --matte shadowbox_black
 ```
 
 **What the batch upload script does:**
@@ -135,11 +130,9 @@ uv run python SamsungFrame/batch_upload.py ~/Photos --dry-run
 
 - `source_dir` - Directory to scan (required)
 - `--matte` - Matte style (default: shadowbox_black)
-- `--delete-existing` - Delete user-uploaded art before upload
-- `--force` - Skip confirmation prompt
-- `--dry-run` - Preview without TV operations
-- `--notify` - Send Pushover notification
-- `--min-size-mb` - Minimum file size (default: 1.0MB)
+- `--purge` - Delete all user-uploaded art before upload
+
+**Note**: Pushover notifications sent automatically. Files <1MB filtered as thumbnails.
 
 **Supported Formats**: HEIC, JPG, JPEG, PNG
 

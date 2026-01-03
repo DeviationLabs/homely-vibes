@@ -339,32 +339,3 @@ class TestArtDeletion:
 
         with pytest.raises(RuntimeError, match="Not connected to TV"):
             delete_all_art(client, force=True)
-
-
-class TestBatchUpload:
-    """Test batch upload orchestration."""
-
-    def test_dry_run_mode(self) -> None:
-        """Test dry-run mode doesn't upload."""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # Create test image
-            img = Image.new("RGB", (100, 100), color="red")
-            img.save(Path(tmp_dir) / "test.jpg", format="JPEG")
-
-            from argparse import Namespace
-
-            args = Namespace(
-                source_dir=tmp_dir,
-                dry_run=True,
-                delete_existing=False,
-                force=False,
-                notify=False,
-                min_size_mb=0.0,
-                matte=None,
-            )
-
-            from SamsungFrame.batch_upload import run_batch_upload
-
-            # Should succeed without connecting to TV
-            result = run_batch_upload(args)
-            assert result == 0
