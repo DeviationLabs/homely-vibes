@@ -176,23 +176,53 @@ class SamsungFrameClient:
             return None
 
         matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        max_retries = 3
+        retry_delay = 2  # seconds
 
-        try:
-            if not self.validate_image_file(image_path):
+        if not self.validate_image_file(image_path):
+            return None
+
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+
+        for attempt in range(max_retries):
+            try:
+                self.logger.info(f"Uploading {image_path} with matte '{matte}'...")
+                image_id = self.tv.art().upload(image_data, matte=matte)
+                self.logger.info(f"Successfully uploaded {image_path} -> ID: {image_id}")
+
+                # Small delay after successful upload to avoid overwhelming TV
+                time.sleep(0.5)
+                return str(image_id) if image_id else None
+
+            except (BrokenPipeError, ConnectionError, OSError) as e:
+                self.logger.warning(
+                    f"Connection error on attempt {attempt + 1}/{max_retries} for {image_path}: {e}"
+                )
+
+                if attempt < max_retries - 1:
+                    self.logger.info(f"Reconnecting to TV and retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+
+                    # Attempt to reconnect
+                    try:
+                        if self.tv:
+                            self.tv.close()
+                    except Exception:
+                        pass
+
+                    if not self.connect():
+                        self.logger.error("Failed to reconnect to TV")
+                        return None
+                else:
+                    self.logger.error(f"All retries exhausted for {image_path}")
+                    return None
+
+            except Exception as e:
+                self.logger.error(f"Failed to upload {image_path}: {e}")
                 return None
 
-            with open(image_path, "rb") as f:
-                image_data = f.read()
-
-            self.logger.info(f"Uploading {image_path} with matte '{matte}'...")
-            image_id = self.tv.art().upload(image_data, matte=matte)
-            self.logger.info(f"Successfully uploaded {image_path} -> ID: {image_id}")
-
-            return str(image_id) if image_id else None
-
-        except Exception as e:
-            self.logger.error(f"Failed to upload {image_path}: {e}")
-            return None
+        return None
 
     def upload_images_from_folder(
         self, folder_path: str, matte: Optional[str] = None
