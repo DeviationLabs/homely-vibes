@@ -33,6 +33,7 @@ dependencies = [
     "websocket>=0.2.1",
     "samsungtvws>=2.6.0",
     "Pillow>=10.0.0",
+    "pillow-heif>=0.18.0",
 ]
 
 [project.optional-dependencies]
@@ -194,6 +195,7 @@ module = [
     "reporter.*",
     "utils.*",
     "streamlit.*",
+    "pillow_heif.*",
 ]
 ignore_missing_imports = true
 
