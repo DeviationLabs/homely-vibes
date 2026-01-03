@@ -13,6 +13,7 @@ from typing import List, Dict, Optional
 import pillow_heif
 from PIL import Image
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
@@ -424,7 +425,16 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         # Enable art mode with exponential backoff retry
         if summary.upload_summary.successful_uploads > 0:
             logger.info("Starting slideshow...")
-            if not client.start_slideshow(duration=3, shuffle=True):
+
+            @retry(
+                stop=stop_after_attempt(5),
+                wait=wait_exponential(multiplier=1, min=1, max=10),
+                reraise=True,
+            )
+            def start_slideshow_with_retry() -> bool:
+                return client.start_slideshow(duration=3, shuffle=True)
+
+            if not start_slideshow_with_retry():
                 logger.error("Slideshow start failed")
                 return 1
 

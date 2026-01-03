@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any, cast
 from pydantic import BaseModel
 from PIL import Image
 from tqdm import tqdm
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from lib.logger import get_logger
 from lib import Constants
@@ -189,8 +190,18 @@ class SamsungFrameClient:
             if file_ext == "jpeg":
                 file_ext = "jpg"
 
-            self.logger.debug(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
-            image_id = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
+            @retry(
+                stop=stop_after_attempt(5),
+                wait=wait_exponential(multiplier=1, min=1, max=10),
+                reraise=True,
+            )
+            def upload_with_retry() -> Optional[str]:
+                assert self.tv is not None
+                self.logger.debug(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
+                result = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
+                return cast(Optional[str], result)
+
+            image_id = upload_with_retry()
             self.logger.debug(f"Successfully uploaded {image_path} -> ID: {image_id}")
             return str(image_id) if image_id else None
 
@@ -243,6 +254,8 @@ class SamsungFrameClient:
             except Exception as e:
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 errors.append({"file": os.path.basename(image_path), "error": str(e)})
+            finally:
+                time.sleep(1)
 
         summary = ImageUploadSummary(
             total_images=len(image_files),

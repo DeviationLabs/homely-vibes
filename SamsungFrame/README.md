@@ -195,6 +195,31 @@ This command:
 - Updates each art item to use the specified matte style
 - Reports success/failure/skipped counts
 
+### Start Slideshow
+
+Enable the TV's automatic slideshow feature (recommended for normal use):
+
+```bash
+# Start slideshow with default settings (15 min interval, shuffle on)
+uv run python SamsungFrame/manage_samsung.py start-slideshow
+
+# Custom interval (30 minutes between images)
+uv run python SamsungFrame/manage_samsung.py start-slideshow --duration 30
+
+# Sequential mode (no shuffle)
+uv run python SamsungFrame/manage_samsung.py start-slideshow --no-shuffle
+```
+
+This command:
+
+- Enables art mode on the TV
+- Starts the TV's built-in slideshow for user-uploaded photos
+- Configures the interval between image changes (in minutes)
+- Optionally enables shuffle or sequential mode
+- Returns after starting the slideshow (TV continues cycling independently)
+
+**Note**: This uses the TV's native slideshow feature, which continues running even after the command exits. The TV will cycle through images automatically based on the configured interval.
+
 ### Cycle Through Images
 
 Manually cycle through your photos with a specified period (useful for testing or presentations):
@@ -218,7 +243,7 @@ This command:
 - Continues indefinitely until you press Ctrl+C
 - Logs each image change for monitoring
 
-**Note**: This is different from the TV's built-in slideshow. The cycle-images command gives you precise control over timing and which images to display.
+**Note**: This is different from the TV's built-in slideshow. The cycle-images command gives you precise control over timing (in seconds) and which images to display, but requires the script to keep running.
 
 ## Architecture
 
