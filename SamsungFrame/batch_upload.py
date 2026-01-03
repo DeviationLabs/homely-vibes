@@ -7,12 +7,14 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
 import pillow_heif
 from PIL import Image
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
@@ -58,7 +60,7 @@ class BatchUploadSummary(BaseModel):
 
 
 class ImageConverter:
-    """Convert HEIC to JPG, resize to 4K, compress to <10MB."""
+    """Convert HEIC to JPG; pass through JPG/PNG unchanged."""
 
     MAX_WIDTH = 3840
     MAX_HEIGHT = 2160
@@ -70,12 +72,12 @@ class ImageConverter:
         self.logger = get_logger(f"{__name__}.ImageConverter")
 
     def convert_if_needed(self, image_path: Path) -> ConversionResult:
-        """Convert HEIC/PNG to JPG; pass through JPG unchanged."""
+        """Convert HEIC to JPG; pass through JPG and PNG unchanged."""
         original_size_mb = image_path.stat().st_size / (1024 * 1024)
 
-        # Pass through JPG unchanged
+        # Pass through JPG and PNG unchanged
         ext = image_path.suffix.lower()
-        if ext in [".jpg", ".jpeg"]:
+        if ext in [".jpg", ".jpeg", ".png"]:
             return ConversionResult(
                 source_path=str(image_path),
                 converted_path=None,
@@ -84,7 +86,7 @@ class ImageConverter:
                 converted_size_mb=None,
             )
 
-        # Convert HEIC/PNG to JPG
+        # Convert HEIC to JPG
         try:
             with Image.open(image_path) as img:
                 # Convert to RGB (HEIC may have transparency)
@@ -421,13 +423,29 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             if len(all_errors) > 5:
                 logger.error(f"  ... and {len(all_errors) - 5} more")
 
-        # Enable art mode (slideshow)
+        # Enable art mode with exponential backoff retry
         if summary.upload_summary.successful_uploads > 0:
-            logger.info("Enabling art mode...")
-            if client.enable_art_mode():
-                logger.info("Art mode enabled - TV will display uploaded images")
-            else:
-                logger.warning("Failed to enable art mode")
+
+            @retry(
+                stop=stop_after_attempt(4),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                reraise=False,
+            )
+            def enable_with_retry() -> None:
+                logger.info("Reconnecting to TV for slideshow...")
+                client.close()
+                time.sleep(2)
+                if not client.connect():
+                    raise ConnectionError("Failed to reconnect")
+                logger.info("Starting slideshow...")
+                if not client.start_slideshow():
+                    raise RuntimeError("Slideshow start failed")
+
+            try:
+                enable_with_retry()
+                logger.info("Slideshow started successfully")
+            except Exception:
+                logger.warning("Failed to start slideshow after retries")
 
         # Send notification
         send_batch_notification(summary)

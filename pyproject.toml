@@ -2,6 +2,9 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project]
 name = "homely_vibes"
 version = "2.0.0"
@@ -20,6 +23,7 @@ dependencies = [
     "langchain-openai>=0.1.0",
     "tiktoken>=0.8.0",
     "tqdm>=4.66.0",
+    "tenacity>=8.0.0",
     "uvicorn>=0.23.0",
     "matplotlib>=3.10.5",
     "tld>=0.13.1",
@@ -32,7 +36,7 @@ dependencies = [
     "libpyfoscam>=1.2.2",
     "requests-oauthlib>=2.0.0",
     "websocket>=0.2.1",
-    "samsungtvws>=2.6.0",
+    "samsungtvws @ git+https://github.com/NickWaterton/samsung-tv-ws-api.git",
     "Pillow>=10.0.0",
     "pillow-heif>=0.18.0",
 ]

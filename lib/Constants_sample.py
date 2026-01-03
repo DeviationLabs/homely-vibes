@@ -159,7 +159,7 @@ AUGUST_TOKEN_FILE = f"{TOKENS_DIR}/august_auth_token.json"
 SAMSUNG_FRAME_IP = "192.168.1.4"
 SAMSUNG_FRAME_PORT = 8002  # WebSocket port
 SAMSUNG_FRAME_TOKEN_FILE = f"{TOKENS_DIR}/samsung_frame_token.txt"
-SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
+SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox_black"  # Black border style
 SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
 SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
 

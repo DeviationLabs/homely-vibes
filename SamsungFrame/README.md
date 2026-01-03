@@ -247,9 +247,11 @@ This command:
 
 ### Dependencies
 
-- **`samsungtvws`**: Samsung TV WebSocket API library
+- **`samsungtvws`**: Samsung TV WebSocket API library (using [NickWaterton fork v3.0.5+](https://github.com/NickWaterton/samsung-tv-ws-api) for improved upload reliability)
 - **`Pillow`**: Image validation and processing
 - **`pydantic`**: Data validation and modeling
+
+**Note**: This project uses the NickWaterton fork of samsungtvws which includes critical fixes for image uploads, particularly for TVs with `support_myshelf: FALSE`. The official pypi package (v2.7.2) has known issues with large file uploads.
 
 ## Supported Matte Styles
 
@@ -369,6 +371,7 @@ The slideshow uses the TV's configured rotation interval (fastest available). Th
 
 ## References
 
-- [samsung-tv-ws-api GitHub](https://github.com/xchwarze/samsung-tv-ws-api)
+- [NickWaterton samsung-tv-ws-api fork](https://github.com/NickWaterton/samsung-tv-ws-api) (v3.0.5+ used by this project)
+- [Original samsung-tv-ws-api](https://github.com/xchwarze/samsung-tv-ws-api) (official upstream)
 - Samsung Frame TV User Manual
 - [Pushover API Documentation](https://pushover.net/api)
