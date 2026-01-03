@@ -7,14 +7,12 @@ import os
 import re
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
 import pillow_heif
 from PIL import Image
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
 from tqdm import tqdm
 
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
@@ -110,7 +108,7 @@ class ImageConverter:
                     )
 
                 converted_size_mb = output_path.stat().st_size / (1024 * 1024)
-                self.logger.info(
+                self.logger.debug(
                     f"Converted {image_path.name}: "
                     f"{original_size_mb:.2f}MB → {converted_size_mb:.2f}MB"
                 )
@@ -144,7 +142,7 @@ class ImageConverter:
         new_width = int(width * ratio)
         new_height = int(height * ratio)
 
-        self.logger.info(f"Resizing from {width}×{height} to {new_width}×{new_height}")
+        self.logger.debug(f"Resizing from {width}×{height} to {new_width}×{new_height}")
         return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
     def _compress_to_limit(self, img: Image.Image, output_path: Path) -> bool:
@@ -371,7 +369,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                 image_id = client.upload_image(img_path, matte=matte)
                 if image_id:
                     uploaded_ids.append(image_id)
-                    logger.info(f"Uploaded {Path(img_path).name} → {image_id}")
+                    logger.debug(f"Uploaded {Path(img_path).name} → {image_id}")
                 else:
                     upload_errors.append(
                         {"file": Path(img_path).name, "error": "Upload returned None"}
@@ -425,27 +423,10 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
         # Enable art mode with exponential backoff retry
         if summary.upload_summary.successful_uploads > 0:
-
-            @retry(
-                stop=stop_after_attempt(4),
-                wait=wait_exponential(multiplier=1, min=2, max=10),
-                reraise=False,
-            )
-            def enable_with_retry() -> None:
-                logger.info("Reconnecting to TV for slideshow...")
-                client.close()
-                time.sleep(2)
-                if not client.connect():
-                    raise ConnectionError("Failed to reconnect")
-                logger.info("Starting slideshow...")
-                if not client.start_slideshow():
-                    raise RuntimeError("Slideshow start failed")
-
-            try:
-                enable_with_retry()
-                logger.info("Slideshow started successfully")
-            except Exception:
-                logger.warning("Failed to start slideshow after retries")
+            logger.info("Starting slideshow...")
+            if not client.start_slideshow(duration=3, shuffle=True):
+                logger.error("Slideshow start failed")
+                return 1
 
         # Send notification
         send_batch_notification(summary)

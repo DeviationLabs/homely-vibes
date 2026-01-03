@@ -65,6 +65,11 @@ def main() -> int:
     cycle_parser.add_argument(
         "--all", action="store_true", help="Cycle through all art (not just user photos)"
     )
+    cycle_parser.add_argument(
+        "--no-shuffle",
+        action="store_true",
+        help="Disable randomization (cycle in sequential order)",
+    )
 
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -295,7 +300,8 @@ def cycle_images(args: argparse.Namespace) -> int:
             return 1
 
         user_photos_only = not args.all
-        client.cycle_images(period=args.period, user_photos_only=user_photos_only)
+        shuffle = not args.no_shuffle
+        client.cycle_images(period=args.period, user_photos_only=user_photos_only, shuffle=shuffle)
 
         client.close()
         return 0

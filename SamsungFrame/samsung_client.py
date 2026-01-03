@@ -189,9 +189,9 @@ class SamsungFrameClient:
             if file_ext == "jpeg":
                 file_ext = "jpg"
 
-            self.logger.info(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
+            self.logger.debug(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
             image_id = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
-            self.logger.info(f"Successfully uploaded {image_path} -> ID: {image_id}")
+            self.logger.debug(f"Successfully uploaded {image_path} -> ID: {image_id}")
             return str(image_id) if image_id else None
 
         except Exception as e:
@@ -388,10 +388,7 @@ class SamsungFrameClient:
             return False
 
         try:
-            # Enable art mode first
-            if not self.enable_art_mode():
-                return False
-
+            self.enable_art_mode()
             # Start slideshow for user photos (category 2)
             self.tv.art().set_slideshow_status(duration=duration, type=shuffle, category=2)
             self.logger.info(
@@ -403,17 +400,22 @@ class SamsungFrameClient:
             self.logger.error(f"Error starting slideshow: {e}")
             return False
 
-    def cycle_images(self, period: int = 15, user_photos_only: bool = True) -> None:
+    def cycle_images(
+        self, period: int = 15, user_photos_only: bool = True, shuffle: bool = True
+    ) -> None:
         """Cycle through images on TV with specified period.
 
         Args:
             period: Time in seconds between image changes (default: 15)
             user_photos_only: Only cycle through user-uploaded photos (default: True)
+            shuffle: Randomize image order each cycle (default: True)
 
         Raises:
             RuntimeError: If not connected to TV
             KeyboardInterrupt: When user stops the cycle
         """
+        import random
+
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
@@ -433,12 +435,19 @@ class SamsungFrameClient:
             return
 
         self.enable_art_mode()
-        self.logger.info(f"Starting image cycle with {period} second period")
+        self.logger.info(
+            f"Starting image cycle with {period} second period "
+            f"({'shuffle' if shuffle else 'sequential'} mode)"
+        )
         self.logger.info("Press Ctrl+C to stop")
 
         try:
             cycle_count = 0
             while True:
+                # Shuffle list at start of each cycle if enabled
+                if shuffle:
+                    random.shuffle(art_list)
+
                 for art_item in art_list:
                     content_id = art_item.get("content_id")
                     if not content_id:
