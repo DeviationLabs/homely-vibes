@@ -421,13 +421,9 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             if len(all_errors) > 5:
                 logger.error(f"  ... and {len(all_errors) - 5} more")
 
-        # Enable art mode (slideshow)
+        # Note: Art mode enable skipped - TV needs recovery time after upload
         if summary.upload_summary.successful_uploads > 0:
-            logger.info("Enabling art mode...")
-            if client.enable_art_mode():
-                logger.info("Art mode enabled - TV will display uploaded images")
-            else:
-                logger.warning("Failed to enable art mode")
+            logger.info("Upload complete - enable art mode manually on TV if needed")
 
         # Send notification
         send_batch_notification(summary)

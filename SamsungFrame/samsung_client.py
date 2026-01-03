@@ -370,19 +370,8 @@ class SamsungFrameClient:
             self.logger.info("Art mode enabled")
             return True
         except Exception as e:
-            self.logger.warning(f"Connection timeout, reconnecting: {e}")
-            # Reconnect and retry once
-            if self.connect():
-                try:
-                    self.tv.art().set_artmode(True)
-                    self.logger.info("Art mode enabled after reconnect")
-                    return True
-                except Exception as retry_error:
-                    self.logger.error(f"Error enabling art mode after reconnect: {retry_error}")
-                    return False
-            else:
-                self.logger.error("Failed to reconnect to TV")
-                return False
+            self.logger.error(f"Error enabling art mode: {e}")
+            return False
 
     def start_slideshow(self) -> bool:
         if not self.tv:
