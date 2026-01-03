@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, cast
 from pydantic import BaseModel
 from PIL import Image
+from tqdm import tqdm
 
 from lib.logger import get_logger
 from lib import Constants
@@ -283,7 +284,9 @@ class SamsungFrameClient:
             self.logger.error(f"Error getting matte list: {e}")
             return []
 
-    def update_all_mattes(self, matte: Optional[str] = None) -> Dict[str, int]:
+    def update_all_mattes(
+        self, matte: Optional[str] = None, user_photos_only: bool = True
+    ) -> Dict[str, int]:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
@@ -311,6 +314,11 @@ class SamsungFrameClient:
                 )
 
         art_list = self.get_available_art()
+
+        # Filter for user-uploaded art only if requested
+        if user_photos_only:
+            art_list = [art for art in art_list if art.get("content_id", "").startswith("MY_F")]
+
         if not art_list:
             self.logger.warning("No art found on TV to update")
             return {"total": 0, "updated": 0, "skipped": 0, "failed": 0}
@@ -319,7 +327,7 @@ class SamsungFrameClient:
         skipped = 0
         failed = 0
 
-        for art_item in art_list:
+        for art_item in tqdm(art_list, desc="Updating mattes", unit="art"):
             content_id = art_item.get("content_id")
             current_matte = art_item.get("matte_id")
 

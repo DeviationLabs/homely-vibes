@@ -4,6 +4,7 @@
 import argparse
 import sys
 
+
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
 from lib.MyPushover import Pushover
 from lib.logger import get_logger
@@ -50,13 +51,18 @@ def main() -> int:
     )
 
     matte_parser = subparsers.add_parser(
-        "update-mattes", help="Update matte style for all art on TV"
+        "update-mattes", help="Update matte style for user-uploaded art (use --all for all art)"
     )
     matte_parser.add_argument(
         "--matte",
         type=str,
         default=None,
         help=f"Matte style (default: {Constants.SAMSUNG_FRAME_DEFAULT_MATTE})",
+    )
+    matte_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Update all art (including Samsung pre-installed art)",
     )
 
     cycle_parser = subparsers.add_parser(
@@ -355,9 +361,14 @@ def update_mattes(args: argparse.Namespace) -> int:
             return 1
 
         matte = args.matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
-        logger.info(f"Updating all art mattes to '{matte}'...")
+        user_photos_only = not args.all
 
-        result = client.update_all_mattes(matte)
+        if user_photos_only:
+            logger.info(f"Updating user-uploaded art mattes to '{matte}'...")
+        else:
+            logger.info(f"Updating all art mattes to '{matte}'...")
+
+        result = client.update_all_mattes(matte, user_photos_only=user_photos_only)
 
         logger.info(
             f"Results: {result['updated']} updated, "

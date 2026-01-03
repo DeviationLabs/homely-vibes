@@ -319,6 +319,11 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("No images found matching criteria")
         return 1
 
+    # Limit files if max_files is specified
+    if args.max_files > 0 and len(images) > args.max_files:
+        logger.info(f"Limiting to first {args.max_files} of {len(images)} discovered images")
+        images = images[: args.max_files]
+
     # Convert HEIC to JPG
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Using temp directory: {temp_dir}")
@@ -478,6 +483,13 @@ def main() -> int:
         "--purge",
         action="store_true",
         help="Delete all user-uploaded art before upload (no confirmation)",
+    )
+
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        default=0,
+        help="Maximum number of files to upload (0 = all)",
     )
 
     args = parser.parse_args()
