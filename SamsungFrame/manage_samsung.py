@@ -71,6 +71,21 @@ def main() -> int:
         help="Disable randomization (cycle in sequential order)",
     )
 
+    slideshow_parser = subparsers.add_parser(
+        "start-slideshow", help="Start automatic slideshow on TV"
+    )
+    slideshow_parser.add_argument(
+        "--duration",
+        type=int,
+        default=15,
+        help="Time in minutes between image changes (default: 15)",
+    )
+    slideshow_parser.add_argument(
+        "--no-shuffle",
+        action="store_true",
+        help="Disable shuffle mode (sequential order)",
+    )
+
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -92,6 +107,8 @@ def main() -> int:
         return update_mattes(args)
     elif args.command == "cycle-images":
         return cycle_images(args)
+    elif args.command == "start-slideshow":
+        return start_slideshow(args)
 
     return 0
 
@@ -311,6 +328,33 @@ def cycle_images(args: argparse.Namespace) -> int:
         return 0
     except Exception as e:
         logger.error(f"Error cycling images: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def start_slideshow(args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        shuffle = not args.no_shuffle
+        if client.start_slideshow(duration=args.duration, shuffle=shuffle):
+            logger.info("Slideshow started successfully")
+            return 0
+        else:
+            logger.error("Failed to start slideshow")
+            return 1
+
+    except Exception as e:
+        logger.error(f"Error starting slideshow: {e}")
         return 1
     finally:
         if "client" in locals():
