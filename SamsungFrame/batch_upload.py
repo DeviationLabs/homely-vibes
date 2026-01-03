@@ -13,6 +13,7 @@ from typing import List, Dict, Optional
 import pillow_heif
 from PIL import Image
 from pydantic import BaseModel
+from tqdm import tqdm
 
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
 from lib.MyPushover import Pushover
@@ -69,12 +70,12 @@ class ImageConverter:
         self.logger = get_logger(f"{__name__}.ImageConverter")
 
     def convert_if_needed(self, image_path: Path) -> ConversionResult:
-        """Convert HEIC to JPG; pass through JPG/PNG unchanged."""
+        """Convert HEIC/PNG to JPG; pass through JPG unchanged."""
         original_size_mb = image_path.stat().st_size / (1024 * 1024)
 
-        # Pass through JPG/PNG unchanged
+        # Pass through JPG unchanged
         ext = image_path.suffix.lower()
-        if ext in [".jpg", ".jpeg", ".png"]:
+        if ext in [".jpg", ".jpeg"]:
             return ConversionResult(
                 source_path=str(image_path),
                 converted_path=None,
@@ -83,7 +84,7 @@ class ImageConverter:
                 converted_size_mb=None,
             )
 
-        # Convert HEIC to JPG
+        # Convert HEIC/PNG to JPG
         try:
             with Image.open(image_path) as img:
                 # Convert to RGB (HEIC may have transparency)
@@ -285,6 +286,16 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("Failed to connect to TV")
         return 1
 
+    # Verify TV connection is stable by testing art API
+    try:
+        logger.info("Verifying TV connection...")
+        client.get_available_art()
+        logger.info("TV connection verified and stable")
+    except Exception as e:
+        logger.error(f"TV connection test failed: {e}")
+        logger.error("TV appears connected but is not responding - check TV status and retry")
+        return 1
+
     # Delete existing art (if requested)
     art_deleted = 0
     art_delete_failures = 0
@@ -316,7 +327,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         conversion_results: List[ConversionResult] = []
         processed_images: List[str] = []
 
-        for image_path in images:
+        for image_path in tqdm(images, desc="Converting images", unit="img"):
             conversion_result = converter.convert_if_needed(image_path)
             conversion_results.append(conversion_result)
 
@@ -348,7 +359,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         uploaded_ids: List[str] = []
         upload_errors: List[Dict[str, str]] = []
 
-        for img_path in processed_images:
+        for img_path in tqdm(processed_images, desc="Uploading images", unit="img"):
             try:
                 image_id = client.upload_image(img_path, matte=matte)
                 if image_id:

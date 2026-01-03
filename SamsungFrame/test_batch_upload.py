@@ -146,8 +146,8 @@ class TestImageConverter:
             assert result.converted_path is None
             assert result.source_path == str(jpg_path)
 
-    def test_png_passthrough(self) -> None:
-        """Test PNG files pass through unchanged."""
+    def test_png_conversion(self) -> None:
+        """Test PNG files are converted to JPG."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Create PNG
             img = Image.new("RGB", (500, 500), color="cyan")
@@ -158,7 +158,8 @@ class TestImageConverter:
             result = converter.convert_if_needed(png_path)
 
             assert result.success
-            assert result.converted_path is None
+            assert result.converted_path is not None
+            assert Path(result.converted_path).suffix == ".jpg"
 
     def test_resize_large_image(self) -> None:
         """Test resizing image larger than 4K."""
