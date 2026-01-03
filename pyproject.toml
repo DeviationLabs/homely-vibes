@@ -19,6 +19,7 @@ dependencies = [
     "langchain>=0.2.5",
     "langchain-openai>=0.1.0",
     "tiktoken>=0.8.0",
+    "tqdm>=4.66.0",
     "uvicorn>=0.23.0",
     "matplotlib>=3.10.5",
     "tld>=0.13.1",
@@ -33,6 +34,7 @@ dependencies = [
     "websocket>=0.2.1",
     "samsungtvws>=2.6.0",
     "Pillow>=10.0.0",
+    "pillow-heif>=0.18.0",
 ]
 
 [project.optional-dependencies]
@@ -194,6 +196,8 @@ module = [
     "reporter.*",
     "utils.*",
     "streamlit.*",
+    "pillow_heif.*",
+    "tqdm.*",
 ]
 ignore_missing_imports = true
 
