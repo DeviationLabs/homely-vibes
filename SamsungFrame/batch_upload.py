@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -421,9 +422,16 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             if len(all_errors) > 5:
                 logger.error(f"  ... and {len(all_errors) - 5} more")
 
-        # Note: Art mode enable skipped - TV needs recovery time after upload
+        # Enable art mode (may timeout after heavy upload - TV needs recovery)
         if summary.upload_summary.successful_uploads > 0:
-            logger.info("Upload complete - enable art mode manually on TV if needed")
+            logger.info("Reconnecting to TV for art mode...")
+            client.close()
+            time.sleep(5)
+            if client.connect():
+                logger.info("Enabling art mode...")
+                client.enable_art_mode()  # May timeout, that's OK
+            else:
+                logger.warning("Failed to reconnect for art mode")
 
         # Send notification
         send_batch_notification(summary)
