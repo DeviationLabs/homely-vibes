@@ -427,25 +427,25 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         if summary.upload_summary.successful_uploads > 0:
 
             @retry(
-                stop=stop_after_attempt(3),
+                stop=stop_after_attempt(4),
                 wait=wait_exponential(multiplier=1, min=2, max=10),
                 reraise=False,
             )
-            def enable_with_retry():
-                logger.info("Reconnecting to TV for art mode...")
+            def enable_with_retry() -> None:
+                logger.info("Reconnecting to TV for slideshow...")
                 client.close()
                 time.sleep(2)
                 if not client.connect():
                     raise ConnectionError("Failed to reconnect")
-                logger.info("Enabling art mode...")
-                if not client.enable_art_mode():
-                    raise RuntimeError("Art mode enable failed")
+                logger.info("Starting slideshow...")
+                if not client.start_slideshow():
+                    raise RuntimeError("Slideshow start failed")
 
             try:
                 enable_with_retry()
-                logger.info("Art mode enabled successfully")
+                logger.info("Slideshow started successfully")
             except Exception:
-                logger.warning("Failed to enable art mode after retries")
+                logger.warning("Failed to start slideshow after retries")
 
         # Send notification
         send_batch_notification(summary)
