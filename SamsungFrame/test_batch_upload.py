@@ -90,9 +90,19 @@ class TestImageDiscovery:
                 img.save(Path(tmp_dir) / name, format="JPEG")
 
             # Create thumbnails (should be filtered)
-            for name in ["photo1_thumb.jpg", "photo2_thumbnail.jpg", "photo3_small.jpg"]:
+            thumbnail_names = [
+                "photo1_thumb.jpg",
+                "photo2_thumbnail.jpg",
+                "photo3_small.jpg",
+                "photo4_small@2x.jpg",
+                "photo5_thumbnail@3x.png",
+                "photo6_small@10x.jpg",
+                "photo7_thumb@100x.png",
+            ]
+            for name in thumbnail_names:
                 img = Image.new("RGB", (500, 500), color="red")
-                img.save(Path(tmp_dir) / name, format="JPEG")
+                ext = "PNG" if name.endswith(".png") else "JPEG"
+                img.save(Path(tmp_dir) / name, format=ext)
 
             images = discover_images(tmp_dir, min_size_mb=0.0)
             assert len(images) == 2

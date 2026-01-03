@@ -2,6 +2,7 @@
 """Batch upload images to Samsung Frame TV with HEIC conversion."""
 
 import argparse
+import hashlib
 import os
 import re
 import sys
@@ -28,7 +29,7 @@ pushover = Pushover(
 )
 
 # Thumbnail patterns to exclude
-THUMBNAIL_PATTERNS = re.compile(r"_(thumb|thumbnail|small)(@\dx)?\.[\w]+$", re.IGNORECASE)
+THUMBNAIL_PATTERNS = re.compile(r"_(thumb|thumbnail|small)(@\d+x)?\.[\w]+$", re.IGNORECASE)
 
 
 class ConversionResult(BaseModel):
@@ -92,8 +93,9 @@ class ImageConverter:
                 # Resize if needed
                 img = self._resize_if_needed(img)
 
-                # Save to temp directory
-                output_path = self.temp_dir / f"{image_path.stem}.jpg"
+                # Save to temp directory with unique name (avoid collisions from nested dirs)
+                path_hash = hashlib.md5(str(image_path).encode()).hexdigest()[:8]
+                output_path = self.temp_dir / f"{image_path.stem}_{path_hash}.jpg"
                 success = self._compress_to_limit(img, output_path)
 
                 if not success:

@@ -4,7 +4,10 @@ A Python client for managing art mode on Samsung Frame TVs. Upload images, confi
 
 ## Features
 
+- **Batch Upload with HEIC Conversion**: Convert iPhone/iOS HEIC images to 4K JPG and upload
 - **Image Upload**: Batch upload images from a local folder to TV
+- **Recursive Directory Scanning**: Process images from nested subdirectories
+- **Smart Filtering**: Exclude thumbnails and small files automatically
 - **Matte Configuration**: Apply black borders (or other matte styles) to uploaded images
 - **Art Mode Control**: Enable art mode and start automatic slideshow
 - **TV Status**: Check connection and art mode support
@@ -97,6 +100,48 @@ uv run python SamsungFrame/manage_samsung.py upload /path/to/images --notify
 5. Enables art mode
 6. Starts slideshow with fastest rotation interval
 7. Sends Pushover notification (on errors or if --notify flag used)
+
+### Batch Upload with HEIC Conversion
+
+For iPhone/iOS users with HEIC photos, use the batch upload script which handles conversion automatically:
+
+```bash
+# Basic batch upload with HEIC conversion
+uv run python SamsungFrame/batch_upload.py ~/Photos/Favorites
+
+# Replace all existing user-uploaded art
+uv run python SamsungFrame/batch_upload.py ~/Photos/Vacation \
+    --delete-existing --force --notify
+
+# Custom matte and minimum file size
+uv run python SamsungFrame/batch_upload.py ~/Photos \
+    --matte shadowbox_black --min-size-mb 2.0
+
+# Dry run (preview without uploading)
+uv run python SamsungFrame/batch_upload.py ~/Photos --dry-run
+```
+
+**What the batch upload script does:**
+
+1. **Recursive Discovery**: Scans directory and all subdirectories for images
+2. **Smart Filtering**: Excludes files <1MB (configurable) and thumbnail patterns (*_thumb*, *_thumbnail*, *_small*)
+3. **HEIC Conversion**: Converts HEIC to high-quality JPG at 4K resolution (maintains aspect ratio, max 3840×2160)
+4. **Quality Compression**: Reduces JPG quality (95→90→85→80→75→70) if needed to meet 10MB TV limit
+5. **Delete Existing Art**: Optionally removes all user-uploaded art (preserves Samsung pre-loaded art)
+6. **Batch Upload**: Uploads all processed images with specified matte
+7. **Enable Art Mode**: Automatically enables slideshow after upload
+
+**Command Options:**
+
+- `source_dir` - Directory to scan (required)
+- `--matte` - Matte style (default: shadowbox_black)
+- `--delete-existing` - Delete user-uploaded art before upload
+- `--force` - Skip confirmation prompt
+- `--dry-run` - Preview without TV operations
+- `--notify` - Send Pushover notification
+- `--min-size-mb` - Minimum file size (default: 1.0MB)
+
+**Supported Formats**: HEIC, JPG, JPEG, PNG
 
 ### Check TV Status
 
