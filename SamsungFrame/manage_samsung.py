@@ -77,8 +77,8 @@ def main() -> int:
     slideshow_parser.add_argument(
         "--duration",
         type=int,
-        default=15,
-        help="Time in minutes between image changes (default: 15)",
+        default=3,
+        help="Time in minutes between image changes (default: 3)",
     )
     slideshow_parser.add_argument(
         "--no-shuffle",
