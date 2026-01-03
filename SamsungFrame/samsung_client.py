@@ -373,16 +373,32 @@ class SamsungFrameClient:
             self.logger.error(f"Error enabling art mode: {e}")
             return False
 
-    def start_slideshow(self) -> bool:
+    def start_slideshow(self, duration: int = 15, shuffle: bool = True) -> bool:
+        """Start slideshow with automatic image cycling.
+
+        Args:
+            duration: Time in minutes between image changes (default: 15)
+            shuffle: Enable shuffle mode (default: True)
+
+        Returns:
+            True if slideshow started successfully
+        """
         if not self.tv:
             self.logger.error("Not connected to TV - call connect() first")
             return False
 
         try:
-            if self.enable_art_mode():
-                self.logger.info("Slideshow started with all uploaded images")
-                return True
-            return False
+            # Enable art mode first
+            if not self.enable_art_mode():
+                return False
+
+            # Start slideshow for user photos (category 2)
+            self.tv.art().set_slideshow_status(duration=duration, type=shuffle, category=2)
+            self.logger.info(
+                f"Slideshow started: {duration}min interval, "
+                f"{'shuffle' if shuffle else 'sequential'} mode"
+            )
+            return True
         except Exception as e:
             self.logger.error(f"Error starting slideshow: {e}")
             return False
