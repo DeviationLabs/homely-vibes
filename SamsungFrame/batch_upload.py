@@ -299,21 +299,13 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("TV appears connected but is not responding - check TV status and retry")
         return 1
 
-    # Delete existing art (if requested)
+    # Initialize deletion tracking (deletion happens after uploads)
     art_deleted = 0
     art_delete_failures = 0
-    if args.purge:
-        try:
-            result = delete_all_art(client, force=True)
-            art_deleted = result["deleted"]
-            art_delete_failures = result["failed"]
-        except Exception as e:
-            logger.error(f"Error deleting art: {e}")
-            return 1
 
     # Discover images
     try:
-        images = discover_images(args.source_dir, min_size_mb=1.0)
+        images = discover_images(args.source_dir, min_size_mb=0.1)
     except ValueError as e:
         logger.error(str(e))
         return 1
@@ -389,6 +381,17 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             errors=upload_errors,
         )
 
+        # Delete existing art (if requested) - only after successful uploads
+        if args.purge and upload_summary.successful_uploads > 0:
+            logger.info("Deleting existing art after successful uploads...")
+            try:
+                result = delete_all_art(client, force=True)
+                art_deleted = result["deleted"]
+                art_delete_failures = result["failed"]
+            except Exception as e:
+                logger.error(f"Error deleting art: {e}")
+                # Continue to notification even if deletion fails
+
         # Summary
         summary = BatchUploadSummary(
             total_discovered=len(images),
@@ -426,21 +429,23 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
         # Enable art mode with exponential backoff retry
         if summary.upload_summary.successful_uploads > 0:
-            logger.info("Starting slideshow...")
+            try:
+                logger.info("Starting slideshow...")
 
-            @retry(
-                stop=stop_after_attempt(5),
-                wait=wait_exponential(multiplier=1, min=1, max=10),
-                reraise=True,
-            )
-            def start_slideshow_with_retry() -> bool:
-                return client.start_slideshow(duration=3, shuffle=True)
+                @retry(
+                    stop=stop_after_attempt(5),
+                    wait=wait_exponential(multiplier=1, min=1, max=10),
+                    reraise=True,
+                )
+                def start_slideshow_with_retry() -> bool:
+                    return client.start_slideshow(duration=3, shuffle=True)
 
-            if not start_slideshow_with_retry():
-                logger.error("Slideshow start failed")
-                return 1
+                if not start_slideshow_with_retry():
+                    logger.error("Slideshow start failed")
+            except Exception as e:
+                logger.error(f"Error starting slideshow: {e}")
 
-        # Send notification
+        # Send notification (always send, even if art mode fails)
         send_batch_notification(summary)
 
         # Close TV connection

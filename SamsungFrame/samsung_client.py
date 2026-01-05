@@ -158,7 +158,7 @@ class SamsungFrameClient:
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
             if file_size_mb > cfg.samsung_frame.max_image_size_mb:
                 self.logger.error(
-                    f"File too large: {file_size_mb:.2f}MB > "
+                    f"File too large: {Path(file_path).name} is {file_size_mb:.2f}MB > "
                     f"{cfg.samsung_frame.max_image_size_mb}MB"
                 )
                 return False
