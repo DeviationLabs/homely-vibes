@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hydra-based configuration system for homely-vibes.
+OmegaConf-based configuration system for homely-vibes.
 
 Replaces the old Constants.py pattern with hierarchical YAML configs:
 - config/default.yaml: Safe defaults (checked into git)
