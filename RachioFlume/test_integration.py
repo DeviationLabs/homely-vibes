@@ -53,7 +53,7 @@ class TestRachioClient:
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
-        client = RachioClient()
+        client = RachioClient(api_key="test_key", device_id="test_device")  # nosecret
         zones = client.get_zones()
 
         assert len(zones) == 2
