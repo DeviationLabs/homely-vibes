@@ -16,9 +16,25 @@ Usage:
 
 import os
 from dataclasses import dataclass, is_dataclass
+from enum import StrEnum
 from typing import Dict, get_origin, get_args
 
 from omegaconf import OmegaConf
+
+
+class NodeType(StrEnum):
+    """Node type enumeration"""
+
+    FOSCAM = "foscam"
+    WINDOWS = "windows"
+    GENERIC = "generic"
+
+
+class OpMode(StrEnum):
+    """Tesla Powerwall operation mode"""
+
+    AUTONOMOUS = "autonomous"
+    SELF_CONSUMPTION = "self_consumption"
 
 
 @dataclass
@@ -27,7 +43,6 @@ class PathsConfig:
 
     home: str
     logging_dir: str
-    tokens_dir: str
     tuya_log_base: str
     json_summary_file: str
     json_summary_patch_file: str
@@ -69,7 +84,7 @@ class NodeConfig:
     """Individual node configuration"""
 
     ip: str
-    node_type: str  # "foscam", "windows", "generic"
+    node_type: NodeType
     username: str | None = None
     password: str | None = None
 
@@ -132,7 +147,7 @@ class OpModeConfig:
     iff_higher: bool
     pct_min: int
     pct_min_trail_stop: int
-    op_mode: str  # "autonomous" or "self_consumption"
+    op_mode: OpMode
     reason: str
     always_notify: bool
 
@@ -315,6 +330,9 @@ def _dict_to_config(cfg_dict: dict) -> Config:  # type: ignore
             elif is_dataclass(field_type):
                 # Nested dataclass
                 kwargs[field_name] = build_nested(value, field_type)
+            elif isinstance(field_type, type) and issubclass(field_type, StrEnum):
+                # StrEnum - convert string to enum
+                kwargs[field_name] = field_type(value)
             else:
                 # Primitive type
                 kwargs[field_name] = value

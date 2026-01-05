@@ -5,7 +5,6 @@
 paths:
   home: ${oc.env:HOME}
   logging_dir: ${paths.home}/logs
-  tokens_dir: lib/tokens
   tuya_log_base: ${paths.home}/tuya_logs/tuya_logs.csv
   json_summary_file: ${paths.home}/tuya_logs/summary.json
   json_summary_patch_file: ${paths.home}/tuya_logs/summary.json

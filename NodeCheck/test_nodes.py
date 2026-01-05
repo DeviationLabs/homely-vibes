@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import patch
 from typing import Any
 from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
-from lib.config import NodeConfig
+from lib.config import NodeConfig, NodeType
 
 
 class TestNode:
@@ -13,7 +13,7 @@ class TestNode:
 
     def test_node_can_be_instantiated(self) -> None:
         """Test that GenericNode can be instantiated directly"""
-        node = GenericNode("test", NodeConfig("192.168.1.1", "generic"))
+        node = GenericNode("test", NodeConfig("192.168.1.1", NodeType.GENERIC))
         assert node.name == "test"
         assert node.config.ip == "192.168.1.1"
 
@@ -23,7 +23,7 @@ class TestFoscamNode:
 
     @pytest.fixture
     def foscam_config(self) -> NodeConfig:
-        return NodeConfig("192.168.1.51", "foscam", "testuser", "testpass")
+        return NodeConfig("192.168.1.51", NodeType.FOSCAM, "testuser", "testpass")
 
     @pytest.fixture
     def foscam_node(self, foscam_config: NodeConfig) -> FoscamNode:
@@ -110,7 +110,7 @@ class TestWindowsNode:
 
     @pytest.fixture
     def windows_config(self) -> NodeConfig:
-        return NodeConfig("192.168.1.100", "windows", "testuser", "testpass")
+        return NodeConfig("192.168.1.100", NodeType.WINDOWS, "testuser", "testpass")
 
     @pytest.fixture
     def windows_node(self, windows_config: NodeConfig) -> WindowsNode:
@@ -179,7 +179,7 @@ class TestGenericNode:
 
     @pytest.fixture
     def generic_config(self) -> NodeConfig:
-        return NodeConfig("192.168.1.200", "generic")
+        return NodeConfig("192.168.1.200", NodeType.GENERIC)
 
     @pytest.fixture
     def generic_node(self, generic_config: NodeConfig) -> GenericNode:
