@@ -9,11 +9,13 @@ Install August API library:
 uv add yalexs
 ```
 
-Add credentials to `lib/Constants.py`:
-```python
-AUGUST_EMAIL = "your_august_email@example.com"
-AUGUST_PASSWORD = "your_august_password"
-AUGUST_PHONE = "+1234567890"  # Required for 2FA
+Add credentials to `config/local.yaml`:
+```yaml
+august:
+  email: your_august_email@example.com
+  password: your_august_password
+  phone: "+1234567890"  # Required for 2FA
+  token_file: lib/tokens/august_auth_token.json
 ```
 
 **Important**: Use your actual August account credentials. The phone number is required for 2FA verification.
