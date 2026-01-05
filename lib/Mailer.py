@@ -5,7 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
 import smtplib
-from lib import Constants
+from lib.config import get_config
 
 
 def sendmail(topic, alert, message, always_email=False):
@@ -17,9 +17,10 @@ def sendmail(topic, alert, message, always_email=False):
 
     if always_email or alert:
         try:
+            cfg = get_config()
             msg = MIMEMultipart()
-            msg["From"] = Constants.EMAIL_FROM
-            msg["To"] = Constants.EMAIL_TO
+            msg["From"] = cfg.email.from_addr
+            msg["To"] = cfg.email.to_addr
             flag = "[ALERT]" if alert else ""
             msg["Subject"] = "%s%s %s %02d:%02d" % (
                 topic,
@@ -36,8 +37,8 @@ def sendmail(topic, alert, message, always_email=False):
 
             server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
             server.ehlo()
-            server.login(Constants.GMAIL_USERNAME, Constants.GMAIL_PASSWORD)
-            server.sendmail(Constants.EMAIL_FROM, Constants.EMAIL_TO, msg.as_string())
+            server.login(cfg.email.gmail_username, cfg.email.gmail_password)
+            server.sendmail(cfg.email.from_addr, cfg.email.to_addr, msg.as_string())
             server.close()
             logging.info("%s Email sent!" % ts)
         except smtplib.SMTPDataError as e:

@@ -16,6 +16,9 @@ token_file
 cache.json
 *config.json
 
+# Hydra local config (secrets)
+config/local.yaml
+
 # Misc
 .DS_Store
 backups/
