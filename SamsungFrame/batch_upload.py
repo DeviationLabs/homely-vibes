@@ -396,6 +396,9 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             conversion_errors=conversion_errors,
         )
 
+        # Send notification immediately after processing
+        send_batch_notification(summary)
+
         logger.info("=" * 50)
         logger.info("BATCH UPLOAD SUMMARY")
         logger.info(f"Discovered: {summary.total_discovered}")
@@ -434,9 +437,6 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             if not start_slideshow_with_retry():
                 logger.error("Slideshow start failed")
                 return 1
-
-        # Send notification
-        send_batch_notification(summary)
 
         # Close TV connection
         if client:
