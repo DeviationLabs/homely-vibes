@@ -15,77 +15,68 @@ Usage:
 """
 
 import os
-from dataclasses import dataclass, field, is_dataclass
+from dataclasses import dataclass, is_dataclass
+from enum import StrEnum
 from typing import Dict, get_origin, get_args
 
 from omegaconf import OmegaConf
+
+
+class NodeType(StrEnum):
+    """Node type enumeration"""
+
+    FOSCAM = "foscam"
+    WINDOWS = "windows"
+    GENERIC = "generic"
+
+
+class OpMode(StrEnum):
+    """Tesla Powerwall operation mode"""
+
+    AUTONOMOUS = "autonomous"
+    SELF_CONSUMPTION = "self_consumption"
 
 
 @dataclass
 class PathsConfig:
     """File paths and directories"""
 
-    home: str = field(default_factory=lambda: os.environ.get("HOME", "/tmp"))
-    logging_dir: str = ""  # Derived from home
-    tokens_dir: str = "lib/tokens"
-    tuya_log_base: str = ""  # Derived from home
-    json_summary_file: str = ""  # Derived from home
-    json_summary_patch_file: str = ""  # Derived from home (debugging)
-    json_pumprates_file: str = ""  # Derived from home
-    rachio_events_cmd: str = ""  # Derived from home
-
-    def __post_init__(self) -> None:
-        """Compute derived paths from home directory"""
-        if not self.logging_dir:
-            self.logging_dir = f"{self.home}/logs"
-        if not self.tuya_log_base:
-            self.tuya_log_base = f"{self.home}/tuya_logs/tuya_logs.csv"
-        if not self.json_summary_file:
-            self.json_summary_file = f"{self.home}/tuya_logs/summary.json"
-        if not self.json_summary_patch_file:
-            self.json_summary_patch_file = f"{self.home}/tuya_logs/summary.json"
-        if not self.json_pumprates_file:
-            self.json_pumprates_file = f"{self.home}/tuya_logs/pump_rates.json"
-        if not self.rachio_events_cmd:
-            self.rachio_events_cmd = f"{self.home}/bin/WaterLogging/get_rachio_events.js"
+    home: str
+    logging_dir: str
+    tuya_log_base: str
+    json_summary_file: str
+    json_summary_patch_file: str
+    json_pumprates_file: str
+    rachio_events_cmd: str
 
 
 @dataclass
 class EmailConfig:
     """Email configuration"""
 
-    from_addr: str = "user@example.com"
-    to_addr: str = "user@example.com"
-    gmail_username: str = "user"
-    gmail_password: str = ""
+    from_addr: str
+    to_addr: str
+    gmail_username: str
+    gmail_password: str
 
 
 @dataclass
 class TwilioConfig:
     """Twilio SMS configuration"""
 
-    sid: str = ""
-    auth_token: str = ""
-    sms_from: str = "+18001234567"
+    sid: str
+    auth_token: str
+    sms_from: str
 
 
 @dataclass
 class PushoverConfig:
     """Pushover notification configuration"""
 
-    user: str = ""
-    delivery_group: str = ""
-    default_token: str = ""
-    tokens: Dict[str, str] = field(
-        default_factory=lambda: {
-            "August": "",
-            "NetworkCheck": "",
-            "NodeCheck": "",
-            "Powerwall": "",
-            "RachioFlume": "",
-            "SamsungFrame": "",
-        }
-    )
+    user: str
+    delivery_group: str
+    default_token: str
+    tokens: Dict[str, str]
 
 
 @dataclass
@@ -93,7 +84,7 @@ class NodeConfig:
     """Individual node configuration"""
 
     ip: str
-    node_type: str  # "foscam", "windows", "generic"
+    node_type: NodeType
     username: str | None = None
     password: str | None = None
 
@@ -102,55 +93,47 @@ class NodeConfig:
 class FoscamConfig:
     """Foscam camera configuration"""
 
-    username: str = ""
-    password: str = ""
-    foscam_dir: str = "/mnt/IPCam_Data"
-    purge_after_days: int = 90
+    username: str
+    password: str
+    foscam_dir: str
+    purge_after_days: int
 
 
 @dataclass
 class WindowsConfig:
     """Windows node credentials"""
 
-    username: str = ""
-    password: str = ""
+    username: str
+    password: str
 
 
 @dataclass
 class NodeCheckConfig:
     """Node monitoring configuration"""
 
-    # Foscam and Windows credentials (used to build NODE_CONFIGS dict)
-    foscam: FoscamConfig = field(default_factory=FoscamConfig)
-    windows: WindowsConfig = field(default_factory=WindowsConfig)
-
-    # NODE_CONFIGS dict - maps node name to NodeConfig
-    node_configs: Dict[str, NodeConfig] = field(default_factory=dict)
-
-    # NODES dict for BrowserAlert - maps node name to arbitrary config dict
-    nodes: Dict[str, dict] = field(default_factory=dict)
+    foscam: FoscamConfig
+    windows: WindowsConfig
+    node_configs: Dict[str, NodeConfig]
+    nodes: Dict[str, dict]
 
 
 @dataclass
 class WaterMonitorConfig:
     """Water monitoring and alerting thresholds"""
 
-    # Processing
-    max_zones: int = 16
-    max_new_files: int = 2
-    logrotate_per_day: int = 4
-    days_lookback: int = 90
-    start_from_epoch: int = 1546329600  # 2019-01-01
-
-    # Alerting
-    days_email_report: int = 14
-    min_drip_zone_alert_time: int = 1800
-    min_drip_plot_time: int = 189
-    min_misc_zone_alert_time: int = 86400  # SECONDS_IN_DAY
-    min_sprinkler_zone_alert_time: int = 600
-    alert_thresh: float = 1.18
-    pump_alert: int = 22
-    pump_toggles_count: int = 25
+    max_zones: int
+    max_new_files: int
+    logrotate_per_day: int
+    days_lookback: int
+    start_from_epoch: int
+    days_email_report: int
+    min_drip_zone_alert_time: int
+    min_drip_plot_time: int
+    min_misc_zone_alert_time: int
+    min_sprinkler_zone_alert_time: int
+    alert_thresh: float
+    pump_alert: int
+    pump_toggles_count: int
 
 
 @dataclass
@@ -164,7 +147,7 @@ class OpModeConfig:
     iff_higher: bool
     pct_min: int
     pct_min_trail_stop: int
-    op_mode: str  # "autonomous" or "self_consumption"
+    op_mode: OpMode
     reason: str
     always_notify: bool
 
@@ -173,102 +156,96 @@ class OpModeConfig:
 class TeslaConfig:
     """Tesla Powerwall configuration"""
 
-    powerwall_ip: str = "192.168.1.62"
-    powerwall_email: str = ""
-    powerwall_password: str = ""
-    powerwall_sms_rcpt: str = ""
-    powerwall_poll_time: int = 180
-
-    tesla_email: str = ""
-    tesla_password: str = ""
-    tesla_token_file: str = "lib/tokens/tesla_tokens.json"
-
-    # Powerwall decision points (complex nested config)
-    decision_points: list[OpModeConfig] = field(default_factory=list)
+    powerwall_ip: str
+    powerwall_email: str
+    powerwall_password: str
+    powerwall_sms_rcpt: str
+    powerwall_poll_time: int
+    tesla_email: str
+    tesla_password: str
+    tesla_token_file: str
+    decision_points: list[OpModeConfig]
 
 
 @dataclass
 class AugustConfig:
     """August Smart Locks configuration"""
 
-    email: str = ""
-    password: str = ""
-    phone: str = ""
-    token_file: str = "lib/tokens/august_auth_token.json"
+    email: str
+    password: str
+    phone: str
+    token_file: str
 
 
 @dataclass
 class SamsungFrameConfig:
     """Samsung Frame TV configuration"""
 
-    ip: str = "192.168.1.4"
-    port: int = 8002
-    token_file: str = "lib/tokens/samsung_frame_token.txt"
-    default_matte: str = "shadowbox_black"
-    supported_formats: list[str] = field(default_factory=lambda: ["jpg", "jpeg", "png"])
-    max_image_size_mb: int = 10
+    ip: str
+    port: int
+    token_file: str
+    default_matte: str
+    supported_formats: list[str]
+    max_image_size_mb: int
 
 
 @dataclass
 class RachioConfig:
     """Rachio irrigation system configuration"""
 
-    api_key: str = ""
-    rachio_id: str = ""
+    api_key: str
+    rachio_id: str
 
 
 @dataclass
 class FlumeConfig:
     """Flume water monitoring configuration"""
 
-    client_id: str = ""
-    client_secret: str = ""
-    user_email: str = ""
-    password: str = ""
+    client_id: str
+    client_secret: str
+    user_email: str
+    password: str
 
 
 @dataclass
 class NetworkCheckConfig:
     """Network bandwidth monitoring configuration"""
 
-    min_dl_bw: int = 400  # Mbps
-    min_ul_bw: int = 400  # Mbps
+    min_dl_bw: int
+    min_ul_bw: int
 
 
 @dataclass
 class BrowserAlertConfig:
     """Browser activity monitoring configuration"""
 
-    refresh_delay: int = 30  # seconds
-    min_reporting_gap: int = 6  # hours
-    hr_start_monitoring: int = 2
-    hr_stop_monitoring: int = 23
-    hr_email: int = 19
-    blacklist: list[str] = field(default_factory=list)
+    refresh_delay: int
+    min_reporting_gap: int
+    hr_start_monitoring: int
+    hr_stop_monitoring: int
+    hr_email: int
+    blacklist: list[str]
 
 
 @dataclass
 class Config:
     """Root configuration for homely-vibes"""
 
-    # Module configs
-    paths: PathsConfig = field(default_factory=PathsConfig)
-    email: EmailConfig = field(default_factory=EmailConfig)
-    twilio: TwilioConfig = field(default_factory=TwilioConfig)
-    pushover: PushoverConfig = field(default_factory=PushoverConfig)
-    node_check: NodeCheckConfig = field(default_factory=NodeCheckConfig)
-    water_monitor: WaterMonitorConfig = field(default_factory=WaterMonitorConfig)
-    tesla: TeslaConfig = field(default_factory=TeslaConfig)
-    august: AugustConfig = field(default_factory=AugustConfig)
-    samsung_frame: SamsungFrameConfig = field(default_factory=SamsungFrameConfig)
-    rachio: RachioConfig = field(default_factory=RachioConfig)
-    flume: FlumeConfig = field(default_factory=FlumeConfig)
-    network_check: NetworkCheckConfig = field(default_factory=NetworkCheckConfig)
-    browser_alert: BrowserAlertConfig = field(default_factory=BrowserAlertConfig)
-
-    # Constants
-    my_external_ip: str = "hoiboi.tplinkdns.com"
-    seconds_in_day: int = 86400
+    paths: PathsConfig
+    email: EmailConfig
+    twilio: TwilioConfig
+    pushover: PushoverConfig
+    node_check: NodeCheckConfig
+    water_monitor: WaterMonitorConfig
+    tesla: TeslaConfig
+    august: AugustConfig
+    samsung_frame: SamsungFrameConfig
+    rachio: RachioConfig
+    flume: FlumeConfig
+    network_check: NetworkCheckConfig
+    browser_alert: BrowserAlertConfig
+    my_external_ip: str
+    seconds_in_day: int
 
 
 # Singleton configuration instance
@@ -343,11 +320,19 @@ def _dict_to_config(cfg_dict: dict) -> Config:  # type: ignore
                     # Plain list (e.g., list[str])
                     kwargs[field_name] = value
             elif origin is dict:
-                # Handle dict types
-                kwargs[field_name] = value
+                # Handle Dict[str, SomeDataclass] types
+                args = get_args(field_type)
+                if len(args) >= 2 and is_dataclass(args[1]):
+                    value_class: type = args[1]  # type: ignore[assignment]
+                    kwargs[field_name] = {k: build_nested(v, value_class) for k, v in value.items()}
+                else:
+                    kwargs[field_name] = value
             elif is_dataclass(field_type):
                 # Nested dataclass
                 kwargs[field_name] = build_nested(value, field_type)
+            elif isinstance(field_type, type) and issubclass(field_type, StrEnum):
+                # StrEnum - convert string to enum
+                kwargs[field_name] = field_type(value)
             else:
                 # Primitive type
                 kwargs[field_name] = value
