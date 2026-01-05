@@ -6,7 +6,7 @@ import os
 from unittest.mock import Mock, patch
 from PIL import Image
 
-from lib import Constants
+from unittest.mock import MagicMock
 from SamsungFrame.samsung_client import (
     SamsungFrameClient,
 )
@@ -15,15 +15,18 @@ from SamsungFrame.samsung_client import (
 class TestSamsungFrameClient:
     """Test Samsung Frame TV client."""
 
-    @patch.object(Constants, "SAMSUNG_FRAME_IP", "192.168.1.4")
-    @patch.object(Constants, "SAMSUNG_FRAME_PORT", 8002)
-    @patch.object(Constants, "SAMSUNG_FRAME_TOKEN_FILE", "/tmp/token.txt")
-    def test_init_with_constants(self) -> None:
-        """Test initialization with Constants."""
-        client = SamsungFrameClient()
-        assert client.host == "192.168.1.4"
-        assert client.port == 8002
-        assert client.token_file == "/tmp/token.txt"
+    def test_init_with_config(self) -> None:
+        """Test initialization with config."""
+        mock_config = MagicMock()
+        mock_config.samsung_frame.ip = "192.168.1.4"
+        mock_config.samsung_frame.port = 8002
+        mock_config.samsung_frame.token_file = "/tmp/token.txt"
+
+        with patch("SamsungFrame.samsung_client.get_config", return_value=mock_config):
+            client = SamsungFrameClient()
+            assert client.host == "192.168.1.4"
+            assert client.port == 8002
+            assert client.token_file == "/tmp/token.txt"
 
     def test_init_with_custom_params(self) -> None:
         """Test initialization with custom parameters."""

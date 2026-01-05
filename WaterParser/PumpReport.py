@@ -3,7 +3,7 @@ import collections
 import logging
 import os
 import time
-from lib import Constants
+from lib.config import get_config
 import Mailer
 from TuyaLogParser import readSummaryFile
 
@@ -25,6 +25,7 @@ def custom_sort(record):
 
 # Flag all zone where latest rate is greater than average of the last N days.
 def genSendMessage(always_email):
+    cfg = get_config()
     aggregated = collections.defaultdict(lambda: {"pumpTime": 0, "toggles": 0, "runTime": 0})
     latest = collections.defaultdict(
         lambda: {
@@ -37,14 +38,14 @@ def genSendMessage(always_email):
     )
     aggregatedPumpTime = 0
     aggregatedToggles = 0
-    summary = readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
+    summary = readSummaryFile(cfg.paths.json_summary_patch_file)
     sorted_summary_items = sorted(list(summary.items()))
     lastEndTime = None
 
     # Find the average, until we cover 10x the min time requirement for reporting. This is the average burn rate
     # We dont want to include the last 14 days, since this is the window we want to validate
     for ts, record in sorted_summary_items[
-        -14 : -(Constants.DAYS_LOOKBACK * Constants.LOGROTATE_PER_DAY) : -1
+        -14 : -(cfg.water_monitor.days_lookback * cfg.water_monitor.logrotate_per_day) : -1
     ]:
         zonesStats = record["zonesStats"]
         for zoneNumStr, zoneStats in zonesStats.items():
@@ -55,7 +56,7 @@ def genSendMessage(always_email):
 
     # Loop over DAYS_EMAIL but in reversed order until we meet min time requirement. This is the current burn rate
     for ts, record in sorted_summary_items[
-        : -(Constants.DAYS_EMAIL_REPORT * Constants.LOGROTATE_PER_DAY) : -1
+        : -(cfg.water_monitor.days_email_report * cfg.water_monitor.logrotate_per_day) : -1
     ]:
         zonesStats = record["zonesStats"]
         lastEndTime = lastEndTime or record["logEndTime"]
@@ -113,12 +114,12 @@ def genSendMessage(always_email):
             deviation = (zoneStats["pumpRate"] - average) * 100 / average
 
         if not meetsMinRunTime(zoneStats["zoneName"], zoneStats["runTime"]):
-            if zoneStats["pumpRate"] < average * Constants.ALERT_THRESH:
+            if zoneStats["pumpRate"] < average * cfg.water_monitor.alert_thresh:
                 attrib = "Good."
             else:
                 attrib = '<font color="blue">Low data</font>'
         else:
-            if zoneStats["pumpRate"] < average * Constants.ALERT_THRESH:
+            if zoneStats["pumpRate"] < average * cfg.water_monitor.alert_thresh:
                 attrib = "Good"
             else:
                 attrib = '<b><font color="red">Failed</font></b>'
@@ -139,14 +140,14 @@ def genSendMessage(always_email):
     pumpDutyCycle = aggregatedPumpTime / aggregatedToggles if aggregatedToggles else 0
     message += "</table><br>Pump duty cycle %s= <b>%d</b> seconds" % (
         '<font color="red">[Failed: Too Low] </font>'
-        if pumpDutyCycle < Constants.PUMP_ALERT
+        if pumpDutyCycle < cfg.water_monitor.pump_alert
         else "",
         pumpDutyCycle,
     )
     message += "<br><hr><br><small>Deviation alert @ %+d %%</small>" % (
-        Constants.ALERT_THRESH * 100 - 100
+        cfg.water_monitor.alert_thresh * 100 - 100
     )
-    message += "<br><small>Pump alert @ %d seconds</small>" % (Constants.PUMP_ALERT)
+    message += "<br><small>Pump alert @ %d seconds</small>" % (cfg.water_monitor.pump_alert)
     message += "<br><small>Last Update: %s</small>" % lastEndTime
     message += (
         '<br><small><a href="http://%s/reboot_foscam.php">Reboot Foscams</a></small>\n'
@@ -165,7 +166,7 @@ def genSendMessage(always_email):
 
 # Hacky: Assumes only drip zones have "D" in 1st half of zoneName
 def meetsMinRunTime(zoneName, runTime):
-    if "D" in zoneName.split("-")[0] and runTime > Constants.MIN_DRIP_ZONE_ALERT_TIME:
+    if "D" in zoneName.split("-")[0] and runTime > cfg.water_monitor.min_drip_zone_alert_time:
         return True
     elif "S" in zoneName.split("-")[0] and runTime > Constants.MIN_SPRINKLER_ZONE_ALERT_TIME:
         return True

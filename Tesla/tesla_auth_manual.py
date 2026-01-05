@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
-from lib import Constants
+from lib.config import get_config
 from lib.logger import get_logger
 
 logger = get_logger(__name__)
@@ -52,7 +52,8 @@ def save_tokens(tokens: dict, token_file: str) -> None:
 
 def manual_auth_flow(email: str, token_file: Optional[str] = None) -> bool:
     """Manual OAuth flow - user completes auth in their own browser."""
-    token_file = token_file or Constants.TESLA_TOKEN_FILE
+    cfg = get_config()
+    token_file = token_file or cfg.tesla.tesla_token_file
     # Generate PKCE parameters
     code_verifier = generate_code_verifier()
     code_challenge = generate_code_challenge(code_verifier)

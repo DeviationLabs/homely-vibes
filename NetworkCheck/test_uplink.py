@@ -5,6 +5,7 @@ Network Speed Test Utility
 Performs network speed tests using the speedtest-cli tool and reports results
 via email and pushover notifications. Supports retry logic for unreliable connections.
 """
+cfg = get_config()
 
 import argparse
 import json
@@ -13,13 +14,13 @@ import sys
 import time
 from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass
-from lib import Constants
+from lib.config import get_config
 from lib import Mailer
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
 
 logger = SystemLogger.get_logger(__name__)
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NetworkCheck"])
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NetworkCheck"])
 
 # Constants
 SPEEDTEST_CMD = "/usr/bin/speedtest"
@@ -84,9 +85,9 @@ def run_speedtest() -> Tuple[Optional[SpeedTestResult], str]:
         external_ip = payload.get("interface", {}).get("externalIp", "UNK")
 
         # Determine connection quality
-        is_good = download_mbps > Constants.MIN_DL_BW and upload_mbps > Constants.MIN_UL_BW
+        is_good = download_mbps > cfg.network_check.min_dl_bw and upload_mbps > cfg.network_check.min_ul_bw
         is_degraded = (
-            download_mbps > Constants.MIN_DL_BW * 0.8 and upload_mbps > Constants.MIN_UL_BW * 0.8
+            download_mbps > cfg.network_check.min_dl_bw * 0.8 and upload_mbps > cfg.network_check.min_ul_bw * 0.8
         )
 
         if is_good:

@@ -5,13 +5,14 @@ import json
 import logging
 import time
 import subprocess
-from lib import Constants
+from lib.config import get_config
 import TuyaLogParser
 
 
 # Poll data is very coarse. Let's refine using event log.
 def patchWithRachioEvents():
-    returnedOutput = subprocess.check_output(Constants.RACHIO_EVENTS_CMD)
+    cfg = get_config()
+    returnedOutput = subprocess.check_output(cfg.paths.rachio_events_cmd)
 
     rachioEvents = []
     # using decode() function to convert byte string to string
@@ -20,7 +21,7 @@ def patchWithRachioEvents():
         rachioEvents.append(row)
     rachioEvents.append([0, False, "Dummy"])  # A dummy row to flush out the calculations
 
-    summary = TuyaLogParser.readSummaryFile(Constants.JSON_SUMMARY_FILE)
+    summary = TuyaLogParser.readSummaryFile(cfg.paths.json_summary_file)
     eventNum = 0
     for ts, record in sorted(summary.items(), reverse=False):
         zonesModified = collections.defaultdict(
@@ -100,7 +101,7 @@ def patchWithRachioEvents():
                             )
                 break
 
-    with open(Constants.JSON_SUMMARY_PATCH_FILE, "w") as fp:
+    with open(cfg.paths.json_summary_patch_file, "w") as fp:
         fp.write(json.dumps(summary, sort_keys=True, indent=2))
 
 
@@ -111,21 +112,21 @@ def writeFromSummary():
         lambda: {"zoneName": None, "pumpRates": [], "runTimes": []}
     )
 
-    summary = TuyaLogParser.readSummaryFile(Constants.JSON_SUMMARY_PATCH_FILE)
+    summary = TuyaLogParser.readSummaryFile(cfg.paths.json_summary_patch_file)
     logging.info(
-        "Found %s records, looking back %s days..." % (len(summary), Constants.DAYS_LOOKBACK)
+        "Found %s records, looking back %s days..." % (len(summary), cfg.water_monitor.days_lookback)
     )
 
     for ts, record in sorted(summary.items(), reverse=False):
-        if record["logStartEpoch"] < Constants.START_FROM_EPOCH:
+        if record["logStartEpoch"] < cfg.water_monitor.start_from_epoch:
             continue
         if (
             currEpoch - record["logStartEpoch"]
-        ) > Constants.DAYS_LOOKBACK * Constants.SECONDS_IN_DAY:
+        ) > cfg.water_monitor.days_lookback * Constants.SECONDS_IN_DAY:
             continue
 
         zonesStats = record["zonesStats"]
-        for zoneNum in range(-1, Constants.MAX_ZONES):  # Don't care about UNK and RateLimited
+        for zoneNum in range(-1, cfg.water_monitor.max_zones):  # Don't care about UNK and RateLimited
             zoneNumStr = str(zoneNum)
             zone = {}
             if zonesStats.get(zoneNumStr, None) is not None:
@@ -135,29 +136,29 @@ def writeFromSummary():
             runTime = zone.get("runTime", None)
             # Get rid of the low confidence data when drip runs for too little time
             if runTime is None:
-                #          or ( 'D' in zone['zoneName'].split('-')[0] and runTime < Constants.MIN_DRIP_PLOT_TIME):
+                #          or ( 'D' in zone['zoneName'].split('-')[0] and runTime < cfg.water_monitor.min_drip_plot_time):
                 pumpRate = None
             # DST and other confounding issues. Put an upper bound on runTime
             if runTime is not None:
-                maxSecs = int(Constants.SECONDS_IN_DAY / Constants.LOGROTATE_PER_DAY)
+                maxSecs = int(Constants.SECONDS_IN_DAY / cfg.water_monitor.logrotate_per_day)
                 runTime = min(runTime, maxSecs)
             zonesHistory[zoneNumStr]["pumpRates"].append({"label": ts, "y": pumpRate})
             zonesHistory[zoneNumStr]["runTimes"].append({"label": ts, "y": runTime})
     # Drop reference to junk zones and save
-    for zoneNum in range(-3, Constants.MAX_ZONES):
+    for zoneNum in range(-3, cfg.water_monitor.max_zones):
         zoneNumStr = str(zoneNum)
         if zonesHistory[zoneNumStr]["zoneName"] is None:
             del zonesHistory[zoneNumStr]
             continue
     #  printPumpStats(zonesHistory)
-    with open(Constants.JSON_PUMPRATES_FILE, "w") as fp:
+    with open(cfg.paths.json_pumprates_file, "w") as fp:
         fp.write(json.dumps(zonesHistory, sort_keys=True, indent=2))
-    logging.info("Done and saved to %s" % Constants.JSON_PUMPRATES_FILE)
+    logging.info("Done and saved to %s" % cfg.paths.json_pumprates_file)
 
 
 # Pretty print the pump stats
 def printPumpStats(zonesHistory):
-    for zoneNum in range(-3, Constants.MAX_ZONES):
+    for zoneNum in range(-3, cfg.water_monitor.max_zones):
         zoneNumStr = str(zoneNum)
         zoneHistory = zonesHistory.get(zoneNumStr, None)
         if zoneHistory is None:

@@ -7,15 +7,15 @@ import logging
 
 from August.august_client import AugustMonitor, AugustClient
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 from lib.MyPushover import Pushover
 from August.validate_2fa import complete_2fa
 
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
 
 
 async def _test() -> None:
-    client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
+    client = AugustClient(cfg.august.email, cfg.august.password)
     message = ""
     try:
         statuses = await client.get_all_lock_statuses()
@@ -66,6 +66,7 @@ async def _run_command(
 
 def main() -> None:
     logger = get_logger(__name__)
+    cfg = get_config()
     logger.info("=" * 50)
     logger.info("Starting August Smart Lock Monitoring")
 
@@ -118,8 +119,8 @@ def main() -> None:
         logger.error("Please add AUGUST_EMAIL and AUGUST_PASSWORD to Constants.py")
         sys.exit(1)
 
-    email = Constants.AUGUST_EMAIL
-    password = Constants.AUGUST_PASSWORD
+    email = cfg.august.email
+    password = cfg.august.password
     phone = getattr(Constants, "AUGUST_PHONE", None)
 
     try:

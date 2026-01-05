@@ -8,16 +8,17 @@ import sys
 from SamsungFrame.samsung_client import SamsungFrameClient
 from lib.MyPushover import Pushover
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 
 pushover = Pushover(
-    Constants.PUSHOVER_USER,
-    Constants.PUSHOVER_TOKENS.get("SamsungFrame", Constants.PUSHOVER_DEFAULT_TOKEN),
+    cfg.pushover.user,
+    cfg.pushover.tokens.get("SamsungFrame", cfg.pushover.default_token),
 )
 
 
 def main() -> int:
     """Main entry point with command line interface."""
+    cfg = get_config()
     logger = get_logger(__name__)
     logger.info("=" * 50)
     logger.info("Starting Samsung Frame TV Art Manager")
@@ -45,7 +46,7 @@ def main() -> int:
         "--matte",
         type=str,
         default=None,
-        help=f"Matte style (default: {Constants.SAMSUNG_FRAME_DEFAULT_MATTE})",
+        help=f"Matte style (default: {cfg.samsung_frame.default_matte})",
     )
     matte_parser.add_argument(
         "--all",
@@ -269,6 +270,7 @@ def download_thumbnails(args: argparse.Namespace) -> int:
 
 def update_mattes(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
+    cfg = get_config()
 
     try:
         client = SamsungFrameClient()
@@ -278,7 +280,7 @@ def update_mattes(args: argparse.Namespace) -> int:
             logger.error(f"Failed to connect to TV at {client.host}")
             return 1
 
-        matte = args.matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        matte = args.matte or cfg.samsung_frame.default_matte
         user_photos_only = not args.all
 
         if user_photos_only:

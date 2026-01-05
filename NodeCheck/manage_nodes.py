@@ -3,7 +3,7 @@ from typing import List, TYPE_CHECKING
 import argparse
 import sys
 import time
-from lib import Constants
+from lib.config import get_config
 from lib.logger import SystemLogger
 from lib import Mailer
 from lib.MyPushover import Pushover
@@ -18,12 +18,13 @@ pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeChec
 
 class NodeChecker:
     def __init__(self, mode: str):
+    cfg = get_config()
         self.mode = mode
         self.nodes: List[GenericNode] = []
         self.messages: List[str] = []
 
         # Create nodes based on mode
-        for name, config in Constants.NODE_CONFIGS.items():
+        for name, config in cfg.node_check.node_configs.items():
             if mode == "foscam" and config.node_type == "foscam":
                 self.nodes.append(FoscamNode(name, config))
             elif mode == "windows" and config.node_type == "windows":

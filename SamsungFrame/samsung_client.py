@@ -10,7 +10,7 @@ from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 
 from samsungtvws import SamsungTVWS
 
@@ -37,6 +37,7 @@ VALID_MATTE_COLORS = [
 
 class UploadResult(BaseModel):
     """Result of a single image upload."""
+    cfg = get_config()
 
     image_path: str
     image_id: Optional[str]
@@ -46,6 +47,7 @@ class UploadResult(BaseModel):
 
 class ImageUploadSummary(BaseModel):
     """Summary of batch image upload operation."""
+    cfg = get_config()
 
     total_images: int
     successful_uploads: int
@@ -56,6 +58,7 @@ class ImageUploadSummary(BaseModel):
 
 class SamsungFrameClient:
     """Client for Samsung Frame TV art mode management."""
+    cfg = get_config()
 
     def __init__(
         self,
@@ -63,9 +66,9 @@ class SamsungFrameClient:
         port: Optional[int] = None,
         token_file: Optional[str] = None,
     ):
-        self.host = host or Constants.SAMSUNG_FRAME_IP
-        self.port = port or Constants.SAMSUNG_FRAME_PORT
-        self.token_file = token_file or Constants.SAMSUNG_FRAME_TOKEN_FILE
+        self.host = host or cfg.samsung_frame.ip
+        self.port = port or cfg.samsung_frame.port
+        self.token_file = token_file or cfg.samsung_frame.token_file
 
         if not self.host:
             raise ValueError("Samsung Frame TV IP address required")
@@ -142,23 +145,24 @@ class SamsungFrameClient:
 
     def validate_image_file(self, file_path: str) -> bool:
         try:
+        cfg = get_config()
             if not os.path.exists(file_path):
                 self.logger.error(f"File not found: {file_path}")
                 return False
 
             ext = Path(file_path).suffix.lower().lstrip(".")
-            if ext not in Constants.SAMSUNG_FRAME_SUPPORTED_FORMATS:
+            if ext not in cfg.samsung_frame.supported_formats:
                 self.logger.error(
                     f"Unsupported format: {ext}. "
-                    f"Supported: {Constants.SAMSUNG_FRAME_SUPPORTED_FORMATS}"
+                    f"Supported: {cfg.samsung_frame.supported_formats}"
                 )
                 return False
 
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            if file_size_mb > Constants.SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB:
+            if file_size_mb > cfg.samsung_frame.max_image_size_mb:
                 self.logger.error(
                     f"File too large: {file_size_mb:.2f}MB > "
-                    f"{Constants.SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB}MB"
+                    f"{cfg.samsung_frame.max_image_size_mb}MB"
                 )
                 return False
 
@@ -173,10 +177,11 @@ class SamsungFrameClient:
 
     def upload_image(self, image_path: str, matte: Optional[str] = None) -> Optional[str]:
         if not self.tv:
+        cfg = get_config()
             self.logger.error("Not connected to TV - call connect() first")
             return None
 
-        matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        matte = matte or cfg.samsung_frame.default_matte
 
         if not self.validate_image_file(image_path):
             return None
@@ -211,17 +216,18 @@ class SamsungFrameClient:
 
     def upload_images_from_folder(
         self, folder_path: str, matte: Optional[str] = None
+        cfg = get_config()
     ) -> ImageUploadSummary:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
-        matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        matte = matte or cfg.samsung_frame.default_matte
 
         if not os.path.isdir(folder_path):
             raise ValueError(f"Folder not found: {folder_path}")
 
         image_files: List[str] = []
-        for ext in Constants.SAMSUNG_FRAME_SUPPORTED_FORMATS:
+        for ext in cfg.samsung_frame.supported_formats:
             image_files.extend(str(f) for f in Path(folder_path).glob(f"*.{ext}"))
             image_files.extend(str(f) for f in Path(folder_path).glob(f"*.{ext.upper()}"))
 
@@ -303,11 +309,12 @@ class SamsungFrameClient:
 
     def update_all_mattes(
         self, matte: Optional[str] = None, user_photos_only: bool = True
+        cfg = get_config()
     ) -> Dict[str, int]:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
-        matte = matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        matte = matte or cfg.samsung_frame.default_matte
 
         matte_list = self.tv.art().get_matte_list()
         available_mattes = [matte_type for elem in matte_list for matte_type in elem.values()]

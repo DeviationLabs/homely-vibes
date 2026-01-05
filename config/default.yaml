@@ -48,6 +48,9 @@ node_check:
   windows:
     username: ""  # Override in local.yaml
     password: ""  # Override in local.yaml
+  # NODE_CONFIGS and NODES dicts - define in local.yaml
+  node_configs: {}
+  nodes: {}
 
 # === Water Monitoring ===
 water_monitor:

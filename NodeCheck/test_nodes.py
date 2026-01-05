@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import patch
 from typing import Any
 from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
-from lib.Constants import NodeConfig
+from lib.config import NodeConfig
 
 
 class TestNode:

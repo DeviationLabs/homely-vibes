@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+cfg = get_config()
 import argparse
 import os
 import sys
@@ -6,13 +7,13 @@ import time
 from pathlib import Path
 from lib.logger import SystemLogger
 from lib import Mailer
-from lib import Constants
+from lib.config import get_config
 from lib.MyPushover import Pushover
 
 logger = SystemLogger.get_logger(__name__)
 
 # Initialize Pushover client for Foscam notifications
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NodeCheck"])
 
 
 def purge_old_foscam_files() -> tuple[bool, str]:

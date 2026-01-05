@@ -6,7 +6,6 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 import os
 
-from lib import Constants
 from RachioFlume.rachio_client import RachioClient, Zone, WateringEvent
 from RachioFlume.flume_client import FlumeClient, WaterReading
 from RachioFlume.data_storage import WaterTrackingDB

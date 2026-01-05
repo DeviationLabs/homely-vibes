@@ -3,7 +3,7 @@ import argparse
 import sys
 import time
 from typing import List, Set
-from lib import Constants
+from lib.config import get_config
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
 from NodeCheck.nodes import GenericNode
@@ -23,9 +23,10 @@ class HeartbeatMonitor:
 
     def _create_nodes_list(self) -> List[GenericNode]:
         """Create nodes for all node types and filter based on specific_nodes parameter"""
+        cfg = get_config()
         nodes: List[GenericNode] = []
 
-        for name, config in Constants.NODE_CONFIGS.items():
+        for name, config in cfg.node_check.node_configs.items():
             # This is intentionally generic to run only the basic methods
             nodes.append(GenericNode(name, config))
 

@@ -9,14 +9,17 @@ from RachioFlume.collector import WaterTrackingCollector
 from lib.MyPushover import Pushover
 from RachioFlume.reporter import WeeklyReporter
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 from datetime import datetime, timedelta
 
-# Create default database path using Constants.LOGGING_DIR
-DB_PATH = Constants.LOGGING_DIR + "/water_tracking.db"
+# Load config at module level
+cfg = get_config()
+
+# Create default database path using cfg.paths.logging_dir
+DB_PATH = cfg.paths.logging_dir + "/water_tracking.db"
 pushover = Pushover(
-    Constants.PUSHOVER_USER,
-    Constants.PUSHOVER_TOKENS.get("RachioFlume", Constants.PUSHOVER_DEFAULT_TOKEN),
+    cfg.pushover.user,
+    cfg.pushover.tokens.get("RachioFlume", cfg.pushover.default_token),
 )
 
 

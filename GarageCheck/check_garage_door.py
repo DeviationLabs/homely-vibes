@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+cfg = get_config()
 import argparse
 import os
 import sys
 import traceback
 import time
-from lib import Constants
+from lib.config import get_config
 from lib.logger import SystemLogger
 from lib.FoscamImager import FoscamImager
 from lib import Mailer
@@ -23,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--out_dir",
         help="Folder for storing output files",
-        default="%s/garage_images/" % Constants.HOME,
+        default="%s/garage_images/" % cfg.paths.home,
     )
     parser.add_argument(
         "--display_image",
@@ -46,7 +47,7 @@ if __name__ == "__main__":
     send_email = args.always_email
     model = None
     msg = ""
-    garage_node = Constants.NODE_CONFIGS["Garage Backup"]
+    garage_node = cfg.node_check.node_configs["Garage Backup"]
     mycam = FoscamImager(garage_node.ip, args.display_image)
 
     if args.model_file and os.path.isfile(args.model_file):

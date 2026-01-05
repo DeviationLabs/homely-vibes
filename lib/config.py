@@ -18,7 +18,6 @@ import os
 from dataclasses import dataclass, field, is_dataclass
 from typing import Dict, get_origin, get_args
 
-from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 
 
@@ -267,11 +266,6 @@ class Config:
     # Constants
     my_external_ip: str = "hoiboi.tplinkdns.com"
     seconds_in_day: int = 86400
-
-
-# Register structured config with Hydra ConfigStore
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
 
 
 # Singleton configuration instance

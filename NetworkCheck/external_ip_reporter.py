@@ -5,6 +5,7 @@ External IP Address Reporter
 Fetches and reports the current external IP address via email and pushover notifications.
 Useful for monitoring IP changes when using dynamic IP addresses.
 """
+cfg = get_config()
 
 import sys
 import requests
@@ -12,10 +13,10 @@ from typing import Tuple
 from lib.MyPushover import Pushover
 from lib import Mailer
 from lib.logger import SystemLogger
-from lib import Constants
+from lib.config import get_config
 
 logger = SystemLogger.get_logger(__name__)
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NetworkCheck"])
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NetworkCheck"])
 
 
 def get_external_ip() -> Tuple[str, bool]:
