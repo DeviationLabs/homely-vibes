@@ -12,13 +12,14 @@ from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
 if TYPE_CHECKING:
     pass
 
+cfg = get_config()
 logger = SystemLogger.get_logger(__name__)
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NodeCheck"])
 
 
 class NodeChecker:
     def __init__(self, mode: str):
-    cfg = get_config()
+        cfg = get_config()
         self.mode = mode
         self.nodes: List[GenericNode] = []
         self.messages: List[str] = []

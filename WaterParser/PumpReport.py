@@ -8,6 +8,7 @@ import Mailer
 from TuyaLogParser import readSummaryFile
 
 THIS_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+cfg = get_config()
 
 
 def custom_sort(record):
@@ -49,7 +50,7 @@ def genSendMessage(always_email):
     ]:
         zonesStats = record["zonesStats"]
         for zoneNumStr, zoneStats in zonesStats.items():
-            if aggregated[zoneNumStr]["toggles"] < Constants.PUMP_TOGGLES_COUNT:
+            if aggregated[zoneNumStr]["toggles"] < cfg.water_monitor.pump_toggles_count:
                 aggregated[zoneNumStr]["toggles"] += zoneStats.get("toggles", 0)
                 aggregated[zoneNumStr]["pumpTime"] += zoneStats.get("pumpTime", 0)
                 aggregated[zoneNumStr]["runTime"] += zoneStats.get("runTime", 0)
@@ -60,7 +61,7 @@ def genSendMessage(always_email):
     ]:
         zonesStats = record["zonesStats"]
         lastEndTime = lastEndTime or record["logEndTime"]
-        if aggregatedToggles < Constants.PUMP_TOGGLES_COUNT:
+        if aggregatedToggles < cfg.water_monitor.pump_toggles_count:
             aggregatedToggles += record.get("totalToggles", 0)
             aggregatedPumpTime += record.get("totalPumpTime", 0)
         for zoneNumStr, zoneStats in zonesStats.items():
@@ -101,7 +102,7 @@ def genSendMessage(always_email):
     message += "</style></head><body>\n"
     message += (
         '<a href="http://%s/WaterParser_html/pump_rates.html">Water Charts</a>\n<br><br><table>\n'
-        % Constants.MY_EXTERNAL_IP
+        % cfg.my_external_ip
     )
     message += "<tr><th>Last Update</th><th>Zone</th><th>Status</th><th>Deviation</th><th>Rate</th><th>Minutes</th><th>Usage</th></tr>"
 
@@ -151,7 +152,7 @@ def genSendMessage(always_email):
     message += "<br><small>Last Update: %s</small>" % lastEndTime
     message += (
         '<br><small><a href="http://%s/reboot_foscam.php">Reboot Foscams</a></small>\n'
-        % Constants.MY_EXTERNAL_IP
+        % cfg.my_external_ip
     )
 
     message += "</body></html>"
@@ -168,8 +169,10 @@ def genSendMessage(always_email):
 def meetsMinRunTime(zoneName, runTime):
     if "D" in zoneName.split("-")[0] and runTime > cfg.water_monitor.min_drip_zone_alert_time:
         return True
-    elif "S" in zoneName.split("-")[0] and runTime > Constants.MIN_SPRINKLER_ZONE_ALERT_TIME:
+    elif (
+        "S" in zoneName.split("-")[0] and runTime > cfg.water_monitor.min_sprinkler_zone_alert_time
+    ):
         return True
-    elif runTime > Constants.MIN_MISC_ZONE_ALERT_TIME:
+    elif runTime > cfg.water_monitor.min_misc_zone_alert_time:
         return True
     return False

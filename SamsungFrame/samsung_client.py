@@ -14,6 +14,7 @@ from lib.config import get_config
 
 from samsungtvws import SamsungTVWS
 
+cfg = get_config()
 
 VALID_MATTE_COLORS = [
     "seafoam",
@@ -37,7 +38,6 @@ VALID_MATTE_COLORS = [
 
 class UploadResult(BaseModel):
     """Result of a single image upload."""
-    cfg = get_config()
 
     image_path: str
     image_id: Optional[str]
@@ -47,7 +47,6 @@ class UploadResult(BaseModel):
 
 class ImageUploadSummary(BaseModel):
     """Summary of batch image upload operation."""
-    cfg = get_config()
 
     total_images: int
     successful_uploads: int
@@ -58,7 +57,6 @@ class ImageUploadSummary(BaseModel):
 
 class SamsungFrameClient:
     """Client for Samsung Frame TV art mode management."""
-    cfg = get_config()
 
     def __init__(
         self,
@@ -145,7 +143,7 @@ class SamsungFrameClient:
 
     def validate_image_file(self, file_path: str) -> bool:
         try:
-        cfg = get_config()
+            cfg = get_config()
             if not os.path.exists(file_path):
                 self.logger.error(f"File not found: {file_path}")
                 return False
@@ -153,8 +151,7 @@ class SamsungFrameClient:
             ext = Path(file_path).suffix.lower().lstrip(".")
             if ext not in cfg.samsung_frame.supported_formats:
                 self.logger.error(
-                    f"Unsupported format: {ext}. "
-                    f"Supported: {cfg.samsung_frame.supported_formats}"
+                    f"Unsupported format: {ext}. Supported: {cfg.samsung_frame.supported_formats}"
                 )
                 return False
 
@@ -177,9 +174,10 @@ class SamsungFrameClient:
 
     def upload_image(self, image_path: str, matte: Optional[str] = None) -> Optional[str]:
         if not self.tv:
-        cfg = get_config()
             self.logger.error("Not connected to TV - call connect() first")
             return None
+
+        cfg = get_config()
 
         matte = matte or cfg.samsung_frame.default_matte
 
@@ -216,11 +214,11 @@ class SamsungFrameClient:
 
     def upload_images_from_folder(
         self, folder_path: str, matte: Optional[str] = None
-        cfg = get_config()
     ) -> ImageUploadSummary:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
+        cfg = get_config()
         matte = matte or cfg.samsung_frame.default_matte
 
         if not os.path.isdir(folder_path):
@@ -309,11 +307,11 @@ class SamsungFrameClient:
 
     def update_all_mattes(
         self, matte: Optional[str] = None, user_photos_only: bool = True
-        cfg = get_config()
     ) -> Dict[str, int]:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
+        cfg = get_config()
         matte = matte or cfg.samsung_frame.default_matte
 
         matte_list = self.tv.art().get_matte_list()

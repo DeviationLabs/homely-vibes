@@ -12,8 +12,6 @@ from lib.config import get_config
 class Zone(BaseModel):
     """Rachio zone model."""
 
-    cfg = get_config()
-
     id: str
     zone_number: int
     name: str
@@ -22,8 +20,6 @@ class Zone(BaseModel):
 
 class WateringEvent(BaseModel):
     """Rachio watering event model."""
-
-    cfg = get_config()
 
     event_date: datetime
     zone_name: str

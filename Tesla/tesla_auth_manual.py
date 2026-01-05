@@ -166,10 +166,11 @@ def manual_auth_flow(email: str, token_file: Optional[str] = None) -> bool:
 
 def main() -> None:
     """Main entry point."""
-    email = os.getenv("TESLA_EMAIL") or getattr(Constants, "TESLA_EMAIL", None)
+    cfg = get_config()
+    email = os.getenv("TESLA_EMAIL") or cfg.tesla.tesla_email
 
     if not email:
-        print("✗ TESLA_EMAIL not configured in Constants.py", file=sys.stderr)
+        print("✗ TESLA_EMAIL not configured in config/local.yaml", file=sys.stderr)
         sys.exit(1)
 
     print(f"Authenticating for: {email}")

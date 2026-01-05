@@ -10,7 +10,6 @@ __pycache__/
 *.h5
 
 # hardcoded constants
-lib/Constants.py*
 lib/tuya_switch_config_cli.json
 token_file
 cache.json

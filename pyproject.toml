@@ -73,7 +73,6 @@ packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August"]
 [tool.deptry]
 known_first_party = [
     "lib",  # Add lib as first-party module
-    "Constants",
     "Mailer",
     "MyPushover",
     "MyTwilio",
@@ -177,7 +176,6 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = [
-    "Constants",
     "yalexs.*",
     "twilio.*",
     "webview.*",

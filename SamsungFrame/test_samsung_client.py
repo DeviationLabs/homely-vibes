@@ -35,7 +35,6 @@ class TestSamsungFrameClient:
         assert client.port == 8003
         assert client.token_file == "/custom/token.txt"
 
-    @patch.object(Constants, "SAMSUNG_FRAME_IP", None)
     def test_init_missing_host(self) -> None:
         """Test initialization fails without host."""
         with pytest.raises(ValueError, match="Samsung Frame TV IP address required"):
@@ -131,7 +130,6 @@ class TestSamsungFrameClient:
         result = client.validate_image_file("/nonexistent/image.jpg")
         assert result is False
 
-    @patch.object(Constants, "SAMSUNG_FRAME_SUPPORTED_FORMATS", ["jpg", "jpeg", "png"])
     def test_validate_image_file_invalid_format(self) -> None:
         """Test image validation fails for unsupported format."""
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp_file:
@@ -145,8 +143,6 @@ class TestSamsungFrameClient:
         finally:
             os.unlink(tmp_path)
 
-    @patch.object(Constants, "SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB", 1)
-    @patch.object(Constants, "SAMSUNG_FRAME_SUPPORTED_FORMATS", ["jpg", "jpeg", "png"])
     def test_validate_image_file_too_large(self) -> None:
         """Test image validation fails for file too large."""
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
@@ -161,8 +157,6 @@ class TestSamsungFrameClient:
         finally:
             os.unlink(tmp_path)
 
-    @patch.object(Constants, "SAMSUNG_FRAME_SUPPORTED_FORMATS", ["jpg", "jpeg", "png"])
-    @patch.object(Constants, "SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB", 10)
     def test_validate_image_file_success(self) -> None:
         """Test image validation succeeds for valid image."""
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
@@ -185,9 +179,6 @@ class TestSamsungFrameClient:
         assert result is None
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch.object(Constants, "SAMSUNG_FRAME_DEFAULT_MATTE", "shadowbox_black")
-    @patch.object(Constants, "SAMSUNG_FRAME_SUPPORTED_FORMATS", ["jpg", "jpeg", "png"])
-    @patch.object(Constants, "SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB", 10)
     def test_upload_image_success(self, mock_tv: Mock) -> None:
         """Test successful image upload."""
         # Create a valid test image
@@ -220,9 +211,6 @@ class TestSamsungFrameClient:
             client.upload_images_from_folder("/tmp")
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch.object(Constants, "SAMSUNG_FRAME_DEFAULT_MATTE", "shadowbox_black")
-    @patch.object(Constants, "SAMSUNG_FRAME_SUPPORTED_FORMATS", ["jpg", "jpeg", "png"])
-    @patch.object(Constants, "SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB", 10)
     def test_upload_images_from_folder_success(self, mock_tv: Mock) -> None:
         """Test successful batch upload from folder."""
         # Create temp directory with test images
@@ -248,9 +236,6 @@ class TestSamsungFrameClient:
             assert len(summary.uploaded_image_ids) == 3
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch.object(Constants, "SAMSUNG_FRAME_DEFAULT_MATTE", "shadowbox_black")
-    @patch.object(Constants, "SAMSUNG_FRAME_SUPPORTED_FORMATS", ["jpg", "jpeg", "png"])
-    @patch.object(Constants, "SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB", 10)
     def test_upload_images_from_folder_partial_failure(self, mock_tv: Mock) -> None:
         """Test batch upload with some failures."""
         with tempfile.TemporaryDirectory() as tmp_dir:

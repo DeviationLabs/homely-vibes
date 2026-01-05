@@ -13,8 +13,9 @@ logger = SystemLogger.get_logger(__name__)
 
 class HeartbeatMonitor:
     def __init__(self, specific_nodes: Set[str] | None = None) -> None:
+        cfg = get_config()
         self.specific_nodes = {node.lower() for node in specific_nodes} if specific_nodes else None
-        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
+        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NodeCheck"])
 
         self.monitored_nodes = self._create_nodes_list()
 

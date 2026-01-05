@@ -10,7 +10,6 @@ from lib.config import get_config
 
 class WaterReading(BaseModel):
     """Water consumption reading."""
-    cfg = get_config()
 
     timestamp: datetime
     value: float  # gallons consumed
@@ -19,7 +18,6 @@ class WaterReading(BaseModel):
 
 class Device(BaseModel):
     """Flume device model."""
-    cfg = get_config()
 
     id: str
     name: str
@@ -27,15 +25,16 @@ class Device(BaseModel):
     active: bool = True
 
 
+cfg = get_config()
+
+
 class FlumeClient:
     """Client for Flume water monitoring API."""
-    cfg = get_config()
 
     BASE_URL = "https://api.flumewater.com"
 
     def __init__(
         self,
-        cfg = get_config()
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         username: Optional[str] = None,

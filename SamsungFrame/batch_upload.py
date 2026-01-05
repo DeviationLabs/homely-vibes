@@ -24,6 +24,7 @@ from lib.config import get_config
 # Register HEIC support for Pillow
 pillow_heif.register_heif_opener()
 
+cfg = get_config()
 logger = get_logger(__name__)
 pushover = Pushover(
     cfg.pushover.user,

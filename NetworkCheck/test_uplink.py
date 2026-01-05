@@ -6,8 +6,6 @@ Performs network speed tests using the speedtest-cli tool and reports results
 via email and pushover notifications. Supports retry logic for unreliable connections.
 """
 
-cfg = get_config()
-
 import argparse
 import json
 import subprocess
@@ -16,9 +14,11 @@ import time
 from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass
 from lib import Mailer
+from lib.config import get_config
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
 
+cfg = get_config()
 logger = SystemLogger.get_logger(__name__)
 pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NetworkCheck"])
 

@@ -10,6 +10,7 @@ from lib.MyPushover import Pushover
 from lib.logger import get_logger
 from lib.config import get_config
 
+cfg = get_config()
 pushover = Pushover(
     cfg.pushover.user,
     cfg.pushover.tokens.get("SamsungFrame", cfg.pushover.default_token),
