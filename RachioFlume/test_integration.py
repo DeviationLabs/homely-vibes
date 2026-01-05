@@ -81,17 +81,6 @@ class TestFlumeClient:
         assert client.username == "test@example.com"
         assert client.password == "password789"  # nosecret
 
-    @pytest.mark.skip(
-        reason="Module-level config loading prevents mocking in tests. "
-        "Client will use config fallback when credentials are empty."
-    )
-    def test_init_missing_credentials(self) -> None:
-        """Test initialization fails without credentials."""
-        # Note: This test cannot work with module-level cfg = get_config()
-        # The config is loaded at module import time, before test mocking occurs
-        with pytest.raises(Exception):  # Will fail on missing OAuth credentials
-            FlumeClient()
-
     @patch.object(FlumeClient, "_get_access_token", return_value="token123")
     @patch("RachioFlume.flume_client.requests.post")
     @patch("RachioFlume.flume_client.requests.get")
