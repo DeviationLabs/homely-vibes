@@ -327,23 +327,43 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.info(f"Limiting to first {args.max_files} of {len(images)} discovered images")
         images = images[: args.max_files]
 
-    # Convert HEIC to JPG
+    # Convert and upload in single loop
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Using temp directory: {temp_dir}")
         converter = ImageConverter(temp_dir)
+        matte = args.matte or cfg.samsung_frame.default_matte
 
         conversion_results: List[ConversionResult] = []
-        processed_images: List[str] = []
+        uploaded_ids: List[str] = []
+        upload_errors: List[Dict[str, str]] = []
+        processed_count = 0
 
-        for image_path in tqdm(images, desc="Converting images", unit="img"):
+        logger.info(f"Processing and uploading {len(images)} images...")
+        for image_path in tqdm(images, desc="Processing images", unit="img"):
+            # Convert if needed
             conversion_result = converter.convert_if_needed(image_path)
             conversion_results.append(conversion_result)
 
-            if conversion_result.success:
-                # Use converted path if available, otherwise original
-                processed_images.append(
-                    conversion_result.converted_path or conversion_result.source_path
-                )
+            if not conversion_result.success:
+                continue
+
+            processed_count += 1
+            # Use converted path if available, otherwise original
+            img_path = conversion_result.converted_path or conversion_result.source_path
+
+            # Upload immediately
+            try:
+                image_id = client.upload_image(img_path, matte=matte)
+                if image_id:
+                    uploaded_ids.append(image_id)
+                    logger.debug(f"Uploaded {Path(img_path).name} → {image_id}")
+                else:
+                    upload_errors.append(
+                        {"file": Path(image_path).name, "error": "Upload returned None"}
+                    )
+            except Exception as e:
+                logger.error(f"Error uploading {Path(image_path).name}: {e}")
+                upload_errors.append({"file": Path(image_path).name, "error": str(e)})
 
         heic_converted = sum(1 for r in conversion_results if r.converted_path is not None)
         conversion_errors = [
@@ -352,37 +372,12 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             if not r.success
         ]
 
-        logger.info(f"Conversion complete: {heic_converted} HEIC files converted")
-        if conversion_errors:
-            logger.warning(f"{len(conversion_errors)} conversion failures")
-
-        if not processed_images:
+        if processed_count == 0:
             logger.error("All conversions failed")
             return 1
 
-        # Upload images
-        logger.info(f"Uploading {len(processed_images)} images...")
-        matte = args.matte or cfg.samsung_frame.default_matte
-
-        uploaded_ids: List[str] = []
-        upload_errors: List[Dict[str, str]] = []
-
-        for img_path in tqdm(processed_images, desc="Uploading images", unit="img"):
-            try:
-                image_id = client.upload_image(img_path, matte=matte)
-                if image_id:
-                    uploaded_ids.append(image_id)
-                    logger.debug(f"Uploaded {Path(img_path).name} → {image_id}")
-                else:
-                    upload_errors.append(
-                        {"file": Path(img_path).name, "error": "Upload returned None"}
-                    )
-            except Exception as e:
-                logger.error(f"Error uploading {Path(img_path).name}: {e}")
-                upload_errors.append({"file": Path(img_path).name, "error": str(e)})
-
         upload_summary = ImageUploadSummary(
-            total_images=len(processed_images),
+            total_images=processed_count,
             successful_uploads=len(uploaded_ids),
             failed_uploads=len(upload_errors),
             uploaded_image_ids=uploaded_ids,
