@@ -15,8 +15,8 @@ Usage:
 """
 
 import os
-from dataclasses import dataclass, field
-from typing import Dict
+from dataclasses import dataclass, field, is_dataclass
+from typing import Dict, get_origin, get_args
 
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
@@ -332,12 +332,27 @@ def _dict_to_config(cfg_dict: dict) -> Config:  # type: ignore
 
             value = data[field_name]
 
-            # Handle nested dataclasses
-            if hasattr(field_type, "__origin__"):  # Generic types (list, dict, etc.)
+            # Check if it's a generic type like list[OpModeConfig]
+            origin = get_origin(field_type)
+
+            if origin is list:
+                # Handle list[SomeDataclass]
+                args = get_args(field_type)
+                if args and is_dataclass(args[0]):
+                    # Convert each dict in the list to the dataclass
+                    item_class = args[0]
+                    kwargs[field_name] = [build_nested(item, item_class) for item in value]
+                else:
+                    # Plain list (e.g., list[str])
+                    kwargs[field_name] = value
+            elif origin is dict:
+                # Handle dict types
                 kwargs[field_name] = value
-            elif hasattr(field_type, "__dataclass_fields__"):  # Nested dataclass
+            elif is_dataclass(field_type):
+                # Nested dataclass
                 kwargs[field_name] = build_nested(value, field_type)
             else:
+                # Primitive type
                 kwargs[field_name] = value
 
         return cls(**kwargs)
