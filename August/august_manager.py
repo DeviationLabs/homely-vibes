@@ -11,10 +11,12 @@ from lib.config import get_config
 from lib.MyPushover import Pushover
 from August.validate_2fa import complete_2fa
 
+cfg = get_config()
 pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
 
 
 async def _test() -> None:
+    cfg = get_config()
     client = AugustClient(cfg.august.email, cfg.august.password)
     message = ""
     try:
@@ -113,15 +115,16 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    # Get August credentials from Constants
-    if not hasattr(Constants, "AUGUST_EMAIL") or not hasattr(Constants, "AUGUST_PASSWORD"):
-        logger.error("August credentials not found in Constants.py")
-        logger.error("Please add AUGUST_EMAIL and AUGUST_PASSWORD to Constants.py")
+    # Get August credentials from config
+    cfg = get_config()
+    if not cfg.august.email or not cfg.august.password:
+        logger.error("August credentials not found in config")
+        logger.error("Please add august.email and august.password to config/local.yaml")
         sys.exit(1)
 
     email = cfg.august.email
     password = cfg.august.password
-    phone = getattr(Constants, "AUGUST_PHONE", None)
+    phone = cfg.august.phone
 
     try:
         asyncio.run(_run_command(args, email, password, phone, logger))

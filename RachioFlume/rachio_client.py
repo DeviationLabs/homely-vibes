@@ -11,6 +11,7 @@ from lib.config import get_config
 
 class Zone(BaseModel):
     """Rachio zone model."""
+
     cfg = get_config()
 
     id: str
@@ -21,6 +22,7 @@ class Zone(BaseModel):
 
 class WateringEvent(BaseModel):
     """Rachio watering event model."""
+
     cfg = get_config()
 
     event_date: datetime
@@ -32,6 +34,7 @@ class WateringEvent(BaseModel):
 
 class RachioClient:
     """Client for Rachio irrigation system API."""
+
     cfg = get_config()
 
     BASE_URL = "https://api.rach.io/1/public"

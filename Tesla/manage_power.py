@@ -6,7 +6,6 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Tuple
-import importlib
 from lib.config import get_config, reset_config
 from lib.MyPushover import Pushover
 from Tesla.tesla_client import TeslaAPIClient, BatteryProduct

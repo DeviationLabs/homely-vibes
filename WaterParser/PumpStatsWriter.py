@@ -107,6 +107,7 @@ def patchWithRachioEvents():
 
 # Preprocess a PumpStats file from Summary. Keep only N days
 def writeFromSummary():
+    cfg = get_config()
     currEpoch = int(time.time())
     zonesHistory = collections.defaultdict(
         lambda: {"zoneName": None, "pumpRates": [], "runTimes": []}
@@ -114,7 +115,8 @@ def writeFromSummary():
 
     summary = TuyaLogParser.readSummaryFile(cfg.paths.json_summary_patch_file)
     logging.info(
-        "Found %s records, looking back %s days..." % (len(summary), cfg.water_monitor.days_lookback)
+        "Found %s records, looking back %s days..."
+        % (len(summary), cfg.water_monitor.days_lookback)
     )
 
     for ts, record in sorted(summary.items(), reverse=False):
@@ -122,11 +124,13 @@ def writeFromSummary():
             continue
         if (
             currEpoch - record["logStartEpoch"]
-        ) > cfg.water_monitor.days_lookback * Constants.SECONDS_IN_DAY:
+        ) > cfg.water_monitor.days_lookback * cfg.seconds_in_day:
             continue
 
         zonesStats = record["zonesStats"]
-        for zoneNum in range(-1, cfg.water_monitor.max_zones):  # Don't care about UNK and RateLimited
+        for zoneNum in range(
+            -1, cfg.water_monitor.max_zones
+        ):  # Don't care about UNK and RateLimited
             zoneNumStr = str(zoneNum)
             zone = {}
             if zonesStats.get(zoneNumStr, None) is not None:
@@ -140,7 +144,7 @@ def writeFromSummary():
                 pumpRate = None
             # DST and other confounding issues. Put an upper bound on runTime
             if runTime is not None:
-                maxSecs = int(Constants.SECONDS_IN_DAY / cfg.water_monitor.logrotate_per_day)
+                maxSecs = int(cfg.seconds_in_day / cfg.water_monitor.logrotate_per_day)
                 runTime = min(runTime, maxSecs)
             zonesHistory[zoneNumStr]["pumpRates"].append({"label": ts, "y": pumpRate})
             zonesHistory[zoneNumStr]["runTimes"].append({"label": ts, "y": runTime})
@@ -158,6 +162,7 @@ def writeFromSummary():
 
 # Pretty print the pump stats
 def printPumpStats(zonesHistory):
+    cfg = get_config()
     for zoneNum in range(-3, cfg.water_monitor.max_zones):
         zoneNumStr = str(zoneNum)
         zoneHistory = zonesHistory.get(zoneNumStr, None)

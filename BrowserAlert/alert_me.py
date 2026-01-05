@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 from typing import Any, Tuple, Optional
 import argparse
-from importlib import reload
 import os
 import re
 import sys
 import time
 from tld import get_tld
-from lib.config import get_config
+from lib.config import get_config, reset_config
 from lib import Mailer
 from lib import MyTwilio
 from lib import NetHelpers
@@ -27,9 +26,9 @@ def refresh_dns_cache(client: Any) -> str:
 
 
 def run_monitor_one_shot(
-    cfg = get_config()
     client: Any, origin_file: str, ignore_patterns: str
 ) -> Tuple[bool, str, Optional[str]]:
+    cfg = get_config()
     global records
     global parse_start_time
     temp_dest = "~/.gc_history"
@@ -101,6 +100,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    cfg = get_config()
+
     logger.info("============")
     logger.info("Invoked command: %s" % " ".join(sys.argv))
 
@@ -118,7 +119,7 @@ if __name__ == "__main__":
 
     time.sleep(args.start_after_seconds)
 
-    host = Constants.NODES[args.machine]
+    host = cfg.node_check.nodes[args.machine]
     client: Optional[Any] = None
     try:
         client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
@@ -142,8 +143,9 @@ if __name__ == "__main__":
         sleep_time = cfg.browser_alert.refresh_delay
 
         try:
-            Constants = reload(Constants)
-            host = Constants.NODES[args.machine]
+            reset_config()
+            cfg = get_config()
+            host = cfg.node_check.nodes[args.machine]
             (alert, msg, matched) = run_monitor_one_shot(
                 client, str(host["histfile"]), str(host.get("whitelist", ""))
             )

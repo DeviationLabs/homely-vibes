@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-cfg = get_config()
 import argparse
 import os
 import sys
@@ -9,6 +8,8 @@ from lib.config import get_config
 from lib.logger import SystemLogger
 from lib.FoscamImager import FoscamImager
 from lib import Mailer
+
+cfg = get_config()
 
 logger = SystemLogger.get_logger(__name__)
 # import TFOneShot ## Imported on demand

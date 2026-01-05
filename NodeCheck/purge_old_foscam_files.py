@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 from lib.logger import SystemLogger
 from lib import Mailer
-from lib.config import get_config
 from lib.MyPushover import Pushover
 
 logger = SystemLogger.get_logger(__name__)

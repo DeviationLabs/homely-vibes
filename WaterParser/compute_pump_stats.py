@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-cfg = get_config()
 import argparse
 import logging
 import os
@@ -10,6 +9,8 @@ import Mailer
 import PumpReport
 import PumpStatsWriter
 import TuyaLogParser
+
+cfg = get_config()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute waterpump stats and email alert")

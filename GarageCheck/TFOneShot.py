@@ -38,7 +38,6 @@ def load_my_model(model_file: str) -> Tuple[Any, Dict[str, int]]:
 
 
 def run_predictor(model: Any, model_labels: Dict[str, int], img: Any) -> Tuple[str, str]:
-    cfg = get_config()
     x = image.img_to_array(img)
     x = cv2.resize(x, dsize=(224, 224), interpolation=cv2.INTER_CUBIC)
     x = np.expand_dims(x, axis=0)
@@ -71,6 +70,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_file", help="Trained model", default="my_model.h5")
     parser.add_argument("--train_dir", help="Folder with training images", default=None)
     args = parser.parse_args()
+
+    cfg = get_config()
 
     # tf.enable_eager_execution()
     # tf.compat.v1.disable_eager_execution()
