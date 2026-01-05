@@ -5,7 +5,6 @@
 paths:
   home: ${oc.env:HOME}
   logging_dir: ${paths.home}/logs
-  tokens_dir: lib/tokens
   tuya_log_base: ${paths.home}/tuya_logs/tuya_logs.csv
   json_summary_file: ${paths.home}/tuya_logs/summary.json
   json_summary_patch_file: ${paths.home}/tuya_logs/summary.json
@@ -17,19 +16,19 @@ email:
   from_addr: user_from@gmail.com
   to_addr: user_to@gmail.com
   gmail_username: user_from
-  gmail_password: ""  # Override in local.yaml
+  gmail_password: ""  
 
 # === Twilio SMS ===
 twilio:
-  sid: ""  # Override in local.yaml
-  auth_token: ""  # Override in local.yaml
+  sid: ""  
+  auth_token: ""  
   sms_from: "+18001234567"
 
 # === Pushover Notifications ===
 pushover:
-  user: ""  # Override in local.yaml
-  delivery_group: ""  # Override in local.yaml
-  default_token: ""  # Override in local.yaml
+  user: ""  
+  delivery_group: ""  
+  default_token: ""  
   tokens:
     August: ""
     NetworkCheck: ""
@@ -41,13 +40,13 @@ pushover:
 # === Node Monitoring ===
 node_check:
   foscam:
-    username: ""  # Override in local.yaml
-    password: ""  # Override in local.yaml
+    username: ""  
+    password: ""  
     foscam_dir: /mnt/IPCam_Data
     purge_after_days: 90
   windows:
-    username: ""  # Override in local.yaml
-    password: ""  # Override in local.yaml
+    username: ""  
+    password: ""  
   # NODE_CONFIGS and NODES dicts - define in local.yaml
   node_configs: {}
   nodes: {}
@@ -104,13 +103,13 @@ browser_alert:
 # === Tesla Powerwall ===
 tesla:
   powerwall_ip: "192.168.X.Y"
-  powerwall_email: ""  # Override in local.yaml
-  powerwall_password: ""  # Override in local.yaml
+  powerwall_email: ""  
+  powerwall_password: ""  
   powerwall_sms_rcpt: "+18001234567"
   powerwall_poll_time: 180
 
-  tesla_email: ""  # Override in local.yaml
-  tesla_password: ""  # Override in local.yaml
+  tesla_email: ""  
+  tesla_password: ""  
   tesla_token_file: lib/tokens/tesla_tokens.json
 
   # Powerwall decision points
@@ -183,8 +182,8 @@ tesla:
 
 # === August Smart Locks ===
 august:
-  email: ""  # Override in local.yaml
-  password: ""  # Override in local.yaml
+  email: ""  
+  password: ""  
   phone: "+1234567890"
   token_file: lib/tokens/august_auth_token.json
 
@@ -202,15 +201,15 @@ samsung_frame:
 
 # === Rachio Irrigation ===
 rachio:
-  api_key: ""  # Override in local.yaml
-  rachio_id: ""  # Override in local.yaml
+  api_key: ""  
+  rachio_id: ""  
 
 # === Flume Water Monitoring ===
 flume:
-  client_id: ""  # Override in local.yaml
-  client_secret: ""  # Override in local.yaml
-  user_email: ""  # Override in local.yaml
-  password: ""  # Override in local.yaml
+  client_id: ""  
+  client_secret: ""  
+  user_email: ""  
+  password: ""  
 
 # === Constants ===
 my_external_ip: "hoiboi.tplinkdns.com"
