@@ -4,11 +4,13 @@ import logging
 import os
 import sys
 import traceback
-from lib import Constants
+from lib.config import get_config
 import Mailer
 import PumpReport
 import PumpStatsWriter
 import TuyaLogParser
+
+cfg = get_config()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute waterpump stats and email alert")
@@ -20,19 +22,19 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logfile = "%s/%s.log" % (Constants.LOGGING_DIR, os.path.basename(__file__))
+    logfile = "%s/%s.log" % (cfg.paths.logging_dir, os.path.basename(__file__))
     log_format = "%(levelname)s:%(module)s.%(lineno)d:%(asctime)s: %(message)s"
     logging.basicConfig(filename=logfile, format=log_format, level=logging.INFO)
     logging.info("============")
     logging.info("Invoked command: %s" % " ".join(sys.argv))
 
     try:
-        for fileCounter in range(Constants.MAX_NEW_FILES):
-            csvLogfile = Constants.TUYA_LOG_BASE
+        for fileCounter in range(cfg.water_monitor.max_new_files):
+            csvLogfile = cfg.paths.tuya_log_base
             csvLogfile += ".{}".format(fileCounter) if fileCounter > 0 else ""
             isMostRecentLog = fileCounter == 0
             csvLog = TuyaLogParser.TuyaLogParser(
-                csvLogfile, Constants.JSON_SUMMARY_FILE, isMostRecentLog
+                csvLogfile, cfg.paths.json_summary_file, isMostRecentLog
             )
 
         # Poll data is very coarse. Let's refine using event log.

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import io
 import logging
 import time
-from lib import Constants
+from lib.config import get_config
 from lib import NetHelpers
 
 
@@ -18,8 +18,11 @@ def print_ipinfo(returncode, params):
 
 class FoscamImager:
     def __init__(self, nodeIP, display_images=False):
+        cfg = get_config()
         self.nodeIP = nodeIP
-        self.mycam = FoscamCamera(nodeIP, 88, Constants.FOSCAM_USERNAME, Constants.FOSCAM_PASSWORD)
+        self.mycam = FoscamCamera(
+            nodeIP, 88, cfg.node_check.foscam.username, cfg.node_check.foscam.password
+        )
         self.display_images = display_images
         self.err_count = 0
         if display_images:

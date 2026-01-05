@@ -19,15 +19,16 @@ from tqdm import tqdm
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
 from lib.MyPushover import Pushover
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 
 # Register HEIC support for Pillow
 pillow_heif.register_heif_opener()
 
+cfg = get_config()
 logger = get_logger(__name__)
 pushover = Pushover(
-    Constants.PUSHOVER_USER,
-    Constants.PUSHOVER_TOKENS.get("SamsungFrame", Constants.PUSHOVER_DEFAULT_TOKEN),
+    cfg.pushover.user,
+    cfg.pushover.tokens.get("SamsungFrame", cfg.pushover.default_token),
 )
 
 # Thumbnail patterns to exclude
@@ -271,6 +272,7 @@ def delete_all_art(client: SamsungFrameClient, force: bool = False) -> Dict[str,
 
 def run_batch_upload(args: argparse.Namespace) -> int:
     """Main workflow orchestration."""
+    cfg = get_config()
     logger.info("=" * 50)
     logger.info("Samsung Frame TV Batch Upload")
     logger.info("=" * 50)
@@ -360,7 +362,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
         # Upload images
         logger.info(f"Uploading {len(processed_images)} images...")
-        matte = args.matte or Constants.SAMSUNG_FRAME_DEFAULT_MATTE
+        matte = args.matte or cfg.samsung_frame.default_matte
 
         uploaded_ids: List[str] = []
         upload_errors: List[Dict[str, str]] = []
@@ -476,6 +478,7 @@ def send_batch_notification(summary: BatchUploadSummary) -> None:
 
 def main() -> int:
     """Main entry point with command line interface."""
+    cfg = get_config()
     parser = argparse.ArgumentParser(
         description="Batch upload images to Samsung Frame TV with HEIC conversion"
     )
@@ -485,7 +488,7 @@ def main() -> int:
     parser.add_argument(
         "--matte",
         default=None,
-        help=f"Matte style (default: {Constants.SAMSUNG_FRAME_DEFAULT_MATTE})",
+        help=f"Matte style (default: {cfg.samsung_frame.default_matte})",
     )
 
     parser.add_argument(

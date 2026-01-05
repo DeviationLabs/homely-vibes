@@ -6,8 +6,7 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, Tuple
-import importlib
-from lib import Constants
+from lib.config import get_config, reset_config
 from lib.MyPushover import Pushover
 from Tesla.tesla_client import TeslaAPIClient, BatteryProduct
 from lib.logger import get_logger
@@ -69,6 +68,7 @@ class PowerwallManager:
     """Manages Tesla Powerwall operations."""
 
     def __init__(self, email: str, send_notifications: bool = False):
+        cfg = get_config()
         self.email = email
         self.send_notifications = send_notifications
         self.battery_history = BatteryHistory()
@@ -78,7 +78,7 @@ class PowerwallManager:
             None  # APB: 5/25/23 seems we are no longer getting this data from the query
         )
         self.logger = get_logger(__name__)
-        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["Powerwall"])
+        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["Powerwall"])
 
     def sanitize_battery_percentage(self, pct: float, time_sampling: float) -> float:
         """Sanitize battery percentage using history and extrapolation."""
@@ -207,7 +207,8 @@ class PowerwallManager:
         self, product: Any, data: Dict[str, Any], current_time: Any, sleep_time: int
     ) -> int:
         """Process all decision points and return updated sleep time."""
-        decision_points = Constants.POWERWALL_DECISION_POINTS
+        cfg = get_config()
+        decision_points = cfg.tesla.decision_points
         current_time_val = current_time.tm_hour * 100 + current_time.tm_min
 
         for decision_point in decision_points:
@@ -267,10 +268,11 @@ class PowerwallManager:
             self.loop_count += 1
             time.sleep(sleep_time)
 
-            importlib.reload(Constants)  # hot refresh on config.
+            reset_config()  # hot refresh on config
+            cfg = get_config()
 
             current_time = time.localtime()
-            poll_time = Constants.POWERWALL_POLL_TIME
+            poll_time = cfg.tesla.powerwall_poll_time
 
             self.logger.info(f"Loop {self.loop_count}")
 
@@ -306,12 +308,13 @@ class PowerwallManager:
 
 def main() -> None:
     """Main entry point."""
+    cfg = get_config()
     parser = argparse.ArgumentParser(description="Tesla Powerwall Management System")
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     parser.add_argument(
         "-e",
         "--email",
-        default=Constants.POWERWALL_EMAIL,
+        default=cfg.tesla.powerwall_email,
         help="Tesla account email",
     )
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress stdout logging")

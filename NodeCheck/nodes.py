@@ -2,14 +2,14 @@
 import re
 import time
 from lib import NetHelpers
-import lib.Constants as Constants
+from lib.config import NodeConfig
 from lib.logger import SystemLogger
 
 logger = SystemLogger.get_logger(__name__)
 
 
 class GenericNode:
-    def __init__(self, name: str, config: Constants.NodeConfig):
+    def __init__(self, name: str, config: NodeConfig):
         self.name = name
         self.config = config
         self.is_online = False

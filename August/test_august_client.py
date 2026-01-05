@@ -3,7 +3,7 @@
 
 import pytest
 from typing import Any
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from yalexs.lock import LockStatus, LockDoorStatus
 from August.august_client import AugustClient, AugustMonitor, LockState
 
@@ -51,13 +51,15 @@ class TestAugustClient:
     @pytest.mark.asyncio
     async def test_ensure_session(self, client: AugustClient) -> None:
         """Test session initialization"""
+        # Mock config
+        mock_config = MagicMock()
+        mock_config.august.token_file = "/tmp/august_auth_token.json"
+
         with (
             patch("August.august_client.aiohttp.ClientSession") as mock_session,
             patch("August.august_client.ApiAsync") as mock_api,
             patch("August.august_client.AuthenticatorAsync") as mock_auth,
-            patch(
-                "August.august_client.Constants.AUGUST_TOKEN_FILE", "/tmp/august_auth_token.json"
-            ),
+            patch("August.august_client.get_config", return_value=mock_config),
         ):
             mock_session_instance = Mock()
             mock_session.return_value = mock_session_instance
@@ -175,14 +177,17 @@ class TestAugustMonitor:
 
     @pytest.fixture
     def monitor(self) -> AugustMonitor:
+        # Mock the config to return test values
+        mock_config = MagicMock()
+        mock_config.pushover.user = "user123"
+        mock_config.pushover.tokens = {"August": "token123"}
+        mock_config.august.token_file = "/tmp/august_auth_token.json"
+        mock_config.paths.logging_dir = "/tmp"
+
         with (
             patch("August.august_client.AugustClient"),
             patch("August.august_client.Pushover"),
-            patch("August.august_client.Constants.PUSHOVER_USER", "user123"),
-            patch("August.august_client.Constants.PUSHOVER_TOKENS", {"August": "token123"}),
-            patch(
-                "August.august_client.Constants.AUGUST_TOKEN_FILE", "/tmp/august_auth_token.json"
-            ),
+            patch("August.august_client.get_config", return_value=mock_config),
         ):
             return AugustMonitor("test@example.com", "password123")
 
@@ -216,14 +221,17 @@ class TestAugustMonitor:
         }
         mock_json_load.return_value = mock_state
 
+        # Mock config
+        mock_config = MagicMock()
+        mock_config.pushover.user = "user123"
+        mock_config.pushover.tokens = {"August": "token123"}
+        mock_config.august.token_file = "/tmp/august_auth_token.json"
+        mock_config.paths.logging_dir = "/tmp"
+
         with (
             patch("August.august_client.AugustClient"),
             patch("August.august_client.Pushover"),
-            patch("August.august_client.Constants.PUSHOVER_USER", "user123"),
-            patch("August.august_client.Constants.PUSHOVER_TOKENS", {"August": "token123"}),
-            patch(
-                "August.august_client.Constants.AUGUST_TOKEN_FILE", "/tmp/august_auth_token.json"
-            ),
+            patch("August.august_client.get_config", return_value=mock_config),
         ):
             monitor = AugustMonitor("test@example.com", "password123")
 

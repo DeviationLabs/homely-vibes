@@ -7,15 +7,17 @@ import logging
 
 from August.august_client import AugustMonitor, AugustClient
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 from lib.MyPushover import Pushover
 from August.validate_2fa import complete_2fa
 
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
+cfg = get_config()
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
 
 
 async def _test() -> None:
-    client = AugustClient(Constants.AUGUST_EMAIL, Constants.AUGUST_PASSWORD)
+    cfg = get_config()
+    client = AugustClient(cfg.august.email, cfg.august.password)
     message = ""
     try:
         statuses = await client.get_all_lock_statuses()
@@ -66,6 +68,7 @@ async def _run_command(
 
 def main() -> None:
     logger = get_logger(__name__)
+    cfg = get_config()
     logger.info("=" * 50)
     logger.info("Starting August Smart Lock Monitoring")
 
@@ -112,15 +115,16 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    # Get August credentials from Constants
-    if not hasattr(Constants, "AUGUST_EMAIL") or not hasattr(Constants, "AUGUST_PASSWORD"):
-        logger.error("August credentials not found in Constants.py")
-        logger.error("Please add AUGUST_EMAIL and AUGUST_PASSWORD to Constants.py")
+    # Get August credentials from config
+    cfg = get_config()
+    if not cfg.august.email or not cfg.august.password:
+        logger.error("August credentials not found in config")
+        logger.error("Please add august.email and august.password to config/local.yaml")
         sys.exit(1)
 
-    email = Constants.AUGUST_EMAIL
-    password = Constants.AUGUST_PASSWORD
-    phone = getattr(Constants, "AUGUST_PHONE", None)
+    email = cfg.august.email
+    password = cfg.august.password
+    phone = cfg.august.phone
 
     try:
         asyncio.run(_run_command(args, email, password, phone, logger))

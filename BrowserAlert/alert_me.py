@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 from typing import Any, Tuple, Optional
 import argparse
-from importlib import reload
 import os
 import re
 import sys
 import time
 from tld import get_tld
-from lib import Constants
+from lib.config import get_config, reset_config
 from lib import Mailer
 from lib import MyTwilio
 from lib import NetHelpers
@@ -29,6 +28,7 @@ def refresh_dns_cache(client: Any) -> str:
 def run_monitor_one_shot(
     client: Any, origin_file: str, ignore_patterns: str
 ) -> Tuple[bool, str, Optional[str]]:
+    cfg = get_config()
     global records
     global parse_start_time
     temp_dest = "~/.gc_history"
@@ -57,7 +57,7 @@ def run_monitor_one_shot(
             continue
         elif re.search(ignore_patterns, data[2]):
             msg += "Ignoring: "
-        elif any([re.search(pattern, data[2]) for pattern in Constants.BLACKLIST]):
+        elif any([re.search(pattern, data[2]) for pattern in cfg.browser_alert.blacklist]):
             alert = True
             msg += "ALERT!! "
             res = get_tld(data[2], as_object=True)  # Get the root as an object
@@ -100,6 +100,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    cfg = get_config()
+
     logger.info("============")
     logger.info("Invoked command: %s" % " ".join(sys.argv))
 
@@ -117,7 +119,7 @@ if __name__ == "__main__":
 
     time.sleep(args.start_after_seconds)
 
-    host = Constants.NODES[args.machine]
+    host = cfg.node_check.nodes[args.machine]
     client: Optional[Any] = None
     try:
         client = NetHelpers.ssh_connect(host["ip"], host["username"], host["password"])
@@ -129,7 +131,7 @@ if __name__ == "__main__":
         print("Machine offline, but still continuing...")
         logger.info("Machine offline, but still continuing...")
 
-    cool_down_attempts = Constants.MIN_REPORTING_GAP
+    cool_down_attempts = cfg.browser_alert.min_reporting_gap
 
     last_checked_hr = -1
     only_ssh_fails_count = 0
@@ -138,11 +140,12 @@ if __name__ == "__main__":
         cool_down_attempts -= 1
         alert = False
         currtime = time.localtime()
-        sleep_time = Constants.REFRESH_DELAY
+        sleep_time = cfg.browser_alert.refresh_delay
 
         try:
-            Constants = reload(Constants)
-            host = Constants.NODES[args.machine]
+            reset_config()
+            cfg = get_config()
+            host = cfg.node_check.nodes[args.machine]
             (alert, msg, matched) = run_monitor_one_shot(
                 client, str(host["histfile"]), str(host.get("whitelist", ""))
             )
@@ -171,7 +174,7 @@ if __name__ == "__main__":
                 # Take a cooling off period.
                 client = None
                 msg += f"{e}"
-                sleep_time = Constants.REFRESH_DELAY * 10
+                sleep_time = cfg.browser_alert.refresh_delay * 10
                 msg += f"\nSSH reconnect failed. Take a {sleep_time}s cooloff period...\n"
                 if NetHelpers.ping_output(node=host["ip"]):
                     only_ssh_fails_count += 1
@@ -197,12 +200,12 @@ if __name__ == "__main__":
                 args.always_email
                 or (
                     cool_down_attempts <= 0
-                    and currtime.tm_hour >= Constants.HR_START_MONITORING
-                    and currtime.tm_hour < Constants.HR_STOP_MONITORING
+                    and currtime.tm_hour >= cfg.browser_alert.hr_start_monitoring
+                    and currtime.tm_hour < cfg.browser_alert.hr_stop_monitoring
                 )
             ):
                 logger.info(f"Badness Sending SMS: {temp}")
-                cool_down_attempts = Constants.MIN_REPORTING_GAP
+                cool_down_attempts = cfg.browser_alert.min_reporting_gap
                 sms_inform = host.get("sms_inform", [])
                 if isinstance(sms_inform, list):
                     for rcpt in sms_inform:
@@ -218,7 +221,7 @@ if __name__ == "__main__":
                     time.sleep(1)
 
         if (
-            args.always_email or currtime.tm_hour == Constants.HR_EMAIL
+            args.always_email or currtime.tm_hour == cfg.browser_alert.hr_email
         ) and last_checked_hr != currtime.tm_hour:
             # Email on the correct hour
             msg = "Found records:\n" + "\n".join([f"[{k}]: {v}" for k, v in records.items()])

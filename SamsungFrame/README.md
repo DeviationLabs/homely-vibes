@@ -18,22 +18,21 @@ A Python client for managing art mode on Samsung Frame TVs. Upload images, confi
 
 ### Configuration
 
-Add your Samsung Frame TV settings to `lib/Constants.py`:
+Add your Samsung Frame TV settings to `config/local.yaml`:
 
-```python
-# Samsung Frame TV Configuration
-SAMSUNG_FRAME_IP = "192.168.XX.YY"  # Your TV's IP address
-SAMSUNG_FRAME_PORT = 8002  # WebSocket port (default: 8002)
-SAMSUNG_FRAME_TOKEN_FILE = f"{TOKENS_DIR}/samsung_frame_token.txt"
-SAMSUNG_FRAME_DEFAULT_MATTE = "shadowbox"  # Black border style
-SAMSUNG_FRAME_SUPPORTED_FORMATS = ["jpg", "jpeg", "png"]
-SAMSUNG_FRAME_MAX_IMAGE_SIZE_MB = 10
+```yaml
+samsung_frame:
+  ip: "192.168.XX.YY"  # Your TV's IP address
+  port: 8002  # WebSocket port (default: 8002)
+  token_file: lib/tokens/samsung_frame_token.txt
+  default_matte: shadowbox  # Black border style
+  supported_formats: [jpg, jpeg, png]
+  max_image_size_mb: 10
 
-# Add to PUSHOVER_TOKENS dict for notifications
-PUSHOVER_TOKENS = {
-    # ... existing tokens ...
-    "SamsungFrame": "your-pushover-token",
-}
+# Add to pushover tokens for notifications
+pushover:
+  tokens:
+    SamsungFrame: your-pushover-token
 ```
 
 ### Installation
@@ -60,7 +59,7 @@ uv run python SamsungFrame/batch_upload.py /path/to/images
 1. Run any command that connects to TV (status, batch upload, list-art, etc.)
 2. Check your TV screen for the pairing prompt
 3. Accept the connection on your TV
-4. The authentication token will be automatically saved to `Constants.SAMSUNG_FRAME_TOKEN_FILE`
+4. The authentication token will be automatically saved to `config samsung_frame.token_file`
 5. Subsequent operations will use the saved token without requiring TV approval
 
 **To re-pair:** Delete the token file and run any connection command:
@@ -302,7 +301,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 **Solutions**:
 - Verify TV is powered on (not fully off)
 - Check TV is on same network as computer running script
-- Verify IP address in `lib/Constants.py` is correct
+- Verify IP address in `config/local.yaml` (samsung_frame.ip) is correct
 - Check firewall isn't blocking port 8002
 
 ### Authentication Failed
@@ -310,7 +309,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 **Symptoms**: Connection works but commands fail with auth errors
 
 **Solutions**:
-- Delete token file (check `Constants.SAMSUNG_FRAME_TOKEN_FILE`): `rm lib/tokens/samsung_frame_token.txt`
+- Delete token file: `rm lib/tokens/samsung_frame_token.txt`
 - Run status command again and accept pairing prompt on TV
 - Ensure token file has correct permissions (600)
 
@@ -337,7 +336,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 
 ### Token File Permissions
 
-If you see permission errors, ensure token file (from `Constants.SAMSUNG_FRAME_TOKEN_FILE`) has restrictive permissions:
+If you see permission errors, ensure token file has restrictive permissions:
 
 ```bash
 chmod 600 lib/tokens/samsung_frame_token.txt
