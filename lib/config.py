@@ -124,8 +124,11 @@ class NodeCheckConfig:
     foscam: FoscamConfig = field(default_factory=FoscamConfig)
     windows: WindowsConfig = field(default_factory=WindowsConfig)
 
-    # NODE_CONFIGS dict will be constructed from YAML
-    # NODES dict for BrowserAlert will also be constructed from YAML
+    # NODE_CONFIGS dict - maps node name to NodeConfig
+    node_configs: Dict[str, NodeConfig] = field(default_factory=dict)
+
+    # NODES dict for BrowserAlert - maps node name to arbitrary config dict
+    nodes: Dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass

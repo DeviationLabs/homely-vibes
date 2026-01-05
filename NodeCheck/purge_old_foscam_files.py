@@ -23,8 +23,8 @@ def purge_old_foscam_files() -> tuple[bool, str]:
 
     # Configuration from config
     cfg = get_config()
-    purge_after_days = cfg.node_check.purge_after_days
-    foscam_dir = cfg.node_check.foscam_dir
+    purge_after_days = cfg.node_check.foscam.purge_after_days
+    foscam_dir = cfg.node_check.foscam.foscam_dir
 
     messages.append("Starting foscam file purge process...")
 
