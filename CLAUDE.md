@@ -55,7 +55,7 @@ This is a **modular IoT home automation system** with independent components tha
 ### Key Architectural Patterns
 
 **Shared Library Pattern**: All modules use utilities from `lib/`:
-- `lib/config.py` - Hydra-based hierarchical YAML configuration system
+- `lib/config.py` - OmegaConf-based hierarchical YAML configuration system
 - `lib/logger.py` - Standardized logging
 - `lib/MyPushover.py`, `lib/Mailer.py` - Notification services
 - `lib/NetHelpers.py` - Network utilities
@@ -70,7 +70,7 @@ This is a **modular IoT home automation system** with independent components tha
 
 ## Configuration Management
 
-**Hydra Config System**: This project uses Hydra with hierarchical YAML configuration:
+**OmegaConf Config System**: This project uses OmegaConf with hierarchical YAML configuration:
 - `config/default.yaml` - Safe defaults (checked into git)
 - `config/local.yaml` - Secrets and overrides (gitignored)
 - `lib/config.py` - Dataclass-based structured configs with type safety
@@ -188,7 +188,7 @@ uv run pytest NodeCheck
 - **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
 
 ### Shared Library (`lib/`)
-- **Config**: All modules source configuration from `lib/config.py` (Hydra-based hierarchical YAML)
+- **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
 - **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
 - **TeslaPy Submodule**: External dependency managed as Git submodule
 
