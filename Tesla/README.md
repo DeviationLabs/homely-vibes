@@ -27,18 +27,14 @@ This will:
 
 ### Environment Configuration
 
-1. Copy the Constants template:
+1. Create `config/local.yaml` (gitignored) with your overrides:
 
-   ```bash
-   cp lib/Constants.py.sample lib/Constants.py
-   ```
+2. Add to `config/local.yaml`:
 
-2. Edit `lib/Constants.py` and configure:
-
-   - Tesla API credentials
-   - Pushover notification settings (if using notifications)
-   - Email settings (if using email notifications)
-   - Logging directories
+   - Tesla API credentials (tesla.powerwall_email, tesla.powerwall_password)
+   - Pushover notification settings (pushover.user, pushover.tokens.Powerwall)
+   - Email settings (email.from_addr, email.gmail_password)
+   - Logging directories (paths.logging_dir)
 
 ### Tesla Authentication
 
@@ -52,7 +48,7 @@ uv run python Tesla/tesla_auth_manual.py
 
 This will print an auth URL. Open it in your regular browser, complete login + hCaptcha, then paste the callback URL back. Text-only, no display required on server.
 
-**Token Storage**: Tokens saved to `Constants.TESLA_TOKEN_FILE` with 0o600 permissions. Auto-refresh without browser after initial auth.
+**Token Storage**: Tokens saved to `config tesla.tesla_token_file` (default: `lib/tokens/tesla_tokens.json`) with 0o600 permissions. Auto-refresh without browser after initial auth.
 
 ## Usage
 
@@ -77,7 +73,7 @@ Key options:
 - `--send-notifications`: Enable Pushover notifications
 - `--debug`: Enable debug logging
 - `--quiet`: Suppress console output (logs still written to file)
-- `--email`: Specify Tesla account email (defaults to Constants.POWERWALL_EMAIL)
+- `--email`: Specify Tesla account email (defaults to config tesla.powerwall_email)
 
 ## Architecture
 

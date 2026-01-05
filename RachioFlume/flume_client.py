@@ -5,7 +5,7 @@ from typing import Optional, List
 import requests
 from pydantic import BaseModel
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 
 
 class WaterReading(BaseModel):
@@ -25,6 +25,9 @@ class Device(BaseModel):
     active: bool = True
 
 
+cfg = get_config()
+
+
 class FlumeClient:
     """Client for Flume water monitoring API."""
 
@@ -40,10 +43,10 @@ class FlumeClient:
         self.logger = get_logger(__name__)
 
         # OAuth credentials
-        self.client_id = client_id or Constants.FLUME_CLIENT_ID
-        self.client_secret = client_secret or Constants.FLUME_CLIENT_SECRET
-        self.username = username or Constants.FLUME_USER_EMAIL
-        self.password = password or Constants.FLUME_PASSWORD
+        self.client_id = client_id or cfg.flume.client_id
+        self.client_secret = client_secret or cfg.flume.client_secret
+        self.username = username or cfg.flume.user_email
+        self.password = password or cfg.flume.password
 
         self.access_token = self._get_access_token()
 

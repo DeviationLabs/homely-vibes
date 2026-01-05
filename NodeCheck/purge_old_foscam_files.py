@@ -4,15 +4,16 @@ import os
 import sys
 import time
 from pathlib import Path
+from lib.config import get_config
 from lib.logger import SystemLogger
 from lib import Mailer
-from lib import Constants
 from lib.MyPushover import Pushover
 
+cfg = get_config()
 logger = SystemLogger.get_logger(__name__)
 
 # Initialize Pushover client for Foscam notifications
-pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NodeCheck"])
 
 
 def purge_old_foscam_files() -> tuple[bool, str]:
@@ -20,9 +21,10 @@ def purge_old_foscam_files() -> tuple[bool, str]:
     success = True
     messages = []
 
-    # Configuration from Constants
-    purge_after_days = getattr(Constants, "PURGE_AFTER_DAYS", 30)
-    foscam_dir = getattr(Constants, "FOSCAM_DIR", "/path/to/foscam")
+    # Configuration from config
+    cfg = get_config()
+    purge_after_days = cfg.node_check.foscam.purge_after_days
+    foscam_dir = cfg.node_check.foscam.foscam_dir
 
     messages.append("Starting foscam file purge process...")
 

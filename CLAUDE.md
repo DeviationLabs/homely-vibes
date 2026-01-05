@@ -55,7 +55,7 @@ This is a **modular IoT home automation system** with independent components tha
 ### Key Architectural Patterns
 
 **Shared Library Pattern**: All modules use utilities from `lib/`:
-- `lib/Constants.py` - Centralized configuration (API keys, settings)
+- `lib/config.py` - OmegaConf-based hierarchical YAML configuration system
 - `lib/logger.py` - Standardized logging
 - `lib/MyPushover.py`, `lib/Mailer.py` - Notification services
 - `lib/NetHelpers.py` - Network utilities
@@ -70,8 +70,41 @@ This is a **modular IoT home automation system** with independent components tha
 
 ## Configuration Management
 
-**Credentials**: Use `lib/Constants.py` (not environment variables) for API keys and configuration.
-**Template**: Copy `lib/Constants_sample.py` to `lib/Constants.py` for initial setup.
+**OmegaConf Config System**: This project uses OmegaConf with hierarchical YAML configuration:
+- `config/default.yaml` - Safe defaults (checked into git)
+- `config/local.yaml` - Secrets and overrides (gitignored)
+- `lib/config.py` - Dataclass-based structured configs with type safety
+
+**Configuration Access Pattern**:
+```python
+from lib.config import get_config
+
+cfg = get_config()
+email = cfg.tesla.powerwall_email
+tokens = cfg.pushover.tokens["Powerwall"]
+```
+
+**Hot Reload Support** (for long-running processes):
+```python
+from lib.config import reset_config, get_config
+
+reset_config()  # Clear cached config
+cfg = get_config()  # Reload from YAML
+```
+
+**Initial Setup**: Create `config/local.yaml` with your overrides (only add values you want to change):
+```yaml
+tesla:
+  powerwall_email: your@email.com
+  powerwall_password: your_password
+
+pushover:
+  user: your_pushover_user
+  tokens:
+    Powerwall: your_token
+```
+
+Config merges default.yaml + local.yaml hierarchically.
 
 ## Testing Strategy
 
@@ -132,7 +165,7 @@ uv run pytest NodeCheck
 - **Alert Thresholds**: Configurable via CLI (default: 5min unlock, 10min ajar, 20% battery)
 
 ### SamsungFrame Module (`SamsungFrame/`)
-- **Authentication**: WebSocket token-based auth, saved to `Constants.SAMSUNG_FRAME_TOKEN_FILE`
+- **Authentication**: WebSocket token-based auth, saved to `config samsung_frame.token_file`
 - **Main Features**: Image upload to Frame TV, matte/border management, slideshow control, art inventory management
 - **Initial Setup**: First upload command triggers TV pairing prompt, token auto-saved for future use
 - **Key Classes**: SamsungFrameClient, UploadResult (Pydantic), ImageUploadSummary
@@ -155,7 +188,7 @@ uv run pytest NodeCheck
 - **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
 
 ### Shared Library (`lib/`)
-- **Constants**: All modules source configuration from `lib/Constants.py`
+- **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
 - **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
 - **TeslaPy Submodule**: External dependency managed as Git submodule
 

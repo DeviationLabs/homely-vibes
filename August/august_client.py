@@ -13,7 +13,7 @@ from yalexs.api_async import ApiAsync
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
 from yalexs.lock import Lock, LockStatus, LockDoorStatus
 
-from lib import Constants
+from lib.config import get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
@@ -67,10 +67,11 @@ class AugustClient:
     async def _ensure_session(self) -> None:
         """Ensure aiohttp session and API are initialized."""
         if self.session is None:
+            cfg = get_config()
             self.session = aiohttp.ClientSession()
             self.api = ApiAsync(self.session)
             # Use token caching to persist authentication across restarts
-            cache_file = Constants.AUGUST_TOKEN_FILE
+            cache_file = cfg.august.token_file
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             self.authenticator = AuthenticatorAsync(
                 self.api,
@@ -118,7 +119,7 @@ class AugustClient:
         except Exception as e:
             self.logger.error(f"Error during August authentication: {e}")
             self.logger.error(
-                "Make sure AUGUST_EMAIL and AUGUST_PASSWORD are correct in Constants.py"
+                "Make sure august.email and august.password are correct in config/local.yaml"
             )
             return False
 
@@ -207,7 +208,8 @@ class AugustMonitor:
         self.battery_alert_cooldown = battery_alert_cooldown_minutes * 60
         self.door_alert_cooldown = door_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
-        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["August"])
+        cfg = get_config()
+        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
         self.unlock_start_times: Dict[str, float] = {}
         self.ajar_start_times: Dict[str, float] = {}
         self.last_unlock_alerts: Dict[str, float] = {}
@@ -217,7 +219,7 @@ class AugustMonitor:
         # Track unknown status for recovery
         self.unknown_status_start_times: Dict[str, float] = {}
         self.unknown_threshold = 30 * 60  # 30 minutes
-        self.state_file = f"{Constants.LOGGING_DIR}/august_monitor_state.json"
+        self.state_file = f"{cfg.paths.logging_dir}/august_monitor_state.json"
         self._load_state()
 
     def _load_state(self) -> None:

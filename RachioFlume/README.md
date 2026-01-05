@@ -18,21 +18,23 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 
 ### Credentials Configuration
 
-Add your API credentials to `lib/Constants.py`:
+Add your API credentials to `config/local.yaml`:
 
-```python
-# Rachio API credentials  
-RACHIO_API_KEY = "abc123..."
-RACHIO_ID = "device-uuid..."
+```yaml
+# Rachio API credentials
+rachio:
+  api_key: abc123...
+  rachio_id: device-uuid...
 
 # Flume API credentials (get from https://portal.flumetech.com/#token)
-FLUME_CLIENT_ID = "client-id..."  
-FLUME_CLIENT_SECRET = "client-secret..."
-FLUME_USER_EMAIL = "your-email@example.com"
-FLUME_PASSWORD = "your-password..."
+flume:
+  client_id: client-id...
+  client_secret: client-secret...
+  user_email: your-email@example.com
+  password: your-password...
 ```
 
-**Note**: The credentials are sourced from `lib/Constants.py` instead of environment variables for consistency with the broader project architecture.
+**Note**: The credentials are sourced from `config/local.yaml` (gitignored) for security.
 
 ### Installation
 

@@ -78,7 +78,7 @@ This document defines specialized AI agents for the Homely Vibes IoT home automa
 ### Cross-Agent Communication
 - Agents share common utilities from `lib/` directory
 - Centralized logging via `lib/logger.py`
-- Shared constants and configuration in `lib/Constants.py`
+- Shared configuration via Hydra (`lib/config.py` + `config/local.yaml`)
 
 ### Security Considerations
 - All agents use secure credential management

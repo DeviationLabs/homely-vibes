@@ -6,20 +6,21 @@ import os
 import aiohttp
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
 from yalexs.api_async import ApiAsync
-from lib import Constants
+from lib.config import get_config
 
 
 async def complete_2fa() -> bool:
+    cfg = get_config()
     session = aiohttp.ClientSession()
     try:
         api = ApiAsync(session)
-        cache_file = Constants.AUGUST_TOKEN_FILE
+        cache_file = cfg.august.token_file
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         auth = AuthenticatorAsync(
             api,
             "email",
-            Constants.AUGUST_EMAIL,
-            Constants.AUGUST_PASSWORD,
+            cfg.august.email,
+            cfg.august.password,
             access_token_cache_file=cache_file,
         )
         await auth.async_setup_authentication()

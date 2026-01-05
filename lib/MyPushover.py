@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 import logging
 import requests
-from lib import Constants
+from lib.config import get_config
 
 
 class Pushover:
     """Pushover notification client."""
 
-    def __init__(self, user: str, token: str = Constants.PUSHOVER_DEFAULT_TOKEN):
+    def __init__(self, user: str | None = None, token: str | None = None):
         """Initialize Pushover client.
 
         Args:
-            user: Pushover user key
-            token: Pushover application token
+            user: Pushover user key (defaults to config value)
+            token: Pushover application token (defaults to config value)
         """
-        self.user = user
-        self.token = token
+        cfg = get_config()
+        self.user = user or cfg.pushover.user
+        self.token = token or cfg.pushover.default_token
 
     def send_message(self, message: str, title: str | None = None, priority: int = 0) -> bool:
         """Send a message via Pushover.
@@ -61,5 +62,5 @@ class Pushover:
 
 
 if __name__ == "__main__":
-    pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_DEFAULT_TOKEN)
+    pushover = Pushover()  # Uses config defaults
     pushover.send_message("test notification", title="Test")

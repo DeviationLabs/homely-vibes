@@ -10,9 +10,7 @@ mock_pushover_class = MagicMock()
 mock_pushover_module = MagicMock()
 mock_pushover_module.Pushover = mock_pushover_class
 
-sys.modules["Constants"] = MagicMock()
 sys.modules["lib"] = MagicMock()
-sys.modules["lib.Constants"] = MagicMock()
 sys.modules["lib.MyPushover"] = mock_pushover_module
 sys.modules["lib.logger"] = MagicMock()
 sys.modules["TeslaPy"] = MagicMock()

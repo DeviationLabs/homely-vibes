@@ -15,7 +15,7 @@ from keras.models import load_model
 from keras.preprocessing import image
 from keras.preprocessing.image import ImageDataGenerator
 from keras.utils.generic_utils import CustomObjectScope
-from lib import Constants
+from lib.config import get_config
 
 tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -71,6 +71,8 @@ if __name__ == "__main__":
     parser.add_argument("--train_dir", help="Folder with training images", default=None)
     args = parser.parse_args()
 
+    cfg = get_config()
+
     # tf.enable_eager_execution()
     # tf.compat.v1.disable_eager_execution()
     try:
@@ -102,13 +104,13 @@ if __name__ == "__main__":
 
         # Two images from our library that should show an outcome
         img = image.load_img(
-            "%s/image_classification/train_animals/horses/images.jpg" % Constants.HOME
+            "%s/image_classification/train_animals/horses/images.jpg" % cfg.paths.home
         )
         label, msg = run_predictor(model, model_labels, img)
         print(msg)
         img = image.load_img(
             "%s/image_classification/train_garage/door_open/Garage_2019-01-28_07-55-39.jpg"
-            % Constants.HOME
+            % cfg.paths.home
         )
         label, msg = run_predictor(model, model_labels, img)
         print(msg)

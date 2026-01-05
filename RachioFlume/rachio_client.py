@@ -6,7 +6,7 @@ import requests
 from pydantic import BaseModel
 
 from lib.logger import get_logger
-from lib import Constants
+from lib.config import get_config
 
 
 class Zone(BaseModel):
@@ -31,17 +31,20 @@ class WateringEvent(BaseModel):
 class RachioClient:
     """Client for Rachio irrigation system API."""
 
+    cfg = get_config()
+
     BASE_URL = "https://api.rach.io/1/public"
 
     def __init__(self, api_key: Optional[str] = None, device_id: Optional[str] = None):
         """Initialize Rachio client.
 
         Args:
-            api_key: Rachio API key (defaults to Constants.RACHIO_API_KEY)
-            device_id: Rachio device ID (defaults to Constants.RACHIO_ID)
+            api_key: Rachio API key (defaults to cfg.rachio.api_key)
+            device_id: Rachio device ID (defaults to cfg.rachio.rachio_id)
         """
-        self.api_key = api_key or Constants.RACHIO_API_KEY
-        self.device_id = device_id or Constants.RACHIO_ID
+        cfg = get_config()
+        self.api_key = api_key or cfg.rachio.api_key
+        self.device_id = device_id or cfg.rachio.rachio_id
 
         if not self.api_key:
             raise ValueError("Rachio API key required")

@@ -1,0 +1,217 @@
+# Default configuration for homely-vibes
+# Safe defaults checked into git. Override with config/local.yaml (gitignored)
+
+# === Paths and Directories ===
+paths:
+  home: ${oc.env:HOME}
+  logging_dir: ${paths.home}/logs
+  tokens_dir: lib/tokens
+  tuya_log_base: ${paths.home}/tuya_logs/tuya_logs.csv
+  json_summary_file: ${paths.home}/tuya_logs/summary.json
+  json_summary_patch_file: ${paths.home}/tuya_logs/summary.json
+  json_pumprates_file: ${paths.home}/tuya_logs/pump_rates.json
+  rachio_events_cmd: ${paths.home}/bin/WaterLogging/get_rachio_events.js
+
+# === Email Configuration ===
+email:
+  from_addr: user_from@gmail.com
+  to_addr: user_to@gmail.com
+  gmail_username: user_from
+  gmail_password: ""  # Override in local.yaml
+
+# === Twilio SMS ===
+twilio:
+  sid: ""  # Override in local.yaml
+  auth_token: ""  # Override in local.yaml
+  sms_from: "+18001234567"
+
+# === Pushover Notifications ===
+pushover:
+  user: ""  # Override in local.yaml
+  delivery_group: ""  # Override in local.yaml
+  default_token: ""  # Override in local.yaml
+  tokens:
+    August: ""
+    NetworkCheck: ""
+    NodeCheck: ""
+    Powerwall: ""
+    RachioFlume: ""
+    SamsungFrame: ""
+
+# === Node Monitoring ===
+node_check:
+  foscam:
+    username: ""  # Override in local.yaml
+    password: ""  # Override in local.yaml
+    foscam_dir: /mnt/IPCam_Data
+    purge_after_days: 90
+  windows:
+    username: ""  # Override in local.yaml
+    password: ""  # Override in local.yaml
+  # NODE_CONFIGS and NODES dicts - define in local.yaml
+  node_configs: {}
+  nodes: {}
+
+# === Water Monitoring ===
+water_monitor:
+  # Processing settings
+  max_zones: 16
+  max_new_files: 2
+  logrotate_per_day: 4
+  days_lookback: 90
+  start_from_epoch: 1539161991  # 2018-10-10-01-59-51
+
+  # Alerting thresholds
+  days_email_report: 14
+  min_drip_zone_alert_time: 1800
+  min_drip_plot_time: 189
+  min_misc_zone_alert_time: 86400
+  min_sprinkler_zone_alert_time: 600
+  alert_thresh: 1.18  # 18% higher than average
+  pump_alert: 22  # seconds
+  pump_toggles_count: 25
+
+# === Network Check ===
+network_check:
+  min_dl_bw: 150  # Mbps
+  min_ul_bw: 4    # Mbps
+
+# === Browser Alert ===
+browser_alert:
+  refresh_delay: 30  # seconds
+  min_reporting_gap: 6  # hours
+  hr_start_monitoring: 2
+  hr_stop_monitoring: 23
+  hr_email: 19
+  blacklist:
+    - pokemon
+    - surviv
+    - charmeleon
+    - dutrigo
+    - veekun
+    - github
+    - soraapp
+    - emulator
+    - gba
+    - garfield
+    - shellshock
+    - youtube
+    - scratch
+    - clashman2.github.io
+    - .io/
+    - dragapult
+
+# === Tesla Powerwall ===
+tesla:
+  powerwall_ip: "192.168.X.Y"
+  powerwall_email: ""  # Override in local.yaml
+  powerwall_password: ""  # Override in local.yaml
+  powerwall_sms_rcpt: "+18001234567"
+  powerwall_poll_time: 180
+
+  tesla_email: ""  # Override in local.yaml
+  tesla_password: ""  # Override in local.yaml
+  tesla_token_file: lib/tokens/tesla_tokens.json
+
+  # Powerwall decision points
+  decision_points:
+    - time_start: 0
+      time_end: 100
+      pct_gradient_per_hr: 0
+      pct_thresh: 28
+      iff_higher: false
+      pct_min: 30
+      pct_min_trail_stop: 0
+      op_mode: autonomous
+      reason: "Prep for midnight recharge.."
+      always_notify: true
+
+    - time_start: 1300
+      time_end: 1455
+      pct_gradient_per_hr: 35
+      pct_thresh: 99
+      iff_higher: false
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: autonomous
+      reason: "Solar recharge insufficient. Drawdown before shoulder.."
+      always_notify: true
+
+    - time_start: 1455
+      time_end: 1900
+      pct_gradient_per_hr: 0
+      pct_thresh: 0
+      iff_higher: true
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: self_consumption
+      reason: "In Peak. Discharge.."
+      always_notify: false
+
+    - time_start: 0
+      time_end: 1500
+      pct_gradient_per_hr: 0
+      pct_thresh: 0
+      iff_higher: true
+      pct_min: 30
+      pct_min_trail_stop: 10
+      op_mode: self_consumption
+      reason: "Nightly reserves rebuilt. Solar charge only.."
+      always_notify: false
+
+    - time_start: 1900
+      time_end: 2359
+      pct_gradient_per_hr: -8
+      pct_thresh: 20
+      iff_higher: false
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: self_consumption
+      reason: "Reserve for rest of shoulder.."
+      always_notify: false
+
+    - time_start: 1900
+      time_end: 2100
+      pct_gradient_per_hr: -35
+      pct_thresh: 40
+      iff_higher: true
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: autonomous
+      reason: "Dump surplus before end of peak.."
+      always_notify: false
+
+# === August Smart Locks ===
+august:
+  email: ""  # Override in local.yaml
+  password: ""  # Override in local.yaml
+  phone: "+1234567890"
+  token_file: lib/tokens/august_auth_token.json
+
+# === Samsung Frame TV ===
+samsung_frame:
+  ip: "192.168.1.4"
+  port: 8002
+  token_file: lib/tokens/samsung_frame_token.txt
+  default_matte: shadowbox_black
+  supported_formats:
+    - jpg
+    - jpeg
+    - png
+  max_image_size_mb: 10
+
+# === Rachio Irrigation ===
+rachio:
+  api_key: ""  # Override in local.yaml
+  rachio_id: ""  # Override in local.yaml
+
+# === Flume Water Monitoring ===
+flume:
+  client_id: ""  # Override in local.yaml
+  client_secret: ""  # Override in local.yaml
+  user_email: ""  # Override in local.yaml
+  password: ""  # Override in local.yaml
+
+# === Constants ===
+my_external_ip: "hoiboi.tplinkdns.com"
+seconds_in_day: 86400

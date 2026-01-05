@@ -53,12 +53,30 @@ uv run NodeCheck/manage_nodes.py --type foscam --always_email
 
 ## Configuration
 
-```python
-NODE_CONFIGS = {
-    "Deck Stairs": NodeConfig("192.168.1.51", "foscam", FOSCAM_USERNAME, FOSCAM_PASSWORD),
-    "Beta": NodeConfig("192.168.1.100", "windows", WINDOWS_USERNAME, WINDOWS_PASSWORD),
-    "Omega": NodeConfig("192.168.1.101", "generic"),
-}
+Add to `config/local.yaml`:
+
+```yaml
+node_check:
+  foscam:
+    username: your_username
+    password: your_password
+  windows:
+    username: your_username
+    password: your_password
+  node_configs:
+    "Deck Stairs":
+      ip: "192.168.1.51"
+      node_type: foscam
+      username: your_username
+      password: your_password
+    "Beta":
+      ip: "192.168.1.100"
+      node_type: windows
+      username: your_username
+      password: your_password
+    "Omega":
+      ip: "192.168.1.101"
+      node_type: generic
 ```
 
 ## Command Reference
@@ -125,7 +143,7 @@ uv run NodeCheck/heartbeat_nodes.py \
 
 NodeCheck integrates with the broader home automation system:
 
-- **Shared configuration** via `lib/Constants.py`
+- **Shared configuration** via `config/local.yaml`
 - **Common utilities** from `lib/` (networking, notifications, logging)
 - **Coordinated monitoring** with other system components
 - **Centralized alerting** through Pushover and email

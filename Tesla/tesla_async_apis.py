@@ -3,7 +3,7 @@
 import asyncio
 from tesla_api import TeslaApiClient
 
-from lib import Constants
+from lib.config import get_config
 
 
 async def save_token(token: str) -> None:
@@ -36,12 +36,13 @@ async def main_energy(email: str, password: str, token: str) -> None:
 
 
 def initialize() -> None:
+    cfg = get_config()
     email = password = token = None
     try:
         token = open("token_file").read()
     except OSError:
-        email = Constants.TESLA_EMAIL
-        password = Constants.TESLA_PASSWORD
+        email = cfg.tesla.tesla_email
+        password = cfg.tesla.tesla_password
     return email, password, token
 
 

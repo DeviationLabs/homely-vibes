@@ -39,6 +39,7 @@ dependencies = [
     "samsungtvws @ git+https://github.com/NickWaterton/samsung-tv-ws-api.git",
     "Pillow>=10.0.0",
     "pillow-heif>=0.18.0",
+    "omegaconf>=2.3.0",
 ]
 
 [project.optional-dependencies]
@@ -72,7 +73,6 @@ packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August"]
 [tool.deptry]
 known_first_party = [
     "lib",  # Add lib as first-party module
-    "Constants",
     "Mailer",
     "MyPushover",
     "MyTwilio",
@@ -176,7 +176,6 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = [
-    "Constants",
     "yalexs.*",
     "twilio.*",
     "webview.*",

@@ -3,7 +3,7 @@ import argparse
 import sys
 import time
 from typing import List, Set
-from lib import Constants
+from lib.config import get_config
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
 from NodeCheck.nodes import GenericNode
@@ -13,8 +13,9 @@ logger = SystemLogger.get_logger(__name__)
 
 class HeartbeatMonitor:
     def __init__(self, specific_nodes: Set[str] | None = None) -> None:
+        cfg = get_config()
         self.specific_nodes = {node.lower() for node in specific_nodes} if specific_nodes else None
-        self.pushover = Pushover(Constants.PUSHOVER_USER, Constants.PUSHOVER_TOKENS["NodeCheck"])
+        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NodeCheck"])
 
         self.monitored_nodes = self._create_nodes_list()
 
@@ -23,9 +24,10 @@ class HeartbeatMonitor:
 
     def _create_nodes_list(self) -> List[GenericNode]:
         """Create nodes for all node types and filter based on specific_nodes parameter"""
+        cfg = get_config()
         nodes: List[GenericNode] = []
 
-        for name, config in Constants.NODE_CONFIGS.items():
+        for name, config in cfg.node_check.node_configs.items():
             # This is intentionally generic to run only the basic methods
             nodes.append(GenericNode(name, config))
 

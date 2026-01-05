@@ -4,7 +4,7 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
-from lib import Constants
+from lib.config import get_config
 
 
 class SystemLogger:
@@ -32,8 +32,9 @@ class SystemLogger:
 
         # Determine main script name for shared log file
         if cls._shared_log_file is None:
+            cfg = get_config()
             main_script = cls._get_main_script_name()
-            logs_dir = Path(Constants.LOGGING_DIR)
+            logs_dir = Path(cfg.paths.logging_dir)
             logs_dir.mkdir(parents=True, exist_ok=True)
             cls._shared_log_file = logs_dir / f"{main_script}.log"
 

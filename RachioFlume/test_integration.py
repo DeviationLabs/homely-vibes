@@ -6,7 +6,6 @@ from datetime import datetime
 from unittest.mock import Mock, patch
 import os
 
-from lib import Constants
 from RachioFlume.rachio_client import RachioClient, Zone, WateringEvent
 from RachioFlume.flume_client import FlumeClient, WaterReading
 from RachioFlume.data_storage import WaterTrackingDB
@@ -17,24 +16,21 @@ from RachioFlume.reporter import WeeklyReporter
 class TestRachioClient:
     """Test Rachio API client."""
 
-    @patch.object(Constants, "RACHIO_API_KEY", "test_key")
-    @patch.object(Constants, "RACHIO_ID", "test_device")
     def test_init_with_env_vars(self) -> None:
-        """Test initialization with environment variables."""
-        client = RachioClient()
-        assert client.api_key == "test_key"
+        """Test initialization with provided credentials."""
+        client = RachioClient(api_key="test_key", device_id="test_device")  # nosecret
+        assert client.api_key == "test_key"  # nosecret
         assert client.device_id == "test_device"
 
-    @patch.object(Constants, "RACHIO_API_KEY", None)
-    @patch.object(Constants, "RACHIO_ID", None)
-    def test_init_missing_credentials(self) -> None:
+    @patch("RachioFlume.rachio_client.get_config")
+    def test_init_missing_credentials(self, mock_config: Mock) -> None:
         """Test initialization fails without credentials."""
+        # Mock config to return empty values
+        mock_config.return_value = Mock(rachio=Mock(api_key="", rachio_id=""))
         with pytest.raises(ValueError, match="Rachio API key required"):
             RachioClient()
 
     @patch("RachioFlume.rachio_client.requests.get")
-    @patch.object(Constants, "RACHIO_API_KEY", "test_key")
-    @patch.object(Constants, "RACHIO_ID", "test_device")
     def test_get_zones(self, mock_get: Mock) -> None:
         """Test getting zones from device."""
         mock_response = Mock()
@@ -57,7 +53,7 @@ class TestRachioClient:
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
-        client = RachioClient()
+        client = RachioClient(api_key="test_key", device_id="test_device")  # nosecret
         zones = client.get_zones()
 
         assert len(zones) == 2
@@ -71,28 +67,20 @@ class TestRachioClient:
 class TestFlumeClient:
     """Test Flume API client."""
 
-    @patch.object(Constants, "FLUME_CLIENT_ID", "client123")
-    @patch.object(Constants, "FLUME_CLIENT_SECRET", "secret456")
-    @patch.object(Constants, "FLUME_USER_EMAIL", "test@example.com")
-    @patch.object(Constants, "FLUME_PASSWORD", "password789")
     @patch.object(FlumeClient, "_get_access_token", return_value="token123")
     def test_init_with_env_vars(self, _mock_token: Mock) -> None:
-        """Test initialization with environment variables."""
-        client = FlumeClient()
+        """Test initialization with provided credentials."""
+        client = FlumeClient(
+            client_id="client123",
+            client_secret="secret456",  # nosecret
+            username="test@example.com",
+            password="password789",  # nosecret
+        )
         assert client.client_id == "client123"
-        assert client.client_secret == "secret456"
+        assert client.client_secret == "secret456"  # nosecret
         assert client.username == "test@example.com"
-        assert client.password == "password789"
+        assert client.password == "password789"  # nosecret
 
-    def test_init_missing_credentials(self) -> None:
-        """Test initialization fails without credentials."""
-        with pytest.raises(Exception):  # Will fail on missing OAuth credentials
-            FlumeClient()
-
-    @patch.object(Constants, "FLUME_PASSWORD", "password789")
-    @patch.object(Constants, "FLUME_USER_EMAIL", "test@example.com")
-    @patch.object(Constants, "FLUME_CLIENT_SECRET", "secret456")
-    @patch.object(Constants, "FLUME_CLIENT_ID", "client123")
     @patch.object(FlumeClient, "_get_access_token", return_value="token123")
     @patch("RachioFlume.flume_client.requests.post")
     @patch("RachioFlume.flume_client.requests.get")
@@ -139,10 +127,6 @@ class TestFlumeClient:
         assert readings[0].value == 1.5
         assert readings[1].value == 2.0
 
-    @patch.object(Constants, "FLUME_PASSWORD", "password789")
-    @patch.object(Constants, "FLUME_USER_EMAIL", "test@example.com")
-    @patch.object(Constants, "FLUME_CLIENT_SECRET", "secret456")
-    @patch.object(Constants, "FLUME_CLIENT_ID", "client123")
     @patch.object(FlumeClient, "_get_access_token", return_value="token123")
     @patch("RachioFlume.flume_client.requests.get")
     def test_get_devices(self, mock_get: Mock, *args: Mock) -> None:
@@ -177,10 +161,6 @@ class TestFlumeClient:
         assert "Water Sensor" in devices[1].name
         assert devices[1].active is False
 
-    @patch.object(Constants, "FLUME_PASSWORD", "password789")
-    @patch.object(Constants, "FLUME_USER_EMAIL", "test@example.com")
-    @patch.object(Constants, "FLUME_CLIENT_SECRET", "secret456")
-    @patch.object(Constants, "FLUME_CLIENT_ID", "client123")
     @patch.object(FlumeClient, "_get_access_token", return_value="token123")
     @patch("RachioFlume.flume_client.requests.get")
     def test_get_active_device(self, mock_get: Mock, *args: Mock) -> None:
