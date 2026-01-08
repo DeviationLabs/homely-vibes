@@ -220,6 +220,8 @@ class AugustMonitor:
         self.unknown_status_start_times: Dict[str, float] = {}
         self.unknown_threshold = 30 * 60  # 30 minutes
         self.state_file = f"{cfg.paths.logging_dir}/august_monitor_state.json"
+        # Pending alerts for consolidation: (lock_name, alert_type, message)
+        self.pending_alerts: list[tuple[str, str, str]] = []
         self._load_state()
 
     def _load_state(self) -> None:
@@ -288,6 +290,9 @@ class AugustMonitor:
                 k: v for k, v in self.unknown_status_start_times.items() if k in existing_locks
             }
 
+            # Send consolidated alerts for this check cycle
+            self._send_consolidated_alerts()
+
             self._save_state()
 
         except Exception as e:
@@ -347,29 +352,48 @@ class AugustMonitor:
         self, lock_id: str, status: LockState, unlock_duration: float
     ) -> None:
         minutes_unlocked = unlock_duration / 60
-
-        title = "🔓 August Lock Alert"
-        message = f"{status.lock_name} has been unlocked for {minutes_unlocked:.0f} minutes"
-
-        try:
-            self.pushover.send_message(message, title=title, priority=1)
-            self.logger.warning(f"Sent unlock alert: {message}")
-        except Exception as e:
-            self.logger.error(f"Failed to send pushover alert: {e}")
+        message = f"{status.lock_name} unlocked for {minutes_unlocked:.0f} min"
+        self.pending_alerts.append((status.lock_name, "unlock", message))
+        self.logger.warning(f"Queued unlock alert: {message}")
 
     async def _send_door_ajar_alert(
         self, lock_id: str, status: LockState, ajar_duration: float
     ) -> None:
         minutes_ajar = ajar_duration / 60
+        message = f"{status.lock_name} door ajar for {minutes_ajar:.0f} min"
+        self.pending_alerts.append((status.lock_name, "ajar", message))
+        self.logger.warning(f"Queued door ajar alert: {message}")
 
-        title = "🚪 August Door Alert"
-        message = f"{status.lock_name} door has been ajar for {minutes_ajar:.0f} minutes"
+    def _send_consolidated_alerts(self) -> None:
+        """Send consolidated notification for all pending alerts."""
+        if not self.pending_alerts:
+            return
 
+        # Group by lock, track alert types
+        alerts_by_lock: dict[str, list[tuple[str, str]]] = {}
+        for lock_name, alert_type, message in self.pending_alerts:
+            if lock_name not in alerts_by_lock:
+                alerts_by_lock[lock_name] = []
+            alerts_by_lock[lock_name].append((alert_type, message))
+
+        # Build consolidated message: skip unlock if ajar exists (door open implies unlocked)
+        messages = []
+        for lock_name, alerts in alerts_by_lock.items():
+            alert_types = {a[0] for a in alerts}
+            if "ajar" in alert_types:
+                # Only include ajar alert, skip unlock (redundant)
+                messages.extend([a[1] for a in alerts if a[0] == "ajar"])
+            else:
+                messages.extend([a[1] for a in alerts])
+
+        title = "🚪 August Alert" if len(alerts_by_lock) == 1 else "🚪 August Alerts"
         try:
-            self.pushover.send_message(message, title=title, priority=1)
-            self.logger.warning(f"Sent door ajar alert: {message}")
+            self.pushover.send_message("\n".join(messages), title=title, priority=1)
+            self.logger.warning(f"Sent consolidated alert: {messages}")
         except Exception as e:
-            self.logger.error(f"Failed to send door ajar alert: {e}")
+            self.logger.error(f"Failed to send consolidated alert: {e}")
+
+        self.pending_alerts = []
 
     async def _check_battery_level(
         self, lock_id: str, status: LockState, current_time: float
