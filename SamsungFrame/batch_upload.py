@@ -5,9 +5,11 @@ import argparse
 import hashlib
 import os
 import re
+import signal
 import sys
 import tempfile
 from pathlib import Path
+from types import FrameType
 from typing import List, Dict, Optional
 
 import pillow_heif
@@ -33,6 +35,19 @@ pushover = Pushover(
 
 # Thumbnail patterns to exclude
 THUMBNAIL_PATTERNS = re.compile(r"_(thumb|thumbnail|small)(@\d+x)?\.[\w]+$", re.IGNORECASE)
+
+# Global state for signal handler
+_current_summary: Optional["BatchUploadSummary"] = None
+_notification_sent = False
+
+
+def _send_interrupt_notification(_signum: int, _frame: Optional[FrameType]) -> None:
+    """Signal handler to send notification on interrupt."""
+    global _notification_sent
+    if _current_summary and not _notification_sent:
+        _notification_sent = True
+        send_batch_notification(_current_summary, interrupted=True)
+    sys.exit(1)
 
 
 class ConversionResult(BaseModel):
@@ -272,6 +287,13 @@ def delete_all_art(client: SamsungFrameClient, force: bool = False) -> Dict[str,
 
 def run_batch_upload(args: argparse.Namespace) -> int:
     """Main workflow orchestration."""
+    global _current_summary, _notification_sent
+    _notification_sent = False
+
+    # Register signal handlers for interrupt notification
+    signal.signal(signal.SIGINT, _send_interrupt_notification)
+    signal.signal(signal.SIGTERM, _send_interrupt_notification)
+
     cfg = get_config()
     logger.info("=" * 50)
     logger.info("Samsung Frame TV Batch Upload")
@@ -365,6 +387,30 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                 logger.error(f"Error uploading {Path(image_path).name}: {e}")
                 upload_errors.append({"file": Path(image_path).name, "error": str(e)})
 
+            # Update global state for signal handler (partial progress)
+            heic_so_far = sum(1 for r in conversion_results if r.converted_path is not None)
+            conv_errors_so_far = [
+                {"file": Path(r.source_path).name, "error": r.error_message or "Unknown error"}
+                for r in conversion_results
+                if not r.success
+            ]
+            _current_summary = BatchUploadSummary(
+                total_discovered=len(images),
+                total_filtered=len(images),
+                heic_converted=heic_so_far,
+                conversion_failures=len(conv_errors_so_far),
+                art_deleted=art_deleted,
+                art_delete_failures=art_delete_failures,
+                upload_summary=ImageUploadSummary(
+                    total_images=processed_count,
+                    successful_uploads=len(uploaded_ids),
+                    failed_uploads=len(upload_errors),
+                    uploaded_image_ids=uploaded_ids,
+                    errors=upload_errors,
+                ),
+                conversion_errors=conv_errors_so_far,
+            )
+
         heic_converted = sum(1 for r in conversion_results if r.converted_path is not None)
         conversion_errors = [
             {"file": Path(r.source_path).name, "error": r.error_message or "Unknown error"}
@@ -446,11 +492,17 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         return 0 if summary.upload_summary.successful_uploads > 0 else 1
 
 
-def send_batch_notification(summary: BatchUploadSummary) -> None:
+def send_batch_notification(summary: BatchUploadSummary, interrupted: bool = False) -> None:
     """Send Pushover notification with batch upload results."""
+    global _notification_sent
+    _notification_sent = True
+
     total_failures = summary.upload_summary.failed_uploads + summary.conversion_failures
 
-    if total_failures > 0:
+    if interrupted:
+        priority = 1
+        title = "Samsung Batch Upload - Interrupted"
+    elif total_failures > 0:
         priority = 1  # High priority
         title = "Samsung Batch Upload - Partial Success"
     else:
