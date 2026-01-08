@@ -93,6 +93,19 @@ class HeartbeatMonitor:
         self.last_notification_time = time.time()
         logger.info(f"Sent notification: {message}")
 
+    def send_recovery_notification(self, recovered_nodes: Set[str]) -> None:
+        """Send pushover notification when all nodes recover"""
+        node_list = ", ".join(sorted(recovered_nodes))
+        count = len(recovered_nodes)
+        title = "Node Recovered" if count == 1 else "All Nodes Recovered"
+        message = (
+            f"Node {node_list} is back online"
+            if count == 1
+            else f"{count} nodes recovered: {node_list}"
+        )
+        self.pushover.send_message(message, title=title, priority=0)
+        logger.info(f"Sent recovery notification: {message}")
+
     def run_continuous_monitoring(self, poll_time: int, cooloff_time: int) -> None:
         """Run continuous heartbeat monitoring"""
         logger.info(
@@ -120,6 +133,7 @@ class HeartbeatMonitor:
                 else:
                     if self.last_down_nodes:
                         logger.info("All nodes are now healthy (recovery detected)")
+                        self.send_recovery_notification(self.last_down_nodes)
                     logger.debug("All nodes healthy")
 
                 self.last_down_nodes = current_down_nodes
