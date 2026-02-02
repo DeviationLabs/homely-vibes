@@ -431,7 +431,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
     # Discover images
     try:
-        images = discover_images(args.source_dir, min_size_mb=1.0)
+        images = discover_images(args.source_dir, min_size_mb=cfg.samsung_frame.min_size_mb)
     except ValueError as e:
         logger.error(str(e))
         return 1

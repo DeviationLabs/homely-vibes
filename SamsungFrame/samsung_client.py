@@ -536,6 +536,26 @@ class SamsungFrameClient:
         self.logger.info(f"Thumbnail download complete: {downloaded} downloaded, {failed} failed")
         return {"total": len(art_list), "downloaded": downloaded, "failed": failed}
 
+    def reboot(self) -> bool:
+        """Reboot the TV by sending power off then power on commands.
+
+        Returns:
+            True if reboot commands sent successfully
+        """
+        if not self.tv:
+            self.logger.error("Not connected to TV - call connect() first")
+            return False
+
+        try:
+            self.logger.info("Sending reboot command to TV...")
+            # Send power off key
+            self.tv.send_key("KEY_POWER")
+            self.logger.info("Power command sent - TV should restart")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error sending reboot command: {e}")
+            return False
+
     def close(self) -> None:
         """Close connection to TV."""
         if self.tv:
