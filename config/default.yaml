@@ -189,7 +189,7 @@ august:
 
 # === Samsung Frame TV ===
 samsung_frame:
-  ip: "192.168.1.4"
+  ip: "192.168.X.Y"
   port: 8002
   token_file: lib/tokens/samsung_frame_token.txt
   default_matte: shadowbox_black
@@ -198,6 +198,9 @@ samsung_frame:
     - jpeg
     - png
   max_image_size_mb: 10
+  min_size_mb: 0.75  # minimum file size to upload (750KB)
+  min_images: 100  # minimum user images to maintain on TV during purge
+  slideshow_delay_seconds: 3  # delay before starting slideshow after upload
 
 # === Rachio Irrigation ===
 rachio:
