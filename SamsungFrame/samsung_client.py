@@ -279,17 +279,24 @@ class SamsungFrameClient:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
-        try:
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            reraise=True,
+        )
+        def fetch_art_list() -> List[Dict[str, Any]]:
+            assert self.tv is not None
             art_list = self.tv.art().available()
             if isinstance(art_list, dict) and art_list.get("event") == "ms.channel.timeOut":
-                self.logger.warning(
-                    "TV art list request timed out - TV may be busy or slow to respond"
-                )
-                return []
-            self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+                raise TimeoutError("TV art list request timed out")
             return cast(List[Dict[str, Any]], art_list)
+
+        try:
+            art_list = fetch_art_list()
+            self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+            return art_list
         except Exception as e:
-            self.logger.error(f"Error getting available art: {e}")
+            self.logger.error(f"Error getting available art after retries: {e}")
             return []
 
     def get_available_mattes(self) -> List[str]:
@@ -528,6 +535,26 @@ class SamsungFrameClient:
 
         self.logger.info(f"Thumbnail download complete: {downloaded} downloaded, {failed} failed")
         return {"total": len(art_list), "downloaded": downloaded, "failed": failed}
+
+    def reboot(self) -> bool:
+        """Reboot the TV by holding power button (triggers restart on Samsung TVs).
+
+        Returns:
+            True if reboot command sent successfully
+        """
+        if not self.tv:
+            self.logger.error("Not connected to TV - call connect() first")
+            return False
+
+        try:
+            self.logger.info("Sending reboot command (holding power for 3 seconds)...")
+            # Hold power button for 3 seconds - triggers reboot on Samsung TVs
+            self.tv.hold_key("KEY_POWER", 3)
+            self.logger.info("Reboot command sent - TV should restart")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error sending reboot command: {e}")
+            return False
 
     def close(self) -> None:
         """Close connection to TV."""
