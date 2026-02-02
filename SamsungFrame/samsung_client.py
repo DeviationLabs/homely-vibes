@@ -279,17 +279,24 @@ class SamsungFrameClient:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
-        try:
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            reraise=True,
+        )
+        def fetch_art_list() -> List[Dict[str, Any]]:
+            assert self.tv is not None
             art_list = self.tv.art().available()
             if isinstance(art_list, dict) and art_list.get("event") == "ms.channel.timeOut":
-                self.logger.warning(
-                    "TV art list request timed out - TV may be busy or slow to respond"
-                )
-                return []
-            self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+                raise TimeoutError("TV art list request timed out")
             return cast(List[Dict[str, Any]], art_list)
+
+        try:
+            art_list = fetch_art_list()
+            self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+            return art_list
         except Exception as e:
-            self.logger.error(f"Error getting available art: {e}")
+            self.logger.error(f"Error getting available art after retries: {e}")
             return []
 
     def get_available_mattes(self) -> List[str]:
