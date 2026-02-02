@@ -544,6 +544,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                     art_delete_failures = result["failed"]
                 except Exception as e:
                     logger.error(f"Error during smart deletion: {e}")
+                    art_delete_failures = len(ids_to_delete)
                     # Continue to slideshow even if deletion fails
             else:
                 total_images = len(existing_art_ids) + len(uploaded_ids)
