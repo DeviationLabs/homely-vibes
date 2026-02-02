@@ -189,7 +189,7 @@ august:
 
 # === Samsung Frame TV ===
 samsung_frame:
-  ip: "192.168.1.4"
+  ip: "192.168.X.Y"
   port: 8002
   token_file: lib/tokens/samsung_frame_token.txt
   default_matte: shadowbox_black
