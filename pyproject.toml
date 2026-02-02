@@ -35,7 +35,7 @@ dependencies = [
     "paramiko>=2.8.0",
     "libpyfoscam>=1.2.2",
     "requests-oauthlib>=2.0.0",
-    "websocket>=0.2.1",
+    "websocket-client>=1.0.0",
     "samsungtvws @ git+https://github.com/NickWaterton/samsung-tv-ws-api.git",
     "Pillow>=10.0.0",
     "pillow-heif>=0.18.0",
