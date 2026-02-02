@@ -187,6 +187,8 @@ class SamsungFrameConfig:
     default_matte: str
     supported_formats: list[str]
     max_image_size_mb: int
+    min_images: int
+    slideshow_delay_seconds: int
 
 
 @dataclass

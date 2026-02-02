@@ -198,6 +198,8 @@ samsung_frame:
     - jpeg
     - png
   max_image_size_mb: 10
+  min_images: 100  # minimum user images to maintain on TV during purge
+  slideshow_delay_seconds: 3  # delay before starting slideshow after upload
 
 # === Rachio Irrigation ===
 rachio:

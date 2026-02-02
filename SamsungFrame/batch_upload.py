@@ -4,10 +4,12 @@
 import argparse
 import hashlib
 import os
+import random
 import re
 import signal
 import sys
 import tempfile
+import time
 from pathlib import Path
 from types import FrameType
 from typing import List, Dict, Optional
@@ -285,6 +287,98 @@ def delete_all_art(client: SamsungFrameClient, force: bool = False) -> Dict[str,
     return {"total": total, "deleted": deleted, "failed": failed}
 
 
+def delete_art_by_ids(client: SamsungFrameClient, content_ids: List[str]) -> Dict[str, int]:
+    """Delete specific art items by content ID.
+
+    Args:
+        client: Connected SamsungFrameClient
+        content_ids: List of content IDs to delete
+
+    Returns:
+        {'total': int, 'deleted': int, 'failed': int}
+    """
+    if not client.tv:
+        raise RuntimeError("Not connected to TV")
+
+    total = len(content_ids)
+    if total == 0:
+        return {"total": 0, "deleted": 0, "failed": 0}
+
+    logger.info(f"Deleting {total} art items...")
+
+    # Try batch delete first with retry
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+        reraise=True,
+    )
+    def batch_delete() -> None:
+        assert client.tv is not None
+        client.tv.art().delete_list(content_ids)
+
+    try:
+        batch_delete()
+        logger.info(f"Successfully deleted {total} items via batch delete")
+        return {"total": total, "deleted": total, "failed": 0}
+    except Exception as e:
+        logger.warning(f"Batch delete failed after retries: {e}. Falling back to individual...")
+
+    # Fallback to individual deletes with retry
+    deleted = 0
+    failed = 0
+
+    for content_id in content_ids:
+
+        @retry(
+            stop=stop_after_attempt(2),
+            wait=wait_exponential(multiplier=1, min=1, max=5),
+            reraise=True,
+        )
+        def delete_single(cid: str) -> None:
+            assert client.tv is not None
+            client.tv.art().delete(cid)
+
+        try:
+            delete_single(content_id)
+            deleted += 1
+            logger.debug(f"Deleted {content_id} ({deleted}/{total})")
+        except Exception as e:
+            logger.error(f"Failed to delete {content_id} after retries: {e}")
+            failed += 1
+
+    logger.info(f"Individual deletion complete: {deleted} deleted, {failed} failed")
+    return {"total": total, "deleted": deleted, "failed": failed}
+
+
+def calculate_images_to_delete(
+    existing_ids: List[str], successful_uploads: int, min_images: int
+) -> List[str]:
+    """Return IDs to delete, keeping enough to maintain min_images total.
+
+    Args:
+        existing_ids: List of existing content IDs before upload
+        successful_uploads: Number of successfully uploaded images
+        min_images: Minimum number of images to maintain on TV
+
+    Returns:
+        List of content IDs to delete (randomly selected if not deleting all)
+    """
+    total_after_upload = len(existing_ids) + successful_uploads
+    if total_after_upload <= min_images:
+        return []  # Keep all old images
+
+    # Delete enough to leave min_images total
+    delete_count = total_after_upload - min_images
+    # Cap at existing count (can't delete more than we have)
+    delete_count = min(delete_count, len(existing_ids))
+
+    if delete_count >= len(existing_ids):
+        return existing_ids  # Delete all old images
+
+    # Randomly select which old images to delete
+    return random.sample(existing_ids, delete_count)
+
+
 def run_batch_upload(args: argparse.Namespace) -> int:
     """Main workflow orchestration."""
     global _current_summary, _notification_sent
@@ -321,17 +415,19 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("TV appears connected but is not responding - check TV status and retry")
         return 1
 
-    # Delete existing art (if requested)
+    # Capture existing art IDs before upload (for smart deletion later)
     art_deleted = 0
     art_delete_failures = 0
+    existing_art_ids: List[str] = []
     if args.purge:
-        try:
-            result = delete_all_art(client, force=True)
-            art_deleted = result["deleted"]
-            art_delete_failures = result["failed"]
-        except Exception as e:
-            logger.error(f"Error deleting art: {e}")
-            return 1
+        art_list = client.get_available_art()
+        for art in art_list:
+            content_id = art.get("content_id")
+            if content_id and content_id.startswith("MY_F"):
+                existing_art_ids.append(content_id)
+        logger.info(
+            f"Found {len(existing_art_ids)} existing user images (will delete after upload)"
+        )
 
     # Discover images
     try:
@@ -430,6 +526,32 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             errors=upload_errors,
         )
 
+        # Smart delete: keep minimum min_images total on TV
+        min_images = cfg.samsung_frame.min_images
+        if args.purge and existing_art_ids:
+            ids_to_delete = calculate_images_to_delete(
+                existing_art_ids, len(uploaded_ids), min_images
+            )
+            if ids_to_delete:
+                keep_count = len(existing_art_ids) - len(ids_to_delete)
+                logger.info(
+                    f"Deleting {len(ids_to_delete)} old images "
+                    f"(keeping {keep_count} to maintain min {min_images})"
+                )
+                try:
+                    result = delete_art_by_ids(client, ids_to_delete)
+                    art_deleted = result["deleted"]
+                    art_delete_failures = result["failed"]
+                except Exception as e:
+                    logger.error(f"Error during smart deletion: {e}")
+                    # Continue to slideshow even if deletion fails
+            else:
+                total_images = len(existing_art_ids) + len(uploaded_ids)
+                logger.info(
+                    f"Keeping all {len(existing_art_ids)} old images "
+                    f"(total {total_images} < min {min_images})"
+                )
+
         # Summary
         summary = BatchUploadSummary(
             total_discovered=len(images),
@@ -470,6 +592,9 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
         # Enable art mode with exponential backoff retry
         if summary.upload_summary.successful_uploads > 0:
+            delay = cfg.samsung_frame.slideshow_delay_seconds
+            logger.info(f"Waiting {delay}s for TV to process uploads...")
+            time.sleep(delay)
             logger.info("Starting slideshow...")
 
             @retry(
