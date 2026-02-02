@@ -31,6 +31,7 @@ def main() -> int:
     subparsers.add_parser("status", help="Check TV connection and art mode support")
     subparsers.add_parser("list-art", help="List available art on TV")
     subparsers.add_parser("list-mattes", help="List available matte styles")
+    subparsers.add_parser("reboot", help="Reboot the TV")
 
     download_parser = subparsers.add_parser(
         "download-thumbnails", help="Download thumbnails for art on TV"
@@ -111,6 +112,8 @@ def main() -> int:
         return cycle_images(args)
     elif args.command == "start-slideshow":
         return start_slideshow(args)
+    elif args.command == "reboot":
+        return reboot_tv(args)
 
     return 0
 
@@ -358,6 +361,32 @@ def start_slideshow(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Error starting slideshow: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def reboot_tv(_args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        if client.reboot():
+            logger.info("Reboot command sent successfully")
+            return 0
+        else:
+            logger.error("Failed to send reboot command")
+            return 1
+
+    except Exception as e:
+        logger.error(f"Error rebooting TV: {e}")
         return 1
     finally:
         if "client" in locals():
