@@ -134,6 +134,7 @@ DEP002 = [
     # Dependencies that may be used indirectly or for future use
     "requests-oauthlib",
     "websocket",
+    "websocket-client",
 ]
 DEP003 = ["google", "streamlit", "BimpopAI"]
 
