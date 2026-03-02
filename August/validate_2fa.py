@@ -29,61 +29,62 @@ async def complete_2fa() -> bool:
         result = await auth.async_authenticate()
         print(f"Auth state: {result.state}")
 
-        if result.state == AuthenticationState.REQUIRES_VALIDATION:
-            # First, send verification code
-            print("Sending verification code to your phone/email...")
-            send_result = await auth.async_send_verification_code()
+        if result.state == AuthenticationState.AUTHENTICATED:
+            print("Already authenticated! Testing lock access...")
+            locks = await api.async_get_locks(result.access_token)
+            print(f"Found {len(locks)} locks:")
+            for lock in locks:
+                print(f"  - {lock.device_name} ({lock.device_id})")
+            print(f"Token cached to: {cache_file}")
+            return True
 
-            if not send_result:
-                print("❌ Failed to send verification code")
-                return False
-
-            print("✅ Verification code sent!")
-            print("📱 Check your phone for SMS or email for verification code")
-
-            import sys
-
-            print("Enter the 6-digit verification code: ", end="", flush=True)
-            verification_code = sys.stdin.readline().strip()
-
-            print(f"Validating code: {verification_code}")
-            validation_result = await auth.async_validate_verification_code(verification_code)
-
-            print(f"Validation result: {validation_result}")
-
-            # Import ValidationResult to check the result
-            from yalexs.authenticator_async import ValidationResult
-
-            if validation_result == ValidationResult.VALIDATED:
-                print("✅ Verification code validated!")
-
-                # Now authenticate again to get the full access token
-                print("Getting authenticated session...")
-                auth_result = await auth.async_authenticate()
-                print(f"Final auth state: {auth_result.state}")
-
-                if auth_result.state == AuthenticationState.AUTHENTICATED:
-                    print("🎉 SUCCESS! Authentication complete!")
-
-                    # Test if we can get locks now
-                    print("Testing lock access...")
-                    locks = await api.async_get_locks(auth_result.access_token)
-                    print(f"Found {len(locks)} locks:")
-                    for lock in locks:
-                        print(f"  - {lock.device_name} ({lock.device_id})")
-
-                    # Save the token for future use
-                    print(f"Token cached to: {cache_file}")
-                    return True
-                else:
-                    print(f"❌ Authentication still not complete: {auth_result.state}")
-                    return False
-            else:
-                print("❌ Verification code validation failed")
-                return False
-        else:
+        if result.state != AuthenticationState.REQUIRES_VALIDATION:
             print(f"Unexpected state: {result.state}")
             return False
+
+        # Send verification code
+        print("Sending verification code to your phone/email...")
+        send_result = await auth.async_send_verification_code()
+
+        if not send_result:
+            print("Failed to send verification code")
+            return False
+
+        print("Verification code sent! Check your phone/email.")
+
+        import sys
+
+        print("Enter the 6-digit verification code: ", end="", flush=True)
+        verification_code = sys.stdin.readline().strip()
+
+        print(f"Validating code: {verification_code}")
+        validation_result = await auth.async_validate_verification_code(verification_code)
+
+        print(f"Validation result: {validation_result}")
+
+        from yalexs.authenticator_async import ValidationResult
+
+        if validation_result != ValidationResult.VALIDATED:
+            print("Verification code validation failed")
+            return False
+
+        print("Verification code validated!")
+
+        print("Getting authenticated session...")
+        auth_result = await auth.async_authenticate()
+        print(f"Final auth state: {auth_result.state}")
+
+        if auth_result.state != AuthenticationState.AUTHENTICATED:
+            print(f"Authentication still not complete: {auth_result.state}")
+            return False
+
+        print("Authentication complete!")
+        locks = await api.async_get_locks(auth_result.access_token)
+        print(f"Found {len(locks)} locks:")
+        for lock in locks:
+            print(f"  - {lock.device_name} ({lock.device_id})")
+        print(f"Token cached to: {cache_file}")
+        return True
 
     finally:
         await session.close()

@@ -41,6 +41,9 @@ def save_tokens(tokens: dict, token_file: str) -> None:
     }
 
     token_file = os.path.expanduser(token_file)
+    if not os.path.isabs(token_file):
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        token_file = os.path.join(project_root, token_file)
     os.makedirs(os.path.dirname(token_file), exist_ok=True)
 
     with open(token_file, "w") as f:
