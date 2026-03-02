@@ -133,6 +133,8 @@ def main() -> None:
         sys.exit(0)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        if args.command == "test":
+            pushover.send_message(f"August test failed: {e}", title="August Error", priority=2)
         sys.exit(1)
 
 
