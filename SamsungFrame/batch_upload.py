@@ -105,7 +105,8 @@ class ImageConverter:
 
         # Convert HEIC to JPG
         try:
-            with Image.open(image_path) as img:
+            with Image.open(image_path) as raw_img:
+                img: Image.Image = raw_img
                 # Convert to RGB (HEIC may have transparency)
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
