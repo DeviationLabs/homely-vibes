@@ -213,7 +213,7 @@ class SamsungFrameClient:
             return None
 
     def upload_images_from_folder(
-        self, folder_path: str, matte: Optional[str] = None
+        self, folder_path: str, matte: Optional[str] = None, max_consecutive_failures: int = 3
     ) -> ImageUploadSummary:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
@@ -245,21 +245,32 @@ class SamsungFrameClient:
 
         uploaded_ids: List[str] = []
         errors: List[Dict[str, str]] = []
+        consecutive_failures = 0
 
         for image_path in image_files:
             try:
                 image_id = self.upload_image(image_path, matte=matte)
                 if image_id:
                     uploaded_ids.append(image_id)
+                    consecutive_failures = 0
                 else:
                     errors.append(
                         {"file": os.path.basename(image_path), "error": "Upload returned None"}
                     )
+                    consecutive_failures += 1
             except Exception as e:
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 errors.append({"file": os.path.basename(image_path), "error": str(e)})
+                consecutive_failures += 1
             finally:
                 time.sleep(1)
+
+            if consecutive_failures >= max_consecutive_failures:
+                self.logger.error(
+                    f"{consecutive_failures} consecutive upload failures — "
+                    f"connection may be unstable, stopping uploads"
+                )
+                break
 
         summary = ImageUploadSummary(
             total_images=len(image_files),

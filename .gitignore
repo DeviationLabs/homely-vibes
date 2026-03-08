@@ -29,3 +29,6 @@ ext_lib*
 
 # Token storage
 lib/tokens
+
+# Samsung upload history
+config/samsung_upload_history.json
