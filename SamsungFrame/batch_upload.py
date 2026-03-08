@@ -521,7 +521,11 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.info(f"Using temp directory: {temp_dir}")
         conversion_results, processed_count = prepare_images_to_temp_dir(images, temp_dir)
 
-        heic_converted = sum(1 for r in conversion_results if r.converted_path is not None)
+        heic_converted = sum(
+            1
+            for r in conversion_results
+            if r.success and Path(r.source_path).suffix.lower() == ".heic"
+        )
         conversion_errors = [
             {"file": Path(r.source_path).name, "error": r.error_message or "Unknown error"}
             for r in conversion_results
@@ -551,6 +555,17 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         )
 
         # --- Phase 2: Upload from temp dir ---
+        # Re-verify connection (may have gone stale during preparation)
+        try:
+            client.get_available_art()
+            logger.info("TV connection still active")
+        except Exception:
+            logger.warning("TV connection stale after preparation, reconnecting...")
+            client.close()
+            if not client.connect():
+                logger.error("Failed to reconnect to TV")
+                return 1
+
         matte = args.matte or cfg.samsung_frame.default_matte
         logger.info(f"Uploading {processed_count} images from temp dir...")
         upload_summary = client.upload_images_from_folder(temp_dir, matte=matte)
