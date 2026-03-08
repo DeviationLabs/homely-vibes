@@ -16,7 +16,14 @@ from SamsungFrame.batch_upload import (
     prepare_images_to_temp_dir,
 )
 from SamsungFrame.samsung_client import SamsungFrameClient
-from SamsungFrame.upload_tracker import record_uploads, get_stale_ids, remove_ids
+from SamsungFrame.upload_tracker import (
+    record_uploads,
+    get_stale_ids,
+    remove_ids,
+    file_hash,
+    get_known_hashes,
+    record_file_hashes,
+)
 
 
 class TestImageDiscovery:
@@ -465,6 +472,63 @@ class TestUploadTracker:
             with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
                 record_uploads([])
                 assert not tracker_path.exists()
+
+
+class TestFileHashTracking:
+    def test_file_hash_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            img = Image.new("RGB", (100, 100), color="red")
+            p = Path(tmp) / "test.jpg"
+            img.save(p, format="JPEG")
+
+            h1 = file_hash(p)
+            h2 = file_hash(p)
+            assert h1 == h2
+            assert len(h1) == 32  # MD5 hex
+
+    def test_different_files_different_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            img1 = Image.new("RGB", (100, 100), color="red")
+            img2 = Image.new("RGB", (100, 100), color="blue")
+            p1 = Path(tmp) / "a.jpg"
+            p2 = Path(tmp) / "b.jpg"
+            img1.save(p1, format="JPEG")
+            img2.save(p2, format="JPEG")
+
+            assert file_hash(p1) != file_hash(p2)
+
+    def test_record_and_get_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker_path = Path(tmp) / "history.json"
+            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
+                record_file_hashes({"abc123": "MY_F001", "def456": "MY_F002"})
+                known = get_known_hashes()
+                assert known["abc123"] == "MY_F001"
+                assert known["def456"] == "MY_F002"
+
+    def test_hashes_coexist_with_uploads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker_path = Path(tmp) / "history.json"
+            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
+                record_uploads(["MY_F001"])
+                record_file_hashes({"abc123": "MY_F001"})
+
+                known = get_known_hashes()
+                assert known["abc123"] == "MY_F001"
+                stale = get_stale_ids(["MY_F001"], max_age_hours=24)
+                assert stale == []
+
+    def test_remove_ids_cleans_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tracker_path = Path(tmp) / "history.json"
+            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
+                record_uploads(["MY_F001", "MY_F002"])
+                record_file_hashes({"abc": "MY_F001", "def": "MY_F002"})
+                remove_ids(["MY_F001"])
+
+                known = get_known_hashes()
+                assert "abc" not in known
+                assert "def" in known
 
 
 class TestStartIndex:

@@ -482,7 +482,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
     # Verify TV art API is responsive before starting
     try:
         logger.info("Verifying TV connection...")
-        client.get_available_art_strict()
+        existing_art = client.get_available_art_strict()
         logger.info("TV connection verified and stable")
     except Exception as e:
         logger.error(f"TV connection test failed: {e}")
@@ -508,6 +508,28 @@ def run_batch_upload(args: argparse.Namespace) -> int:
     if args.max_files > 0 and len(images) > args.max_files:
         logger.info(f"Limiting to first {args.max_files} of {len(images)} images")
         images = images[: args.max_files]
+
+    # Skip files already uploaded to TV
+    from SamsungFrame.upload_tracker import file_hash, get_known_hashes, record_file_hashes
+
+    existing_ids_on_tv = {art.get("content_id", "") for art in existing_art}
+    known_hashes = get_known_hashes()
+    new_images: List[Path] = []
+    source_hashes: dict[str, str] = {}  # path_str -> hash (for recording after upload)
+    skipped_dupes = 0
+
+    for img_path in images:
+        h = file_hash(img_path)
+        source_hashes[str(img_path)] = h
+        tracked_id = known_hashes.get(h)
+        if tracked_id and tracked_id in existing_ids_on_tv:
+            skipped_dupes += 1
+            continue
+        new_images.append(img_path)
+
+    if skipped_dupes:
+        logger.info(f"Skipping {skipped_dupes} files already on TV")
+    images = new_images
 
     if not images:
         logger.error("No images remaining after start-index/max-files filtering")
@@ -574,6 +596,16 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         from SamsungFrame.upload_tracker import record_uploads
 
         record_uploads(upload_summary.uploaded_image_ids)
+
+        # Record file hashes for duplicate detection on next run
+        # Match prepared files (sorted) to uploaded content_ids (same order)
+        prepared_sources = [r.source_path for r in conversion_results if r.success]
+        hash_to_id: dict[str, str] = {}
+        for src_path, content_id in zip(prepared_sources, upload_summary.uploaded_image_ids):
+            if src_path in source_hashes:
+                hash_to_id[source_hashes[src_path]] = content_id
+        if hash_to_id:
+            record_file_hashes(hash_to_id)
 
         # --- Purge: delete stale art (uploaded > 24h ago or untracked) ---
         if args.purge:

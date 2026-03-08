@@ -15,13 +15,12 @@ class TestSamsungFrameClient:
     """Test Samsung Frame TV client."""
 
     def test_init_with_config(self) -> None:
-        """Test initialization with config."""
-        mock_config = MagicMock()
-        mock_config.samsung_frame.ip = "192.168.1.4"
-        mock_config.samsung_frame.port = 8002
-        mock_config.samsung_frame.token_file = "/tmp/token.txt"
+        mock_cfg = MagicMock()
+        mock_cfg.samsung_frame.ip = "192.168.1.4"
+        mock_cfg.samsung_frame.port = 8002
+        mock_cfg.samsung_frame.token_file = "/tmp/token.txt"
 
-        with patch("SamsungFrame.samsung_client.get_config", return_value=mock_config):
+        with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
             client = SamsungFrameClient()
             assert client.host == "192.168.1.4"
             assert client.port == 8002
@@ -35,9 +34,14 @@ class TestSamsungFrameClient:
         assert client.token_file == "/custom/token.txt"
 
     def test_init_missing_host(self) -> None:
-        """Test initialization fails without host."""
-        with pytest.raises(ValueError, match="Samsung Frame TV IP address required"):
-            SamsungFrameClient()
+        mock_cfg = MagicMock()
+        mock_cfg.samsung_frame.ip = ""
+        mock_cfg.samsung_frame.port = 8002
+        mock_cfg.samsung_frame.token_file = "/tmp/token.txt"
+
+        with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
+            with pytest.raises(ValueError, match="Samsung Frame TV IP address required"):
+                SamsungFrameClient()
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("os.path.exists")
