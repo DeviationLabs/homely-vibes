@@ -473,20 +473,20 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         return 1
 
     # Connect to TV
-    client = SamsungFrameClient()
-    logger.info(f"Connecting to TV at {client.host}:{client.port}...")
+    client = SamsungFrameClient(timeout=args.timeout)
+    logger.info(f"Connecting to TV at {client.host}:{client.port} (timeout={args.timeout}s)...")
     if not client.connect():
         logger.error("Failed to connect to TV")
         return 1
 
-    # Verify TV connection is stable by testing art API
+    # Verify TV art API is responsive before starting
     try:
         logger.info("Verifying TV connection...")
-        client.get_available_art()
+        client.get_available_art_strict()
         logger.info("TV connection verified and stable")
     except Exception as e:
         logger.error(f"TV connection test failed: {e}")
-        logger.error("TV appears connected but is not responding - check TV status and retry")
+        logger.error("TV appears connected but art API is not responding - check TV status")
         return 1
 
     # Discover images
@@ -557,7 +557,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         # --- Phase 2: Upload from temp dir ---
         # Re-verify connection (may have gone stale during preparation)
         try:
-            client.get_available_art()
+            client.ping()
             logger.info("TV connection still active")
         except Exception:
             logger.warning("TV connection stale after preparation, reconnecting...")
@@ -734,6 +734,13 @@ def main() -> int:
         type=int,
         default=0,
         help="Maximum number of files to upload (0 = all)",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=60,
+        help="WebSocket timeout in seconds (default: 60, increase for large files)",
     )
 
     args = parser.parse_args()
