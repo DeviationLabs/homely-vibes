@@ -1,18 +1,24 @@
 """Samsung Frame TV client for art mode management."""
 
+import json
 import os
+import random
+import socket as stdlib_socket
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, cast
+
 from pydantic import BaseModel
 from PIL import Image
 from tqdm import tqdm
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed
 
 from lib.logger import get_logger
 from lib.config import get_config
 
 from samsungtvws import SamsungTVWS
+from samsungtvws.helper import get_ssl_context
 
 cfg = get_config()
 
@@ -182,7 +188,12 @@ class SamsungFrameClient:
             self.logger.error(f"Error validating image {file_path}: {e}")
             return False
 
-    def upload_image(self, image_path: str, matte: Optional[str] = None) -> Optional[str]:
+    def upload_image(
+        self,
+        image_path: str,
+        matte: Optional[str] = None,
+        known_ids: Optional[set[str]] = None,
+    ) -> Optional[str]:
         if not self.tv:
             self.logger.error("Not connected to TV - call connect() first")
             return None
@@ -198,10 +209,19 @@ class SamsungFrameClient:
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
-            # Detect file type from extension
             file_ext = Path(image_path).suffix.lower().lstrip(".")
             if file_ext == "jpeg":
                 file_ext = "jpg"
+
+            if known_ids is not None:
+                self.logger.debug(f"Uploading {image_path} ({file_ext}) with send+poll...")
+                self._send_image_data(image_data, file_ext, matte)
+                new_id = self._poll_for_new_upload(known_ids)
+                if new_id:
+                    self.logger.debug(f"Successfully uploaded {image_path} -> ID: {new_id}")
+                    return new_id
+                self.logger.warning(f"Send completed but poll found no new ID for {image_path}")
+                return None
 
             @retry(
                 stop=stop_after_attempt(5),
@@ -263,26 +283,17 @@ class SamsungFrameClient:
         for image_path in pbar:
             pbar.set_postfix_str(os.path.basename(image_path))
             try:
-                image_id = self.upload_image(image_path, matte=matte)
+                image_id = self.upload_image(image_path, matte=matte, known_ids=known_ids)
                 if image_id:
                     uploaded_ids.append(image_id)
                     known_ids.add(image_id)
                     consecutive_failures = 0
                     self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
                 else:
-                    new_id = self._check_for_new_upload(known_ids)
-                    if new_id:
-                        uploaded_ids.append(new_id)
-                        known_ids.add(new_id)
-                        consecutive_failures = 0
-                        self.logger.debug(
-                            f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
-                        )
-                    else:
-                        errors.append(
-                            {"file": os.path.basename(image_path), "error": "Upload returned None"}
-                        )
-                        consecutive_failures += 1
+                    errors.append(
+                        {"file": os.path.basename(image_path), "error": "Upload returned None"}
+                    )
+                    consecutive_failures += 1
             except Exception as e:
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 new_id = self._check_for_new_upload(known_ids)
@@ -297,7 +308,7 @@ class SamsungFrameClient:
                     errors.append({"file": os.path.basename(image_path), "error": str(e)})
                     consecutive_failures += 1
             finally:
-                time.sleep(5)
+                time.sleep(10)
 
             if consecutive_failures >= max_consecutive_failures:
                 if not rebooted:
@@ -351,6 +362,71 @@ class SamsungFrameClient:
             pass
         return None
 
+    def _send_image_data(self, image_data: bytes, file_ext: str, matte: str) -> None:
+        """Send image to TV via art API handshake + TCP transfer. Returns after all bytes sent."""
+        assert self.tv is not None
+        art = self.tv.art()
+
+        request_data = {
+            "request": "send_image",
+            "file_type": file_ext,
+            "request_id": art.get_uuid(),
+            "id": art.art_uuid,
+            "conn_info": {
+                "d2d_mode": "socket",
+                "connection_id": random.randrange(4 * 1024 * 1024 * 1024),
+                "id": art.art_uuid,
+            },
+            "image_date": datetime.now().strftime("%Y:%m:%d %H:%M:%S"),
+            "matte_id": matte or "none",
+            "portrait_matte_id": matte or "none",
+            "file_size": len(image_data),
+        }
+        data = art._send_art_request(request_data, wait_for_event="ready_to_use")
+        assert data
+        conn_info = json.loads(data["conn_info"])
+
+        header = json.dumps(
+            {
+                "num": 0,
+                "total": 1,
+                "fileLength": len(image_data),
+                "fileName": "dummy",
+                "fileType": file_ext,
+                "secKey": conn_info["key"],
+                "version": "0.0.1",
+            }
+        )
+
+        art_socket_raw = stdlib_socket.socket(stdlib_socket.AF_INET, stdlib_socket.SOCK_STREAM)
+        art_socket = (
+            get_ssl_context().wrap_socket(art_socket_raw)
+            if conn_info.get("secured", False)
+            else art_socket_raw
+        )
+        try:
+            art_socket.connect((conn_info["ip"], int(conn_info["port"])))
+            art_socket.send(len(header).to_bytes(4, "big"))
+            art_socket.send(header.encode("ascii"))
+            chunk_size = 64 * 1024
+            for pos in range(0, len(image_data), chunk_size):
+                art_socket.send(image_data[pos : pos + chunk_size])
+        finally:
+            art_socket.close()
+
+    def _poll_for_new_upload(
+        self, known_ids: set[str], max_wait: int = 60, interval: int = 3
+    ) -> Optional[str]:
+        """Poll art list until a new content_id appears."""
+        elapsed = 0
+        while elapsed < max_wait:
+            time.sleep(interval)
+            elapsed += interval
+            new_id = self._check_for_new_upload(known_ids)
+            if new_id:
+                return new_id
+        return None
+
     def _reconnect(self) -> bool:
         """Close and re-establish TV connection."""
         self.logger.info("Closing stale connection...")
@@ -360,10 +436,20 @@ class SamsungFrameClient:
 
     def _reboot_and_reconnect(self, max_attempts: int = 5) -> bool:
         """Reboot TV and reconnect with exponential backoff (max 5min between attempts)."""
+
+        @retry(
+            stop=stop_after_attempt(5),
+            wait=wait_fixed(30),
+            reraise=True,
+        )
+        def send_reboot() -> None:
+            if not self.reboot():
+                raise RuntimeError("Reboot command returned False")
+
         try:
-            self.reboot()
+            send_reboot()
         except Exception as e:
-            self.logger.error(f"Failed to send reboot command: {e}")
+            self.logger.error(f"Failed to send reboot command after 5 attempts: {e}")
             return False
 
         self.close()
