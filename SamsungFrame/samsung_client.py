@@ -259,23 +259,25 @@ class SamsungFrameClient:
         rebooted = False
         known_ids = self._get_art_ids_on_tv()
 
-        for image_path in image_files:
+        pbar = tqdm(image_files, desc="Uploading images", unit="img")
+        for image_path in pbar:
+            pbar.set_postfix_str(os.path.basename(image_path))
             try:
                 image_id = self.upload_image(image_path, matte=matte)
                 if image_id:
                     uploaded_ids.append(image_id)
                     known_ids.add(image_id)
                     consecutive_failures = 0
+                    self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
                 else:
                     new_id = self._check_for_new_upload(known_ids)
                     if new_id:
-                        self.logger.info(
-                            f"Upload of {os.path.basename(image_path)} "
-                            f"succeeded despite timeout -> {new_id}"
-                        )
                         uploaded_ids.append(new_id)
                         known_ids.add(new_id)
                         consecutive_failures = 0
+                        self.logger.debug(
+                            f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
+                        )
                     else:
                         errors.append(
                             {"file": os.path.basename(image_path), "error": "Upload returned None"}
@@ -285,13 +287,12 @@ class SamsungFrameClient:
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 new_id = self._check_for_new_upload(known_ids)
                 if new_id:
-                    self.logger.info(
-                        f"Upload of {os.path.basename(image_path)} "
-                        f"succeeded despite error -> {new_id}"
-                    )
                     uploaded_ids.append(new_id)
                     known_ids.add(new_id)
                     consecutive_failures = 0
+                    self.logger.debug(
+                        f"Uploaded {os.path.basename(image_path)} (recovered from error)"
+                    )
                 else:
                     errors.append({"file": os.path.basename(image_path), "error": str(e)})
                     consecutive_failures += 1
@@ -403,7 +404,8 @@ class SamsungFrameClient:
             return cast(List[Dict[str, Any]], art_list)
 
         art_list = fetch_art_list()
-        self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+        user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
+        self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
         return art_list
 
     def get_available_art(self) -> List[Dict[str, Any]]:
@@ -424,7 +426,8 @@ class SamsungFrameClient:
 
         try:
             art_list = fetch_art_list()
-            self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+            user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
+            self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
             return art_list
         except Exception as e:
             self.logger.error(f"Error getting available art after retries: {e}")
