@@ -409,15 +409,18 @@ def reboot_tv(_args: argparse.Namespace) -> int:
         client = SamsungFrameClient()
         logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
+        # Send reboot if TV is reachable, then always reconnect into art mode
+        if client.connect():
+            client.reboot()
+        else:
+            logger.info("TV not reachable — will attempt to reconnect")
 
-        if client.reboot():
-            logger.info("Reboot command sent successfully")
+        if client._reboot_and_reconnect():
+            logger.info("TV rebooted and in art mode")
+            client.close()
             return 0
         else:
-            logger.error("Failed to send reboot command")
+            logger.error("Failed to reboot TV into art mode")
             return 1
 
     except Exception as e:
