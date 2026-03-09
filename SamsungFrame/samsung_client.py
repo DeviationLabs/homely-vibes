@@ -4,10 +4,11 @@ import os
 import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any, cast
+
 from pydantic import BaseModel
 from PIL import Image
 from tqdm import tqdm
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, wait_fixed
 
 from lib.logger import get_logger
 from lib.config import get_config
@@ -198,23 +199,13 @@ class SamsungFrameClient:
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
-            # Detect file type from extension
             file_ext = Path(image_path).suffix.lower().lstrip(".")
             if file_ext == "jpeg":
                 file_ext = "jpg"
 
-            @retry(
-                stop=stop_after_attempt(5),
-                wait=wait_exponential(multiplier=1, min=1, max=10),
-                reraise=True,
-            )
-            def upload_with_retry() -> Optional[str]:
-                assert self.tv is not None
-                self.logger.debug(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
-                result = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
-                return cast(Optional[str], result)
-
-            image_id = upload_with_retry()
+            assert self.tv is not None
+            self.logger.debug(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
+            image_id = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
             self.logger.debug(f"Successfully uploaded {image_path} -> ID: {image_id}")
             return str(image_id) if image_id else None
 
@@ -259,23 +250,25 @@ class SamsungFrameClient:
         rebooted = False
         known_ids = self._get_art_ids_on_tv()
 
-        for image_path in image_files:
+        pbar = tqdm(image_files, desc="Uploading images", unit="img")
+        for image_path in pbar:
+            pbar.set_postfix_str(os.path.basename(image_path))
             try:
                 image_id = self.upload_image(image_path, matte=matte)
                 if image_id:
                     uploaded_ids.append(image_id)
                     known_ids.add(image_id)
                     consecutive_failures = 0
+                    self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
                 else:
                     new_id = self._check_for_new_upload(known_ids)
                     if new_id:
-                        self.logger.info(
-                            f"Upload of {os.path.basename(image_path)} "
-                            f"succeeded despite timeout -> {new_id}"
-                        )
                         uploaded_ids.append(new_id)
                         known_ids.add(new_id)
                         consecutive_failures = 0
+                        self.logger.debug(
+                            f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
+                        )
                     else:
                         errors.append(
                             {"file": os.path.basename(image_path), "error": "Upload returned None"}
@@ -285,13 +278,12 @@ class SamsungFrameClient:
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 new_id = self._check_for_new_upload(known_ids)
                 if new_id:
-                    self.logger.info(
-                        f"Upload of {os.path.basename(image_path)} "
-                        f"succeeded despite error -> {new_id}"
-                    )
                     uploaded_ids.append(new_id)
                     known_ids.add(new_id)
                     consecutive_failures = 0
+                    self.logger.debug(
+                        f"Uploaded {os.path.basename(image_path)} (recovered from error)"
+                    )
                 else:
                     errors.append({"file": os.path.basename(image_path), "error": str(e)})
                     consecutive_failures += 1
@@ -359,10 +351,20 @@ class SamsungFrameClient:
 
     def _reboot_and_reconnect(self, max_attempts: int = 5) -> bool:
         """Reboot TV and reconnect with exponential backoff (max 5min between attempts)."""
+
+        @retry(
+            stop=stop_after_attempt(5),
+            wait=wait_fixed(30),
+            reraise=True,
+        )
+        def send_reboot() -> None:
+            if not self.reboot():
+                raise RuntimeError("Reboot command returned False")
+
         try:
-            self.reboot()
+            send_reboot()
         except Exception as e:
-            self.logger.error(f"Failed to send reboot command: {e}")
+            self.logger.error(f"Failed to send reboot command after 5 attempts: {e}")
             return False
 
         self.close()
@@ -403,7 +405,8 @@ class SamsungFrameClient:
             return cast(List[Dict[str, Any]], art_list)
 
         art_list = fetch_art_list()
-        self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+        user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
+        self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
         return art_list
 
     def get_available_art(self) -> List[Dict[str, Any]]:
@@ -424,7 +427,8 @@ class SamsungFrameClient:
 
         try:
             art_list = fetch_art_list()
-            self.logger.info(f"Retrieved {len(art_list)} art items from TV")
+            user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
+            self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
             return art_list
         except Exception as e:
             self.logger.error(f"Error getting available art after retries: {e}")
