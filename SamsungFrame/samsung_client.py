@@ -403,7 +403,8 @@ class SamsungFrameClient:
         # May need two toggles if TV is in regular mode
         self.logger.info("Art API not responding, toggling KEY_POWER into art mode...")
         try:
-            self.tv.send_key("KEY_POWER")
+            if self.tv:
+                self.tv.send_key("KEY_POWER")
         except Exception:
             pass
         self.close()
