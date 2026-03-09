@@ -205,7 +205,7 @@ class SamsungFrameClient:
 
             assert self.tv is not None
             self.logger.debug(f"Uploading {image_path} ({file_ext}) with matte '{matte}'...")
-            image_id = self.tv.art().upload(image_data, matte=matte, file_type=file_ext)
+            image_id = self.tv.art(timeout=30).upload(image_data, matte=matte, file_type=file_ext)
             self.logger.debug(f"Successfully uploaded {image_path} -> ID: {image_id}")
             return str(image_id) if image_id else None
 
@@ -249,10 +249,14 @@ class SamsungFrameClient:
         consecutive_failures = 0
         rebooted = False
         known_ids = self._get_art_ids_on_tv()
+        pause = 5
+        min_pause = 5
+        max_pause = 30
 
         pbar = tqdm(image_files, desc="Uploading images", unit="img")
         for image_path in pbar:
             pbar.set_postfix_str(os.path.basename(image_path))
+            recovered = False
             try:
                 image_id = self.upload_image(image_path, matte=matte)
                 if image_id:
@@ -261,6 +265,7 @@ class SamsungFrameClient:
                     consecutive_failures = 0
                     self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
                 else:
+                    recovered = True
                     new_id = self._check_for_new_upload(known_ids)
                     if new_id:
                         uploaded_ids.append(new_id)
@@ -275,6 +280,7 @@ class SamsungFrameClient:
                         )
                         consecutive_failures += 1
             except Exception as e:
+                recovered = True
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 new_id = self._check_for_new_upload(known_ids)
                 if new_id:
@@ -288,7 +294,12 @@ class SamsungFrameClient:
                     errors.append({"file": os.path.basename(image_path), "error": str(e)})
                     consecutive_failures += 1
             finally:
-                time.sleep(5)
+                if recovered:
+                    pause = min(pause + 5, max_pause)
+                    self.logger.info(f"TV needs cooldown, pausing {pause}s")
+                else:
+                    pause = max(pause - 1, min_pause)
+                time.sleep(pause)
 
             if consecutive_failures >= max_consecutive_failures:
                 if not rebooted:

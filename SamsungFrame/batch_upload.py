@@ -514,6 +514,13 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("Failed to connect to TV")
         return 1
 
+    # Reboot TV to clear stale state from previous runs
+    logger.info("Rebooting TV to ensure clean state...")
+    if not client._reboot_and_reconnect():
+        logger.error("Failed to reboot TV — aborting")
+        return 1
+    logger.info("TV rebooted and reconnected")
+
     # Verify TV art API is responsive before starting
     try:
         logger.info("Verifying TV connection...")

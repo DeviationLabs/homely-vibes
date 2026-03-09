@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Issue Tracking
+
+We use **GitHub Issues** for tracking bugs, enhancements, and tech debt. Claude is responsible for filing and managing issues.
+
+- File issues via `gh issue create` when bugs or improvements are discovered during sessions
+- Labels: `bug`, `enhancement`, `tech-debt`
+- Close issues from PRs when fixed
+- Reference issue numbers in commit messages and PR descriptions
+
 ## Development Environment
 
 **Package Manager**: This project uses `uv` for fast Python dependency management.
