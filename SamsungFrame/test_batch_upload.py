@@ -1,6 +1,5 @@
 """Tests for Samsung Frame TV batch upload."""
 
-import json
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -14,11 +13,10 @@ from SamsungFrame.batch_upload import (
     delete_all_art,
     trim_filename,
     prepare_images_to_temp_dir,
+    get_stale_art_ids,
 )
 from SamsungFrame.samsung_client import SamsungFrameClient
 from SamsungFrame.upload_tracker import (
-    record_uploads,
-    get_stale_ids,
     remove_ids,
     file_hash,
     get_known_hashes,
@@ -429,49 +427,44 @@ class TestPrepareImages:
             assert len(set(names)) == 3
 
 
-class TestUploadTracker:
-    """Test local JSON upload history tracking."""
+class TestStaleArtFromApi:
+    def test_recent_art_not_stale(self) -> None:
+        now = datetime.now(timezone.utc)
+        recent = now.strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [{"content_id": "MY_F001", "image_date": recent}]
+        assert get_stale_art_ids(art_list, max_age_hours=24) == []
 
-    def test_record_and_retrieve(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tracker_path = Path(tmp) / "history.json"
-            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                record_uploads(["MY_F001", "MY_F002"])
-                stale = get_stale_ids(["MY_F001", "MY_F002"], max_age_hours=24)
-                assert stale == []
+    def test_old_art_is_stale(self) -> None:
+        old = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [{"content_id": "MY_F001", "image_date": old}]
+        assert get_stale_art_ids(art_list, max_age_hours=24) == ["MY_F001"]
 
-    def test_stale_detection(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tracker_path = Path(tmp) / "history.json"
-            old_time = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
-            tracker_path.write_text(json.dumps({"uploads": {"MY_F001": old_time}}))
+    def test_empty_image_date_is_stale(self) -> None:
+        art_list = [{"content_id": "MY_F001", "image_date": ""}]
+        assert get_stale_art_ids(art_list, max_age_hours=24) == ["MY_F001"]
 
-            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                stale = get_stale_ids(["MY_F001"], max_age_hours=24)
-                assert stale == ["MY_F001"]
+    def test_samsung_art_excluded(self) -> None:
+        old = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [
+            {"content_id": "SAM-S001", "image_date": ""},
+            {"content_id": "MY_F001", "image_date": old},
+        ]
+        stale = get_stale_art_ids(art_list, max_age_hours=24)
+        assert stale == ["MY_F001"]
 
-    def test_untracked_ids_are_stale(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tracker_path = Path(tmp) / "history.json"
-            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                stale = get_stale_ids(["MY_F_UNKNOWN"], max_age_hours=24)
-                assert stale == ["MY_F_UNKNOWN"]
-
-    def test_remove_ids(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tracker_path = Path(tmp) / "history.json"
-            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                record_uploads(["MY_F001", "MY_F002"])
-                remove_ids(["MY_F001"])
-                stale = get_stale_ids(["MY_F001"], max_age_hours=24)
-                assert stale == ["MY_F001"]
-
-    def test_empty_record(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tracker_path = Path(tmp) / "history.json"
-            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                record_uploads([])
-                assert not tracker_path.exists()
+    def test_mixed_ages(self) -> None:
+        now = datetime.now(timezone.utc)
+        recent = now.strftime("%Y:%m:%d %H:%M:%S")
+        old = (now - timedelta(hours=48)).strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [
+            {"content_id": "MY_F001", "image_date": recent},
+            {"content_id": "MY_F002", "image_date": old},
+            {"content_id": "MY_F003", "image_date": ""},
+        ]
+        stale = get_stale_art_ids(art_list, max_age_hours=24)
+        assert "MY_F001" not in stale
+        assert "MY_F002" in stale
+        assert "MY_F003" in stale
 
 
 class TestFileHashTracking:
@@ -506,23 +499,10 @@ class TestFileHashTracking:
                 assert known["abc123"] == "MY_F001"
                 assert known["def456"] == "MY_F002"
 
-    def test_hashes_coexist_with_uploads(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            tracker_path = Path(tmp) / "history.json"
-            with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                record_uploads(["MY_F001"])
-                record_file_hashes({"abc123": "MY_F001"})
-
-                known = get_known_hashes()
-                assert known["abc123"] == "MY_F001"
-                stale = get_stale_ids(["MY_F001"], max_age_hours=24)
-                assert stale == []
-
     def test_remove_ids_cleans_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tracker_path = Path(tmp) / "history.json"
             with patch("SamsungFrame.upload_tracker._tracker_path", return_value=tracker_path):
-                record_uploads(["MY_F001", "MY_F002"])
                 record_file_hashes({"abc": "MY_F001", "def": "MY_F002"})
                 remove_ids(["MY_F001"])
 

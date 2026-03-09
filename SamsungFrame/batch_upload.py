@@ -11,9 +11,10 @@ import signal
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import FrameType
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 
 import pillow_heif
 from PIL import Image
@@ -413,6 +414,40 @@ def calculate_images_to_delete(
     return random.sample(existing_ids, delete_count)
 
 
+def get_stale_art_ids(art_list: List[Dict[str, Any]], max_age_hours: int = 24) -> List[str]:
+    """Return content IDs of user art older than max_age_hours using TV's image_date.
+
+    Args:
+        art_list: Full art list from art().available()
+        max_age_hours: Max age in hours before art is considered stale
+
+    Returns:
+        List of stale content IDs
+    """
+    now = datetime.now(timezone.utc)
+    stale: List[str] = []
+
+    for art in art_list:
+        content_id = art.get("content_id", "")
+        if not content_id.startswith("MY_F"):
+            continue
+
+        image_date = art.get("image_date", "")
+        if not image_date:
+            stale.append(content_id)
+            continue
+
+        try:
+            ts = datetime.strptime(image_date, "%Y:%m:%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            age_hours = (now - ts).total_seconds() / 3600
+            if age_hours > max_age_hours:
+                stale.append(content_id)
+        except ValueError:
+            stale.append(content_id)
+
+    return stale
+
+
 def prepare_images_to_temp_dir(
     images: List[Path], temp_dir: str
 ) -> tuple[List[ConversionResult], int]:
@@ -592,13 +627,6 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.info(f"Uploading {processed_count} images from temp dir...")
         upload_summary = client.upload_images_from_folder(temp_dir, matte=matte)
 
-        # Record uploaded IDs for purge tracking
-        from SamsungFrame.upload_tracker import record_uploads
-
-        record_uploads(upload_summary.uploaded_image_ids)
-
-        # Record file hashes for duplicate detection on next run
-        # Match prepared files (sorted) to uploaded content_ids (same order)
         prepared_sources = [r.source_path for r in conversion_results if r.success]
         hash_to_id: dict[str, str] = {}
         for src_path, content_id in zip(prepared_sources, upload_summary.uploaded_image_ids):
@@ -607,28 +635,23 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         if hash_to_id:
             record_file_hashes(hash_to_id)
 
-        # --- Purge: delete stale art (uploaded > 24h ago or untracked) ---
+        # --- Purge: delete stale art using image_date from TV API ---
         if args.purge:
-            from SamsungFrame.upload_tracker import get_stale_ids, remove_ids
+            from SamsungFrame.upload_tracker import remove_ids
 
             art_list = client.get_available_art()
-            existing_user_ids = [
-                art.get("content_id", "")
-                for art in art_list
-                if art.get("content_id", "").startswith("MY_F")
-            ]
-            stale_ids = get_stale_ids(existing_user_ids)
+            user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
+            stale_ids = get_stale_art_ids(art_list)
 
-            # Respect min_images safety cap
             min_images = cfg.samsung_frame.min_images
-            total_after_delete = len(existing_user_ids) - len(stale_ids)
-            if total_after_delete < min_images:
-                keep_count = min_images - total_after_delete
+            remaining = len(user_art) - len(stale_ids)
+            if remaining < min_images:
+                keep_count = min_images - remaining
                 stale_ids = stale_ids[keep_count:]
                 logger.info(f"Keeping {keep_count} stale images to maintain min {min_images}")
 
             if stale_ids:
-                logger.info(f"Purging {len(stale_ids)} stale art items (>24h or untracked)")
+                logger.info(f"Purging {len(stale_ids)} stale art items (>24h old)")
                 try:
                     result = delete_art_by_ids(client, stale_ids)
                     art_deleted = result["deleted"]
