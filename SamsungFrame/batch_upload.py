@@ -507,21 +507,15 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error(f"Source directory not found: {args.source_dir}")
         return 1
 
-    # Connect to TV
+    # Connect to TV and ensure art mode
     client = SamsungFrameClient(timeout=args.timeout)
     logger.info(f"Connecting to TV at {client.host}:{client.port} (timeout={args.timeout}s)...")
     if not client.connect():
         logger.error("Failed to connect to TV")
         return 1
 
-    # Verify TV art API is responsive before starting
-    try:
-        logger.info("Verifying TV connection...")
-        client.get_available_art_strict()
-        logger.info("TV connection verified and stable")
-    except Exception as e:
-        logger.error(f"TV connection test failed: {e}")
-        logger.error("TV appears connected but art API is not responding - check TV status")
+    if not client.ensure_art_mode():
+        logger.error("TV connected but art mode not available — check TV status")
         return 1
 
     # Discover images
