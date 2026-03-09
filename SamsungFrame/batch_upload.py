@@ -517,7 +517,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
     # Verify TV art API is responsive before starting
     try:
         logger.info("Verifying TV connection...")
-        existing_art = client.get_available_art_strict()
+        client.get_available_art_strict()
         logger.info("TV connection verified and stable")
     except Exception as e:
         logger.error(f"TV connection test failed: {e}")
@@ -543,28 +543,6 @@ def run_batch_upload(args: argparse.Namespace) -> int:
     if args.max_files > 0 and len(images) > args.max_files:
         logger.info(f"Limiting to first {args.max_files} of {len(images)} images")
         images = images[: args.max_files]
-
-    # Skip files already uploaded to TV
-    from SamsungFrame.upload_tracker import file_hash, get_known_hashes, record_file_hashes
-
-    existing_ids_on_tv = {art.get("content_id", "") for art in existing_art}
-    known_hashes = get_known_hashes()
-    new_images: List[Path] = []
-    source_hashes: dict[str, str] = {}  # path_str -> hash (for recording after upload)
-    skipped_dupes = 0
-
-    for img_path in images:
-        h = file_hash(img_path)
-        source_hashes[str(img_path)] = h
-        tracked_id = known_hashes.get(h)
-        if tracked_id and tracked_id in existing_ids_on_tv:
-            skipped_dupes += 1
-            continue
-        new_images.append(img_path)
-
-    if skipped_dupes:
-        logger.info(f"Skipping {skipped_dupes} files already on TV")
-    images = new_images
 
     if not images:
         logger.error("No images remaining after start-index/max-files filtering")
@@ -627,41 +605,42 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.info(f"Uploading {processed_count} images from temp dir...")
         upload_summary = client.upload_images_from_folder(temp_dir, matte=matte)
 
-        prepared_sources = [r.source_path for r in conversion_results if r.success]
-        hash_to_id: dict[str, str] = {}
-        for src_path, content_id in zip(prepared_sources, upload_summary.uploaded_image_ids):
-            if src_path in source_hashes:
-                hash_to_id[source_hashes[src_path]] = content_id
-        if hash_to_id:
-            record_file_hashes(hash_to_id)
-
         # --- Purge: delete stale art using image_date from TV API ---
-        if args.purge:
-            from SamsungFrame.upload_tracker import remove_ids
+        # Purge runs even if uploads were partially aborted
+        if not args.no_purge:
+            purge_ready = True
+            try:
+                client.ping()
+            except Exception:
+                logger.warning("TV connection lost before purge, reconnecting...")
+                client.close()
+                if not client.connect():
+                    logger.error("Cannot reconnect for purge — skipping purge")
+                    purge_ready = False
 
-            art_list = client.get_available_art()
-            user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
-            stale_ids = get_stale_art_ids(art_list)
+            if purge_ready:
+                art_list = client.get_available_art()
+                user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
+                stale_ids = get_stale_art_ids(art_list)
 
-            min_images = cfg.samsung_frame.min_images
-            remaining = len(user_art) - len(stale_ids)
-            if remaining < min_images:
-                keep_count = min_images - remaining
-                stale_ids = stale_ids[keep_count:]
-                logger.info(f"Keeping {keep_count} stale images to maintain min {min_images}")
+                min_images = cfg.samsung_frame.min_images
+                remaining = len(user_art) - len(stale_ids)
+                if remaining < min_images:
+                    keep_count = min_images - remaining
+                    stale_ids = stale_ids[keep_count:]
+                    logger.info(f"Keeping {keep_count} stale images to maintain min {min_images}")
 
-            if stale_ids:
-                logger.info(f"Purging {len(stale_ids)} stale art items (>24h old)")
-                try:
-                    result = delete_art_by_ids(client, stale_ids)
-                    art_deleted = result["deleted"]
-                    art_delete_failures = result["failed"]
-                    remove_ids(stale_ids[: result["deleted"]])
-                except Exception as e:
-                    logger.error(f"Error during purge: {e}")
-                    art_delete_failures = len(stale_ids)
-            else:
-                logger.info("No stale art to purge")
+                if stale_ids:
+                    logger.info(f"Purging {len(stale_ids)} stale art items (>24h old)")
+                    try:
+                        result = delete_art_by_ids(client, stale_ids)
+                        art_deleted = result["deleted"]
+                        art_delete_failures = result["failed"]
+                    except Exception as e:
+                        logger.error(f"Error during purge: {e}")
+                        art_delete_failures = len(stale_ids)
+                else:
+                    logger.info("No stale art to purge")
 
         # --- Summary ---
         summary = BatchUploadSummary(
@@ -772,9 +751,9 @@ def main() -> int:
     )
 
     parser.add_argument(
-        "--purge",
+        "--no-purge",
         action="store_true",
-        help="Delete stale art (uploaded >24h ago or untracked) after upload",
+        help="Skip purging stale art (>24h old) after upload",
     )
 
     parser.add_argument(
@@ -795,7 +774,7 @@ def main() -> int:
         "--timeout",
         type=int,
         default=60,
-        help="WebSocket timeout in seconds (default: 60, increase for large files)",
+        help="WebSocket timeout in seconds (default: 60)",
     )
 
     args = parser.parse_args()

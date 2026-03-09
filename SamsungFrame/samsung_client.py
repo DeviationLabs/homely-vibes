@@ -256,40 +256,60 @@ class SamsungFrameClient:
         uploaded_ids: List[str] = []
         errors: List[Dict[str, str]] = []
         consecutive_failures = 0
-        reconnected = False
+        rebooted = False
+        known_ids = self._get_art_ids_on_tv()
 
         for image_path in image_files:
             try:
                 image_id = self.upload_image(image_path, matte=matte)
                 if image_id:
                     uploaded_ids.append(image_id)
+                    known_ids.add(image_id)
                     consecutive_failures = 0
                 else:
-                    errors.append(
-                        {"file": os.path.basename(image_path), "error": "Upload returned None"}
-                    )
-                    consecutive_failures += 1
+                    new_id = self._check_for_new_upload(known_ids)
+                    if new_id:
+                        self.logger.info(
+                            f"Upload of {os.path.basename(image_path)} "
+                            f"succeeded despite timeout -> {new_id}"
+                        )
+                        uploaded_ids.append(new_id)
+                        known_ids.add(new_id)
+                        consecutive_failures = 0
+                    else:
+                        errors.append(
+                            {"file": os.path.basename(image_path), "error": "Upload returned None"}
+                        )
+                        consecutive_failures += 1
             except Exception as e:
                 self.logger.error(f"Error uploading {image_path}: {e}")
-                errors.append({"file": os.path.basename(image_path), "error": str(e)})
-                consecutive_failures += 1
-            finally:
-                time.sleep(1)
-
-            if consecutive_failures >= max_consecutive_failures and not reconnected:
-                self.logger.warning(
-                    f"{consecutive_failures} consecutive failures — attempting reconnect..."
-                )
-                reconnected = True
-                if self._reconnect():
-                    self.logger.info("Reconnected successfully, resuming uploads")
+                new_id = self._check_for_new_upload(known_ids)
+                if new_id:
+                    self.logger.info(
+                        f"Upload of {os.path.basename(image_path)} "
+                        f"succeeded despite error -> {new_id}"
+                    )
+                    uploaded_ids.append(new_id)
+                    known_ids.add(new_id)
                     consecutive_failures = 0
-                    continue
+                else:
+                    errors.append({"file": os.path.basename(image_path), "error": str(e)})
+                    consecutive_failures += 1
+            finally:
+                time.sleep(5)
 
             if consecutive_failures >= max_consecutive_failures:
+                if not rebooted:
+                    self.logger.warning(
+                        f"{consecutive_failures} consecutive failures — rebooting TV..."
+                    )
+                    if self._reboot_and_reconnect():
+                        rebooted = True
+                        consecutive_failures = 0
+                        continue
                 self.logger.error(
-                    f"{consecutive_failures} consecutive upload failures — "
-                    f"connection unstable, stopping uploads"
+                    f"{consecutive_failures} consecutive failures — "
+                    f"recovery failed, stopping uploads"
                 )
                 break
 
@@ -307,12 +327,63 @@ class SamsungFrameClient:
 
         return summary
 
+    def _get_art_ids_on_tv(self) -> set[str]:
+        """Get current set of user-uploaded art IDs on TV."""
+        try:
+            art_list = self.get_available_art()
+            return {
+                a.get("content_id", "")
+                for a in art_list
+                if a.get("content_id", "").startswith("MY_F")
+            }
+        except Exception:
+            return set()
+
+    def _check_for_new_upload(self, known_ids: set[str]) -> Optional[str]:
+        """Check if a new art ID appeared on TV (upload succeeded despite timeout)."""
+        try:
+            current_ids = self._get_art_ids_on_tv()
+            new_ids = current_ids - known_ids
+            if new_ids:
+                return new_ids.pop()
+        except Exception:
+            pass
+        return None
+
     def _reconnect(self) -> bool:
         """Close and re-establish TV connection."""
         self.logger.info("Closing stale connection...")
         self.close()
         time.sleep(2)
         return self.connect()
+
+    def _reboot_and_reconnect(self, max_attempts: int = 5) -> bool:
+        """Reboot TV and reconnect with exponential backoff (max 5min between attempts)."""
+        try:
+            self.reboot()
+        except Exception as e:
+            self.logger.error(f"Failed to send reboot command: {e}")
+            return False
+
+        self.close()
+        backoff = 30
+
+        for attempt in range(1, max_attempts + 1):
+            self.logger.info(
+                f"Waiting {backoff}s for TV to restart (attempt {attempt}/{max_attempts})..."
+            )
+            time.sleep(backoff)
+            try:
+                if self.connect():
+                    self.logger.info("Reconnected after reboot")
+                    return True
+            except Exception:
+                pass
+            self.logger.warning(f"Reconnect attempt {attempt} failed")
+            backoff = min(backoff * 2, 300)
+
+        self.logger.error("TV did not recover after reboot")
+        return False
 
     def get_available_art_strict(self) -> List[Dict[str, Any]]:
         """Get available art, raising on error instead of returning []."""
