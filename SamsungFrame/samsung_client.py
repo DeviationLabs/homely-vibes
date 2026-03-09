@@ -265,7 +265,6 @@ class SamsungFrameClient:
                     consecutive_failures = 0
                     self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
                 else:
-                    recovered = True
                     new_id = self._check_for_new_upload(known_ids)
                     if new_id:
                         uploaded_ids.append(new_id)
@@ -275,12 +274,12 @@ class SamsungFrameClient:
                             f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
                         )
                     else:
+                        recovered = True
                         errors.append(
                             {"file": os.path.basename(image_path), "error": "Upload returned None"}
                         )
                         consecutive_failures += 1
             except Exception as e:
-                recovered = True
                 self.logger.error(f"Error uploading {image_path}: {e}")
                 new_id = self._check_for_new_upload(known_ids)
                 if new_id:
@@ -291,6 +290,7 @@ class SamsungFrameClient:
                         f"Uploaded {os.path.basename(image_path)} (recovered from error)"
                     )
                 else:
+                    recovered = True
                     errors.append({"file": os.path.basename(image_path), "error": str(e)})
                     consecutive_failures += 1
             finally:
