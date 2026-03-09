@@ -1,6 +1,7 @@
 """Tests for Samsung Frame TV batch upload."""
 
 import tempfile
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
@@ -10,6 +11,9 @@ from SamsungFrame.batch_upload import (
     ImageConverter,
     discover_images,
     delete_all_art,
+    trim_filename,
+    prepare_images_to_temp_dir,
+    get_stale_art_ids,
 )
 from SamsungFrame.samsung_client import SamsungFrameClient
 
@@ -146,10 +150,9 @@ class TestImageConverter:
             assert result.converted_path is None
             assert result.source_path == str(jpg_path)
 
-    def test_png_conversion(self) -> None:
-        """Test PNG files are converted to JPG."""
+    def test_png_passthrough(self) -> None:
+        """Test PNG files pass through unchanged (same as JPG)."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Create PNG
             img = Image.new("RGB", (500, 500), color="cyan")
             png_path = Path(tmp_dir) / "test.png"
             img.save(png_path, format="PNG")
@@ -158,8 +161,8 @@ class TestImageConverter:
             result = converter.convert_if_needed(png_path)
 
             assert result.success
-            assert result.converted_path is not None
-            assert Path(result.converted_path).suffix == ".jpg"
+            assert result.converted_path is None
+            assert result.source_path == str(png_path)
 
     def test_resize_large_image(self) -> None:
         """Test resizing image larger than 4K."""
@@ -340,3 +343,152 @@ class TestArtDeletion:
 
         with pytest.raises(RuntimeError, match="Not connected to TV"):
             delete_all_art(client, force=True)
+
+
+class TestFilenameTrimming:
+    """Test filename trimming and collision handling."""
+
+    def test_short_name_unchanged(self) -> None:
+        assert trim_filename("photo.jpg") == "photo.jpg"
+
+    def test_exactly_max_length(self) -> None:
+        name = "a" * 46 + ".jpg"  # 50 chars total
+        assert trim_filename(name) == name
+
+    def test_long_name_truncated(self) -> None:
+        name = "a" * 60 + ".jpg"  # 64 chars
+        result = trim_filename(name)
+        assert len(result) == 50
+        assert result.endswith(".jpg")
+
+    def test_preserves_extension(self) -> None:
+        name = "a" * 60 + ".jpeg"
+        result = trim_filename(name)
+        assert result.endswith(".jpeg")
+        assert len(result) == 50
+
+    def test_collision_handling(self) -> None:
+        seen: set[str] = set()
+        r1 = trim_filename("a" * 60 + ".jpg", seen=seen)
+        r2 = trim_filename("a" * 60 + ".jpg", seen=seen)
+        assert r1 != r2
+        assert r2.endswith(".jpg")
+        assert "_1" in r2
+        assert len(r2) <= 50
+
+    def test_multiple_collisions(self) -> None:
+        seen: set[str] = set()
+        results = [trim_filename("longname.jpg", seen=seen) for _ in range(4)]
+        assert len(set(results)) == 4
+
+    def test_case_insensitive_collision(self) -> None:
+        seen: set[str] = set()
+        trim_filename("Photo.JPG", seen=seen)
+        r2 = trim_filename("photo.jpg", seen=seen)
+        assert "_1" in r2
+
+
+class TestPrepareImages:
+    """Test the two-phase prepare_images_to_temp_dir function."""
+
+    def test_jpg_copied_with_trimmed_name(self) -> None:
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as tmp:
+            img = Image.new("RGB", (100, 100), color="red")
+            long_name = "a" * 60 + ".jpg"
+            img.save(Path(src) / long_name, format="JPEG")
+
+            images = [Path(src) / long_name]
+            results, count = prepare_images_to_temp_dir(images, tmp)
+
+            assert count == 1
+            assert results[0].success
+            assert results[0].converted_path is not None
+            copied = Path(results[0].converted_path)
+            assert copied.exists()
+            assert len(copied.name) <= 50
+
+    def test_multiple_files_no_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as tmp:
+            for i in range(3):
+                img = Image.new("RGB", (100, 100), color="blue")
+                img.save(Path(src) / f"img_{i}.jpg", format="JPEG")
+
+            images = sorted(Path(src).glob("*.jpg"))
+            results, count = prepare_images_to_temp_dir(images, tmp)
+
+            assert count == 3
+            names = [Path(r.converted_path).name for r in results if r.converted_path]
+            assert len(set(names)) == 3
+
+
+class TestStaleArtFromApi:
+    def test_recent_art_not_stale(self) -> None:
+        now = datetime.now(timezone.utc)
+        recent = now.strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [{"content_id": "MY_F001", "image_date": recent}]
+        assert get_stale_art_ids(art_list, max_age_hours=24) == []
+
+    def test_old_art_is_stale(self) -> None:
+        old = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [{"content_id": "MY_F001", "image_date": old}]
+        assert get_stale_art_ids(art_list, max_age_hours=24) == ["MY_F001"]
+
+    def test_empty_image_date_is_stale(self) -> None:
+        art_list = [{"content_id": "MY_F001", "image_date": ""}]
+        assert get_stale_art_ids(art_list, max_age_hours=24) == ["MY_F001"]
+
+    def test_samsung_art_excluded(self) -> None:
+        old = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [
+            {"content_id": "SAM-S001", "image_date": ""},
+            {"content_id": "MY_F001", "image_date": old},
+        ]
+        stale = get_stale_art_ids(art_list, max_age_hours=24)
+        assert stale == ["MY_F001"]
+
+    def test_mixed_ages(self) -> None:
+        now = datetime.now(timezone.utc)
+        recent = now.strftime("%Y:%m:%d %H:%M:%S")
+        old = (now - timedelta(hours=48)).strftime("%Y:%m:%d %H:%M:%S")
+        art_list = [
+            {"content_id": "MY_F001", "image_date": recent},
+            {"content_id": "MY_F002", "image_date": old},
+            {"content_id": "MY_F003", "image_date": ""},
+        ]
+        stale = get_stale_art_ids(art_list, max_age_hours=24)
+        assert "MY_F001" not in stale
+        assert "MY_F002" in stale
+        assert "MY_F003" in stale
+
+
+class TestStartIndex:
+    """Test --start-index behavior via discover + slice."""
+
+    def test_start_index_skips_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for i in range(10):
+                img = Image.new("RGB", (100, 100))
+                img.save(Path(tmp_dir) / f"img_{i:02d}.jpg", format="JPEG")
+
+            images = discover_images(tmp_dir, min_size_mb=0.0)
+            sliced = images[5:]
+            assert len(sliced) == 5
+
+    def test_start_index_with_max_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for i in range(10):
+                img = Image.new("RGB", (100, 100))
+                img.save(Path(tmp_dir) / f"img_{i:02d}.jpg", format="JPEG")
+
+            images = discover_images(tmp_dir, min_size_mb=0.0)
+            sliced = images[3:][:2]
+            assert len(sliced) == 2
+
+    def test_start_index_beyond_total(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            img = Image.new("RGB", (100, 100))
+            img.save(Path(tmp_dir) / "only.jpg", format="JPEG")
+
+            images = discover_images(tmp_dir, min_size_mb=0.0)
+            sliced = images[99:]
+            assert len(sliced) == 0

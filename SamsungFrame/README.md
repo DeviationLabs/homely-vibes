@@ -7,6 +7,11 @@ A Python client for managing art mode on Samsung Frame TVs. Upload images, confi
 - **Batch Upload with HEIC Conversion**: Convert iPhone/iOS HEIC images to 4K JPG and upload
 - **Recursive Directory Scanning**: Process images from nested subdirectories
 - **Smart Filtering**: Exclude thumbnails and small files automatically
+- **Filename Trimming**: Automatically trims filenames to <50 chars (preserves extension, handles collisions)
+- **Start Index / Pagination**: Skip first N files with `--start-index` for resuming interrupted uploads
+- **Smart Purge**: Delete stale art (uploaded >24h ago or untracked) while respecting minimum image count
+- **Connection Health Checks**: Automatically stops uploads after consecutive failures to avoid wasting time on unstable connections
+- **Upload History Tracking**: Local JSON tracker records upload timestamps for time-based purge decisions
 - **Matte Configuration**: Apply black borders (or other matte styles) to uploaded images
 - **Art Mode Control**: Enable art mode and start automatic slideshow
 - **TV Status**: Check connection and art mode support
@@ -81,28 +86,38 @@ For iPhone/iOS users with HEIC photos, use the batch upload script which handles
 # Basic batch upload with HEIC conversion
 uv run python SamsungFrame/batch_upload.py ~/Photos/Favorites
 
-# Replace all existing user-uploaded art
+# Purge stale art (>24h old or untracked) after upload
 uv run python SamsungFrame/batch_upload.py ~/Photos/Vacation --purge
 
 # Custom matte
 uv run python SamsungFrame/batch_upload.py ~/Photos --matte shadowbox_black
+
+# Skip first 20 files (resume interrupted upload)
+uv run python SamsungFrame/batch_upload.py ~/Photos --start-index 20
+
+# Upload at most 50 files starting from index 10
+uv run python SamsungFrame/batch_upload.py ~/Photos --start-index 10 --max-files 50
 ```
 
 **What the batch upload script does:**
 
 1. **Recursive Discovery**: Scans directory and all subdirectories for images
 2. **Smart Filtering**: Excludes files <1MB (configurable) and thumbnail patterns (*_thumb*, *_thumbnail*, *_small*)
-3. **HEIC Conversion**: Converts HEIC to high-quality JPG at 4K resolution (maintains aspect ratio, max 3840×2160)
-4. **Quality Compression**: Reduces JPG quality (95→90→85→80→75→70) if needed to meet 10MB TV limit
-5. **Delete Existing Art**: Optionally removes all user-uploaded art (preserves Samsung pre-loaded art)
-6. **Batch Upload**: Uploads all processed images with specified matte
-7. **Enable Art Mode**: Automatically enables slideshow after upload
+3. **Start Index / Max Files**: Optionally skip first N files and/or cap total uploads
+4. **Phase 1 — Prepare**: Converts HEIC to high-quality JPG at 4K (max 3840×2160), copies JPG/PNG, trims all filenames to <50 chars
+5. **Quality Compression**: Reduces JPG quality (95→90→85→80→75→70) if needed to meet 10MB TV limit
+6. **Phase 2 — Upload**: Uploads all prepared images with health checking (stops after 3 consecutive failures)
+7. **Upload Tracking**: Records upload timestamps locally for time-based purge
+8. **Smart Purge**: Optionally deletes art uploaded >24h ago or untracked (respects minimum image count)
+9. **Enable Art Mode**: Automatically enables slideshow after upload
 
 **Command Options:**
 
 - `source_dir` - Directory to scan (required)
 - `--matte` - Matte style (default: shadowbox_black)
-- `--purge` - Delete all user-uploaded art before upload
+- `--purge` - Delete stale art (>24h old or untracked) after upload
+- `--start-index N` - Skip first N discovered files (applied before --max-files)
+- `--max-files N` - Maximum number of files to upload (0 = all)
 
 **Note**: Pushover notifications sent automatically. Files <1MB filtered as thumbnails.
 
@@ -250,19 +265,26 @@ This command:
 
 - **`samsung_client.py`**: Core client class (`SamsungFrameClient`)
   - Connection management with retry logic
-  - Image validation and upload
+  - Image validation and upload with health checking (consecutive failure detection)
   - Art mode control
   - Slideshow management
 
+- **`batch_upload.py`**: Batch upload with two-phase architecture
+  - Phase 1: Prepare images (HEIC conversion, filename trimming, copy to temp dir)
+  - Phase 2: Upload via `upload_images_from_folder()` with automatic health checks
+  - Smart purge using local upload history tracking
+
+- **`upload_tracker.py`**: Local upload history (JSON-based)
+  - Records content_id → timestamp for each upload
+  - Identifies stale art (>24h or untracked) for purge
+  - Stored at `config/samsung_upload_history.json` (gitignored)
+
 - **`manage_samsung.py`**: CLI entry point
-  - Argparse-based command interface
-  - Upload workflow orchestration
+  - Argparse-based command interface for TV management
   - Pushover notification integration
 
-- **`test_samsung_client.py`**: Comprehensive test suite
-  - Unit tests with mocked TV connections
-  - Image validation tests
-  - Upload workflow tests
+- **`test_batch_upload.py`**: Comprehensive test suite
+  - Tests for discovery, conversion, deletion, filename trimming, upload tracking, start-index
 
 ### Data Models (Pydantic)
 
