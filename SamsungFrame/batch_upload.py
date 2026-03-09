@@ -6,13 +6,15 @@ import hashlib
 import os
 import random
 import re
+import shutil
 import signal
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import FrameType
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 
 import pillow_heif
 from PIL import Image
@@ -41,6 +43,38 @@ THUMBNAIL_PATTERNS = re.compile(r"_(thumb|thumbnail|small)(@\d+x)?\.[\w]+$", re.
 # Global state for signal handler
 _current_summary: Optional["BatchUploadSummary"] = None
 _notification_sent = False
+
+
+def trim_filename(name: str, max_length: int = 50, seen: Optional[set[str]] = None) -> str:
+    """Trim filename to max_length chars, preserving extension and handling collisions.
+
+    Args:
+        name: Original filename (e.g. "very_long_photo_name.jpg")
+        max_length: Maximum total length including extension
+        seen: Set of already-used names for collision detection (mutated in place)
+    """
+    stem = Path(name).stem
+    ext = Path(name).suffix  # includes dot
+
+    max_stem = max_length - len(ext)
+    if max_stem < 1:
+        max_stem = 1
+
+    trimmed = stem[:max_stem]
+    candidate = trimmed + ext
+
+    if seen is not None:
+        counter = 1
+        while candidate.lower() in seen:
+            suffix = f"_{counter}"
+            available = max_stem - len(suffix)
+            if available < 1:
+                available = 1
+            candidate = stem[:available] + suffix + ext
+            counter += 1
+        seen.add(candidate.lower())
+
+    return candidate
 
 
 def _send_interrupt_notification(_signum: int, _frame: Optional[FrameType]) -> None:
@@ -380,6 +414,80 @@ def calculate_images_to_delete(
     return random.sample(existing_ids, delete_count)
 
 
+def get_stale_art_ids(art_list: List[Dict[str, Any]], max_age_hours: int = 24) -> List[str]:
+    """Return content IDs of user art older than max_age_hours using TV's image_date.
+
+    Args:
+        art_list: Full art list from art().available()
+        max_age_hours: Max age in hours before art is considered stale
+
+    Returns:
+        List of stale content IDs
+    """
+    now = datetime.now(timezone.utc)
+    stale: List[str] = []
+
+    for art in art_list:
+        content_id = art.get("content_id", "")
+        if not content_id.startswith("MY_F"):
+            continue
+
+        image_date = art.get("image_date", "")
+        if not image_date:
+            stale.append(content_id)
+            continue
+
+        try:
+            ts = datetime.strptime(image_date, "%Y:%m:%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            age_hours = (now - ts).total_seconds() / 3600
+            if age_hours > max_age_hours:
+                stale.append(content_id)
+        except ValueError:
+            stale.append(content_id)
+
+    return stale
+
+
+def prepare_images_to_temp_dir(
+    images: List[Path], temp_dir: str
+) -> tuple[List[ConversionResult], int]:
+    """Convert HEIC and copy JPG/PNG into temp_dir with trimmed filenames.
+
+    Returns:
+        (conversion_results, processed_count)
+    """
+    converter = ImageConverter(temp_dir)
+    results: List[ConversionResult] = []
+    processed = 0
+    seen: set[str] = set()
+
+    for image_path in tqdm(images, desc="Preparing images", unit="img"):
+        result = converter.convert_if_needed(image_path)
+        results.append(result)
+
+        if not result.success:
+            continue
+
+        processed += 1
+
+        if result.converted_path:
+            # HEIC was converted — rename to trimmed name
+            converted = Path(result.converted_path)
+            trimmed = trim_filename(converted.name, seen=seen)
+            final_path = Path(temp_dir) / trimmed
+            if converted != final_path:
+                converted.rename(final_path)
+            result.converted_path = str(final_path)
+        else:
+            # JPG/PNG — copy with trimmed name
+            trimmed = trim_filename(image_path.name, seen=seen)
+            final_path = Path(temp_dir) / trimmed
+            shutil.copy2(image_path, final_path)
+            result.converted_path = str(final_path)
+
+    return results, processed
+
+
 def run_batch_upload(args: argparse.Namespace) -> int:
     """Main workflow orchestration."""
     global _current_summary, _notification_sent
@@ -400,35 +508,21 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         return 1
 
     # Connect to TV
-    client = SamsungFrameClient()
-    logger.info(f"Connecting to TV at {client.host}:{client.port}...")
+    client = SamsungFrameClient(timeout=args.timeout)
+    logger.info(f"Connecting to TV at {client.host}:{client.port} (timeout={args.timeout}s)...")
     if not client.connect():
         logger.error("Failed to connect to TV")
         return 1
 
-    # Verify TV connection is stable by testing art API
+    # Verify TV art API is responsive before starting
     try:
         logger.info("Verifying TV connection...")
-        client.get_available_art()
+        client.get_available_art_strict()
         logger.info("TV connection verified and stable")
     except Exception as e:
         logger.error(f"TV connection test failed: {e}")
-        logger.error("TV appears connected but is not responding - check TV status and retry")
+        logger.error("TV appears connected but art API is not responding - check TV status")
         return 1
-
-    # Capture existing art IDs before upload (for smart deletion later)
-    art_deleted = 0
-    art_delete_failures = 0
-    existing_art_ids: List[str] = []
-    if args.purge:
-        art_list = client.get_available_art()
-        for art in art_list:
-            content_id = art.get("content_id")
-            if content_id and content_id.startswith("MY_F"):
-                existing_art_ids.append(content_id)
-        logger.info(
-            f"Found {len(existing_art_ids)} existing user images (will delete after upload)"
-        )
 
     # Discover images
     try:
@@ -441,74 +535,32 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("No images found matching criteria")
         return 1
 
-    # Limit files if max_files is specified
+    # Apply start-index then max-files
+    if args.start_index > 0:
+        logger.info(f"Skipping first {args.start_index} of {len(images)} discovered images")
+        images = images[args.start_index :]
+
     if args.max_files > 0 and len(images) > args.max_files:
-        logger.info(f"Limiting to first {args.max_files} of {len(images)} discovered images")
+        logger.info(f"Limiting to first {args.max_files} of {len(images)} images")
         images = images[: args.max_files]
 
-    # Convert and upload in single loop
+    if not images:
+        logger.error("No images remaining after start-index/max-files filtering")
+        return 1
+
+    # --- Phase 1: Prepare files in temp dir (convert + trim filenames) ---
+    art_deleted = 0
+    art_delete_failures = 0
+
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Using temp directory: {temp_dir}")
-        converter = ImageConverter(temp_dir)
-        matte = args.matte or cfg.samsung_frame.default_matte
+        conversion_results, processed_count = prepare_images_to_temp_dir(images, temp_dir)
 
-        conversion_results: List[ConversionResult] = []
-        uploaded_ids: List[str] = []
-        upload_errors: List[Dict[str, str]] = []
-        processed_count = 0
-
-        logger.info(f"Processing and uploading {len(images)} images...")
-        for image_path in tqdm(images, desc="Processing images", unit="img"):
-            # Convert if needed
-            conversion_result = converter.convert_if_needed(image_path)
-            conversion_results.append(conversion_result)
-
-            if not conversion_result.success:
-                continue
-
-            processed_count += 1
-            # Use converted path if available, otherwise original
-            img_path = conversion_result.converted_path or conversion_result.source_path
-
-            # Upload immediately
-            try:
-                image_id = client.upload_image(img_path, matte=matte)
-                if image_id:
-                    uploaded_ids.append(image_id)
-                    logger.debug(f"Uploaded {Path(img_path).name} → {image_id}")
-                else:
-                    upload_errors.append(
-                        {"file": Path(image_path).name, "error": "Upload returned None"}
-                    )
-            except Exception as e:
-                logger.error(f"Error uploading {Path(image_path).name}: {e}")
-                upload_errors.append({"file": Path(image_path).name, "error": str(e)})
-
-            # Update global state for signal handler (partial progress)
-            heic_so_far = sum(1 for r in conversion_results if r.converted_path is not None)
-            conv_errors_so_far = [
-                {"file": Path(r.source_path).name, "error": r.error_message or "Unknown error"}
-                for r in conversion_results
-                if not r.success
-            ]
-            _current_summary = BatchUploadSummary(
-                total_discovered=len(images),
-                total_filtered=len(images),
-                heic_converted=heic_so_far,
-                conversion_failures=len(conv_errors_so_far),
-                art_deleted=art_deleted,
-                art_delete_failures=art_delete_failures,
-                upload_summary=ImageUploadSummary(
-                    total_images=processed_count,
-                    successful_uploads=len(uploaded_ids),
-                    failed_uploads=len(upload_errors),
-                    uploaded_image_ids=uploaded_ids,
-                    errors=upload_errors,
-                ),
-                conversion_errors=conv_errors_so_far,
-            )
-
-        heic_converted = sum(1 for r in conversion_results if r.converted_path is not None)
+        heic_converted = sum(
+            1
+            for r in conversion_results
+            if r.success and Path(r.source_path).suffix.lower() == ".heic"
+        )
         conversion_errors = [
             {"file": Path(r.source_path).name, "error": r.error_message or "Unknown error"}
             for r in conversion_results
@@ -519,42 +571,78 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             logger.error("All conversions failed")
             return 1
 
-        upload_summary = ImageUploadSummary(
-            total_images=processed_count,
-            successful_uploads=len(uploaded_ids),
-            failed_uploads=len(upload_errors),
-            uploaded_image_ids=uploaded_ids,
-            errors=upload_errors,
+        # Update signal handler with conversion progress
+        _current_summary = BatchUploadSummary(
+            total_discovered=len(images),
+            total_filtered=len(images),
+            heic_converted=heic_converted,
+            conversion_failures=len(conversion_errors),
+            art_deleted=0,
+            art_delete_failures=0,
+            upload_summary=ImageUploadSummary(
+                total_images=processed_count,
+                successful_uploads=0,
+                failed_uploads=0,
+                uploaded_image_ids=[],
+                errors=[],
+            ),
+            conversion_errors=conversion_errors,
         )
 
-        # Smart delete: keep minimum min_images total on TV
-        min_images = cfg.samsung_frame.min_images
-        if args.purge and existing_art_ids:
-            ids_to_delete = calculate_images_to_delete(
-                existing_art_ids, len(uploaded_ids), min_images
-            )
-            if ids_to_delete:
-                keep_count = len(existing_art_ids) - len(ids_to_delete)
-                logger.info(
-                    f"Deleting {len(ids_to_delete)} old images "
-                    f"(keeping {keep_count} to maintain min {min_images})"
-                )
-                try:
-                    result = delete_art_by_ids(client, ids_to_delete)
-                    art_deleted = result["deleted"]
-                    art_delete_failures = result["failed"]
-                except Exception as e:
-                    logger.error(f"Error during smart deletion: {e}")
-                    art_delete_failures = len(ids_to_delete)
-                    # Continue to slideshow even if deletion fails
-            else:
-                total_images = len(existing_art_ids) + len(uploaded_ids)
-                logger.info(
-                    f"Keeping all {len(existing_art_ids)} old images "
-                    f"(total {total_images} < min {min_images})"
-                )
+        # --- Phase 2: Upload from temp dir ---
+        # Re-verify connection (may have gone stale during preparation)
+        try:
+            client.ping()
+            logger.info("TV connection still active")
+        except Exception:
+            logger.warning("TV connection stale after preparation, reconnecting...")
+            client.close()
+            if not client.connect():
+                logger.error("Failed to reconnect to TV")
+                return 1
 
-        # Summary
+        matte = args.matte or cfg.samsung_frame.default_matte
+        logger.info(f"Uploading {processed_count} images from temp dir...")
+        upload_summary = client.upload_images_from_folder(temp_dir, matte=matte)
+
+        # --- Purge: delete stale art using image_date from TV API ---
+        # Purge runs even if uploads were partially aborted
+        if not args.no_purge:
+            purge_ready = True
+            try:
+                client.ping()
+            except Exception:
+                logger.warning("TV connection lost before purge, reconnecting...")
+                client.close()
+                if not client.connect():
+                    logger.error("Cannot reconnect for purge — skipping purge")
+                    purge_ready = False
+
+            if purge_ready:
+                art_list = client.get_available_art()
+                user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
+                stale_ids = get_stale_art_ids(art_list)
+
+                min_images = cfg.samsung_frame.min_images
+                remaining = len(user_art) - len(stale_ids)
+                if remaining < min_images:
+                    keep_count = min_images - remaining
+                    stale_ids = stale_ids[keep_count:]
+                    logger.info(f"Keeping {keep_count} stale images to maintain min {min_images}")
+
+                if stale_ids:
+                    logger.info(f"Purging {len(stale_ids)} stale art items (>24h old)")
+                    try:
+                        result = delete_art_by_ids(client, stale_ids)
+                        art_deleted = result["deleted"]
+                        art_delete_failures = result["failed"]
+                    except Exception as e:
+                        logger.error(f"Error during purge: {e}")
+                        art_delete_failures = len(stale_ids)
+                else:
+                    logger.info("No stale art to purge")
+
+        # --- Summary ---
         summary = BatchUploadSummary(
             total_discovered=len(images),
             total_filtered=len(images),
@@ -565,8 +653,8 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             upload_summary=upload_summary,
             conversion_errors=conversion_errors,
         )
+        _current_summary = summary
 
-        # Send notification immediately after processing
         send_batch_notification(summary)
 
         logger.info("=" * 50)
@@ -583,8 +671,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         )
         logger.info("=" * 50)
 
-        # Show first 5 errors
-        all_errors = conversion_errors + upload_errors
+        all_errors = conversion_errors + upload_summary.errors
         if all_errors:
             logger.error("Errors:")
             for err in all_errors[:5]:
@@ -611,11 +698,9 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                 logger.error("Slideshow start failed")
                 return 1
 
-        # Close TV connection
         if client:
             client.close()
 
-        # Return success if any uploads succeeded
         return 0 if summary.upload_summary.successful_uploads > 0 else 1
 
 
@@ -666,9 +751,16 @@ def main() -> int:
     )
 
     parser.add_argument(
-        "--purge",
+        "--no-purge",
         action="store_true",
-        help="Delete all user-uploaded art before upload (no confirmation)",
+        help="Skip purging stale art (>24h old) after upload",
+    )
+
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="Skip first N discovered files (applied before --max-files)",
     )
 
     parser.add_argument(
@@ -676,6 +768,13 @@ def main() -> int:
         type=int,
         default=0,
         help="Maximum number of files to upload (0 = all)",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=60,
+        help="WebSocket timeout in seconds (default: 60)",
     )
 
     args = parser.parse_args()

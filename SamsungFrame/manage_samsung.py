@@ -33,6 +33,9 @@ def main() -> int:
     subparsers.add_parser("list-mattes", help="List available matte styles")
     subparsers.add_parser("reboot", help="Reboot the TV")
 
+    delete_parser = subparsers.add_parser("delete-all", help="Delete all user-uploaded art from TV")
+    delete_parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
+
     download_parser = subparsers.add_parser(
         "download-thumbnails", help="Download thumbnails for art on TV"
     )
@@ -114,6 +117,8 @@ def main() -> int:
         return start_slideshow(args)
     elif args.command == "reboot":
         return reboot_tv(args)
+    elif args.command == "delete-all":
+        return delete_all(args)
 
     return 0
 
@@ -361,6 +366,36 @@ def start_slideshow(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Error starting slideshow: {e}")
+        return 1
+    finally:
+        if "client" in locals():
+            client.close()
+
+
+def delete_all(args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        client = SamsungFrameClient()
+        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+
+        if not client.connect():
+            logger.error(f"Failed to connect to TV at {client.host}")
+            return 1
+
+        from SamsungFrame.batch_upload import delete_all_art
+
+        result = delete_all_art(client, force=args.force)
+
+        logger.info(
+            f"Results: {result['deleted']} deleted, "
+            f"{result['failed']} failed (Total: {result['total']})"
+        )
+
+        return 0 if result["failed"] == 0 else 1
+
+    except Exception as e:
+        logger.error(f"Error deleting art: {e}")
         return 1
     finally:
         if "client" in locals():
