@@ -3,6 +3,8 @@
 
 import argparse
 import sys
+from contextlib import contextmanager
+from typing import Generator
 
 
 from SamsungFrame.samsung_client import SamsungFrameClient
@@ -15,6 +17,20 @@ pushover = Pushover(
     cfg.pushover.user,
     cfg.pushover.tokens.get("SamsungFrame", cfg.pushover.default_token),
 )
+
+
+@contextmanager
+def tv_connection() -> Generator[SamsungFrameClient, None, None]:
+    """Get TV to art-mode-ready state from any starting state, yield client, close on exit."""
+    logger = get_logger(__name__)
+    client = SamsungFrameClient()
+    logger.info(f"Preparing Samsung Frame TV at {client.host}...")
+    try:
+        if not client.connect_ready():
+            raise ConnectionError(f"Failed to get TV ready at {client.host}")
+        yield client
+    finally:
+        client.close()
 
 
 def main() -> int:
@@ -127,211 +143,154 @@ def show_status(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+        with tv_connection() as client:
+            logger.info("=" * 50)
+            logger.info("TV STATUS")
+            logger.info("=" * 50)
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            logger.error("Verify TV is powered on and on same network")
-            return 1
+            device_info = client.get_device_info()
+            if device_info:
+                device = device_info.get("device", {})
+                logger.info(f"Model: {device.get('modelName', 'Unknown')}")
+                logger.info(f"Name: {device.get('name', 'Unknown')}")
+                logger.info(f"Firmware: {device.get('firmwareVersion', 'Unknown')}")
+                logger.info(f"Resolution: {device.get('resolution', 'Unknown')}")
+                logger.info(f"Power State: {device.get('PowerState', 'Unknown')}")
+                logger.info(f"OS: {device.get('OS', 'Unknown')}")
+                logger.info(f"Network Type: {device.get('networkType', 'Unknown')}")
 
-        logger.info("=" * 50)
-        logger.info("TV STATUS")
-        logger.info("=" * 50)
+                frame_tv = device.get("FrameTVSupport", "false")
+                logger.info(f"Frame TV Support: {frame_tv}")
 
-        device_info = client.get_device_info()
-        if device_info:
-            device = device_info.get("device", {})
-            logger.info(f"Model: {device.get('modelName', 'Unknown')}")
-            logger.info(f"Name: {device.get('name', 'Unknown')}")
-            logger.info(f"Firmware: {device.get('firmwareVersion', 'Unknown')}")
-            logger.info(f"Resolution: {device.get('resolution', 'Unknown')}")
-            logger.info(f"Power State: {device.get('PowerState', 'Unknown')}")
-            logger.info(f"OS: {device.get('OS', 'Unknown')}")
-            logger.info(f"Network Type: {device.get('networkType', 'Unknown')}")
+                if frame_tv == "true":
+                    art_list = client.get_available_art()
+                    logger.info(f"Available Art: {len(art_list)} items")
+            else:
+                logger.warning("Could not retrieve device info")
 
-            frame_tv = device.get("FrameTVSupport", "false")
-            logger.info(f"Frame TV Support: {frame_tv}")
+            if client.check_art_support():
+                logger.info("Art Mode: Supported and working")
+            else:
+                logger.warning("Art Mode: Not supported or unavailable")
 
-            if frame_tv == "true":
-                art_list = client.get_available_art()
-                logger.info(f"Available Art: {len(art_list)} items")
-        else:
-            logger.warning("Could not retrieve device info")
-
-        if client.check_art_support():
-            logger.info("Art Mode: Supported and working")
-        else:
-            logger.warning("Art Mode: Not supported or unavailable")
-
-        client.close()
-        return 0
+            return 0
 
     except Exception as e:
         logger.error(f"Error checking status: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def list_art(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+        with tv_connection() as client:
+            logger.info("Retrieving available art...")
+            art_list = client.get_available_art()
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
+            if not art_list:
+                logger.info("No art available on TV")
+                return 0
 
-        logger.info("Retrieving available art...")
-        art_list = client.get_available_art()
+            logger.info(f"Available art ({len(art_list)} items):")
+            for i, art in enumerate(art_list, 1):
+                art_id = art.get("content_id", "Unknown ID")
+                logger.info(f"  {i}. ID: {art_id}")
 
-        if not art_list:
-            logger.info("No art available on TV")
             return 0
-
-        logger.info(f"Available art ({len(art_list)} items):")
-        for i, art in enumerate(art_list, 1):
-            art_id = art.get("content_id", "Unknown ID")
-            logger.info(f"  {i}. ID: {art_id}")
-
-        client.close()
-        return 0
 
     except Exception as e:
         logger.error(f"Error listing art: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def list_mattes(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+        with tv_connection() as client:
+            logger.info("Retrieving available matte styles...")
+            mattes = client.get_available_mattes()
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
+            if not mattes:
+                logger.warning("No matte styles available")
+                return 0
 
-        logger.info("Retrieving available matte styles...")
-        mattes = client.get_available_mattes()
+            logger.info(f"Available matte styles ({len(mattes)} options):")
+            for i, matte in enumerate(mattes, 1):
+                logger.info(f"  {i}. {matte}")
 
-        if not mattes:
-            logger.warning("No matte styles available")
             return 0
-
-        logger.info(f"Available matte styles ({len(mattes)} options):")
-        for i, matte in enumerate(mattes, 1):
-            logger.info(f"  {i}. {matte}")
-
-        client.close()
-        return 0
 
     except Exception as e:
         logger.error(f"Error listing mattes: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def download_thumbnails(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+        with tv_connection() as client:
+            user_photos_only = not args.all
+            if user_photos_only:
+                logger.info("Downloading thumbnails for user-uploaded photos only...")
+            else:
+                logger.info("Downloading thumbnails for all art on TV...")
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
+            result = client.download_thumbnails(args.output_dir, user_photos_only=user_photos_only)
 
-        user_photos_only = not args.all
-        if user_photos_only:
-            logger.info("Downloading thumbnails for user-uploaded photos only...")
-        else:
-            logger.info("Downloading thumbnails for all art on TV...")
+            logger.info(
+                f"Results: {result['downloaded']} downloaded, "
+                f"{result['failed']} failed (Total: {result['total']})"
+            )
 
-        result = client.download_thumbnails(args.output_dir, user_photos_only=user_photos_only)
-
-        logger.info(
-            f"Results: {result['downloaded']} downloaded, "
-            f"{result['failed']} failed (Total: {result['total']})"
-        )
-
-        client.close()
-        return 0 if result["failed"] == 0 else 1
+            return 0 if result["failed"] == 0 else 1
 
     except Exception as e:
         logger.error(f"Error downloading thumbnails: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def update_mattes(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+        with tv_connection() as client:
+            matte = args.matte
+            user_photos_only = not args.include_preinstalled
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
+            if user_photos_only:
+                logger.info(f"Updating user-uploaded art mattes to '{matte}'...")
+            else:
+                logger.info(f"Updating all art mattes to '{matte}'...")
 
-        matte = args.matte
-        user_photos_only = not args.include_preinstalled
+            result = client.update_all_mattes(matte, user_photos_only=user_photos_only)
 
-        if user_photos_only:
-            logger.info(f"Updating user-uploaded art mattes to '{matte}'...")
-        else:
-            logger.info(f"Updating all art mattes to '{matte}'...")
+            logger.info(
+                f"Results: {result['updated']} updated, "
+                f"{result['skipped']} skipped, "
+                f"{result['failed']} failed (Total: {result['total']})"
+            )
 
-        result = client.update_all_mattes(matte, user_photos_only=user_photos_only)
-
-        logger.info(
-            f"Results: {result['updated']} updated, "
-            f"{result['skipped']} skipped, "
-            f"{result['failed']} failed (Total: {result['total']})"
-        )
-
-        client.close()
-        return 0 if result["failed"] == 0 else 1
+            return 0 if result["failed"] == 0 else 1
 
     except Exception as e:
         logger.error(f"Error updating mattes: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def cycle_images(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
-
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
-
-        user_photos_only = not args.all
-        shuffle = not args.no_shuffle
-        client.cycle_images(period=args.period, user_photos_only=user_photos_only, shuffle=shuffle)
-
-        client.close()
-        return 0
+        with tv_connection() as client:
+            user_photos_only = not args.all
+            shuffle = not args.no_shuffle
+            client.cycle_images(
+                period=args.period, user_photos_only=user_photos_only, shuffle=shuffle
+            )
+            return 0
 
     except KeyboardInterrupt:
         logger.info("Image cycling stopped by user")
@@ -339,91 +298,62 @@ def cycle_images(args: argparse.Namespace) -> int:
     except Exception as e:
         logger.error(f"Error cycling images: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def start_slideshow(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
-
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
-
-        shuffle = not args.no_shuffle
-        if client.start_slideshow(duration=args.duration, shuffle=shuffle):
-            logger.info("Slideshow started successfully")
-            return 0
-        else:
-            logger.error("Failed to start slideshow")
-            return 1
+        with tv_connection() as client:
+            shuffle = not args.no_shuffle
+            if client.start_slideshow(duration=args.duration, shuffle=shuffle):
+                logger.info("Slideshow started successfully")
+                return 0
+            else:
+                logger.error("Failed to start slideshow")
+                return 1
 
     except Exception as e:
         logger.error(f"Error starting slideshow: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def delete_all(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
+        with tv_connection() as client:
+            from SamsungFrame.batch_upload import delete_all_art
 
-        if not client.connect():
-            logger.error(f"Failed to connect to TV at {client.host}")
-            return 1
+            result = delete_all_art(client, force=args.force)
 
-        from SamsungFrame.batch_upload import delete_all_art
+            logger.info(
+                f"Results: {result['deleted']} deleted, "
+                f"{result['failed']} failed (Total: {result['total']})"
+            )
 
-        result = delete_all_art(client, force=args.force)
-
-        logger.info(
-            f"Results: {result['deleted']} deleted, "
-            f"{result['failed']} failed (Total: {result['total']})"
-        )
-
-        return 0 if result["failed"] == 0 else 1
+            return 0 if result["failed"] == 0 else 1
 
     except Exception as e:
         logger.error(f"Error deleting art: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 def reboot_tv(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        client = SamsungFrameClient()
-        logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
-
-        # _reboot_and_reconnect handles the full flow: reboot + wait + reconnect
-        client.connect()
-        if client._reboot_and_reconnect():
-            logger.info("TV rebooted and in art mode")
-            client.close()
-            return 0
-        else:
-            logger.error("Failed to reboot TV into art mode")
-            return 1
+        with tv_connection() as client:
+            if client._reboot_and_reconnect():
+                logger.info("TV rebooted and in art mode")
+                return 0
+            else:
+                logger.error("Failed to reboot TV into art mode")
+                return 1
 
     except Exception as e:
         logger.error(f"Error rebooting TV: {e}")
         return 1
-    finally:
-        if "client" in locals():
-            client.close()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 import os
 import signal
+import socket
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
@@ -119,6 +120,72 @@ class SamsungFrameClient:
 
         self.logger.error(f"Failed to connect to TV at {self.host}:{self.port}")
         self.logger.error("Verify TV is powered on and on same network")
+        return False
+
+    def _send_wol(self) -> bool:
+        """Send Wake-on-LAN magic packet to TV."""
+        mac = cfg.samsung_frame.mac
+        if not mac:
+            self.logger.warning("No MAC address configured — cannot send Wake-on-LAN")
+            return False
+
+        try:
+            mac_bytes = bytes.fromhex(mac.replace(":", "").replace("-", ""))
+            magic = b"\xff" * 6 + mac_bytes * 16
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                s.sendto(magic, ("<broadcast>", 9))
+            self.logger.info(f"Wake-on-LAN sent to {mac}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Wake-on-LAN failed: {e}")
+            return False
+
+    def _is_tv_reachable(self) -> bool:
+        """Check if TV REST API is reachable (works in standby)."""
+        try:
+            from samsungtvws.rest import SamsungTVRest
+
+            rest = SamsungTVRest(self.host, port=8001, timeout=3)
+            rest.rest_device_info()
+            return True
+        except Exception:
+            return False
+
+    def connect_ready(self) -> bool:
+        """Get TV to art-mode-ready state from any starting state.
+
+        Handles: TV off → WoL → wait → connect → art mode
+                 TV standby → connect → art mode
+                 TV on (regular) → connect → toggle to art mode
+                 TV in art mode → connect → verify
+        """
+        # Phase 1: Try normal connect + art mode
+        if self.connect():
+            if self.ensure_art_mode():
+                return True
+            self.logger.warning("Connected but art mode failed — rebooting...")
+            return self._reboot_and_reconnect()
+
+        # Phase 2: Connect failed — check if TV is reachable at all
+        if self._is_tv_reachable():
+            # TV is in standby — REST works but WebSocket doesn't yet
+            self.logger.info("TV in standby, waiting for WebSocket...")
+            time.sleep(5)
+            if self.connect():
+                return self.ensure_art_mode()
+
+        # Phase 3: TV unreachable — try Wake-on-LAN
+        if self._send_wol():
+            if not self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
+                self.logger.error("TV did not wake up after WoL")
+                return False
+            # Give WebSocket time to come up after power-on
+            time.sleep(5)
+            if self.connect():
+                return self.ensure_art_mode()
+
+        self.logger.error("Cannot reach TV — verify power and network")
         return False
 
     def ping(self) -> bool:
@@ -437,7 +504,6 @@ class SamsungFrameClient:
         REST API (HTTP GET on port 8001) works without WebSocket — lightweight check.
         """
         from samsungtvws.rest import SamsungTVRest
-        from samsungtvws.exceptions import HttpApiError
 
         rest = SamsungTVRest(self.host, port=8001, timeout=5)
         state_name = "on" if target_on else "off"
@@ -449,7 +515,7 @@ class SamsungFrameClient:
                 if is_on == target_on:
                     self.logger.info(f"TV power state is {state_name}")
                     return True
-            except (HttpApiError, Exception):
+            except Exception:
                 if not target_on:
                     # Connection refused = TV is off
                     self.logger.info("TV is off (REST unreachable)")
@@ -462,7 +528,9 @@ class SamsungFrameClient:
 
     def _reboot_and_reconnect(self, max_attempts: int = 3) -> bool:
         """Reboot TV, poll for power cycle, reconnect into art mode."""
-        self.reboot()
+        if not self.reboot():
+            self.logger.error("Reboot command failed — cannot proceed")
+            return False
 
         # Wait for TV to go down (or timeout — it may already be restarting)
         self._wait_for_power(target_on=False, timeout=15, poll_interval=2)
@@ -486,24 +554,25 @@ class SamsungFrameClient:
         self.logger.error("TV is up but art mode failed")
         return False
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    def _fetch_art_list(self) -> List[Dict[str, Any]]:
+        """Fetch art list with retry. Raises on error."""
+        assert self.tv is not None
+        art_list = self.tv.art().available()
+        if isinstance(art_list, dict) and art_list.get("event") == "ms.channel.timeOut":
+            raise TimeoutError("TV art list request timed out")
+        return cast(List[Dict[str, Any]], art_list)
+
     def get_available_art_strict(self) -> List[Dict[str, Any]]:
         """Get available art, raising on error instead of returning []."""
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=2, max=10),
-            reraise=True,
-        )
-        def fetch_art_list() -> List[Dict[str, Any]]:
-            assert self.tv is not None
-            art_list = self.tv.art().available()
-            if isinstance(art_list, dict) and art_list.get("event") == "ms.channel.timeOut":
-                raise TimeoutError("TV art list request timed out")
-            return cast(List[Dict[str, Any]], art_list)
-
-        art_list = fetch_art_list()
+        art_list = self._fetch_art_list()
         user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
         self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
         return art_list
@@ -512,20 +581,8 @@ class SamsungFrameClient:
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=2, max=10),
-            reraise=True,
-        )
-        def fetch_art_list() -> List[Dict[str, Any]]:
-            assert self.tv is not None
-            art_list = self.tv.art().available()
-            if isinstance(art_list, dict) and art_list.get("event") == "ms.channel.timeOut":
-                raise TimeoutError("TV art list request timed out")
-            return cast(List[Dict[str, Any]], art_list)
-
         try:
-            art_list = fetch_art_list()
+            art_list = self._fetch_art_list()
             user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
             self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
             return art_list
@@ -803,7 +860,7 @@ class SamsungFrameClient:
         """Hard reboot TV via 5s power hold. Does not wait for TV to come back.
 
         Returns:
-            True if command was sent
+            True if hold_key was sent successfully, False otherwise
         """
         if not self.tv:
             self.logger.error("Not connected to TV - call connect() first")
@@ -812,11 +869,12 @@ class SamsungFrameClient:
         try:
             self.logger.info("Sending hold_key(KEY_POWER, 5) for hard reboot...")
             self.tv.hold_key("KEY_POWER", 5)
-        except Exception:
-            pass
-
-        self.close()
-        return True
+            return True
+        except Exception as e:
+            self.logger.error(f"hold_key failed: {e}")
+            return False
+        finally:
+            self.close()
 
     def close(self) -> None:
         """Close connection to TV."""
