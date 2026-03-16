@@ -111,55 +111,66 @@ class BatchUploadSummary(BaseModel):
 
 
 class ImageConverter:
-    """Convert HEIC to JPG; pass through JPG/PNG unchanged."""
+    """Downsize all images to 4K and under max file size; convert HEIC to JPG."""
 
     MAX_WIDTH = 3840
     MAX_HEIGHT = 2160
     JPG_QUALITY = 95
-    MAX_SIZE_MB = 10.0
 
     def __init__(self, temp_dir: str):
         self.temp_dir = Path(temp_dir)
         self.logger = get_logger(f"{__name__}.ImageConverter")
+        cfg = get_config()
+        self.max_size_mb = cfg.samsung_frame.max_image_size_mb
 
     def convert_if_needed(self, image_path: Path) -> ConversionResult:
-        """Convert HEIC to JPG; pass through JPG and PNG unchanged."""
+        """Downsize to 4K and compress under max_image_size_mb. Convert HEIC to JPG."""
         original_size_mb = image_path.stat().st_size / (1024 * 1024)
-
-        # Pass through JPG and PNG unchanged
         ext = image_path.suffix.lower()
-        if ext in [".jpg", ".jpeg", ".png"]:
-            return ConversionResult(
-                source_path=str(image_path),
-                converted_path=None,
-                success=True,
-                original_size_mb=original_size_mb,
-                converted_size_mb=None,
-            )
 
-        # Convert HEIC to JPG
         try:
             with Image.open(image_path) as raw_img:
                 img: Image.Image = raw_img
-                # Convert to RGB (HEIC may have transparency)
+                width, height = img.size
+                needs_resize = width > self.MAX_WIDTH or height > self.MAX_HEIGHT
+                needs_compress = original_size_mb > self.max_size_mb
+                is_heic = ext == ".heic"
+
+                if not needs_resize and not needs_compress and not is_heic:
+                    return ConversionResult(
+                        source_path=str(image_path),
+                        converted_path=None,
+                        success=True,
+                        original_size_mb=original_size_mb,
+                        converted_size_mb=None,
+                    )
+
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
 
-                # Resize if needed
-                img = self._resize_if_needed(img)
+                if needs_resize:
+                    img = self._resize_if_needed(img)
 
-                # Save to temp directory with unique name (avoid collisions from nested dirs)
                 path_hash = hashlib.md5(str(image_path).encode()).hexdigest()[:8]
-                output_path = self.temp_dir / f"{image_path.stem}_{path_hash}.jpg"
-                success = self._compress_to_limit(img, output_path)
+                out_ext = "jpg" if is_heic else ext.lstrip(".")
+                if out_ext == "jpeg":
+                    out_ext = "jpg"
+                output_path = self.temp_dir / f"{image_path.stem}_{path_hash}.{out_ext}"
 
-                if not success:
-                    return ConversionResult(
-                        source_path=str(image_path),
-                        success=False,
-                        error_message=f"Could not compress below {self.MAX_SIZE_MB}MB",
-                        original_size_mb=original_size_mb,
-                    )
+                if out_ext == "png" and not needs_compress:
+                    img.save(output_path, format="PNG", optimize=True)
+                else:
+                    if out_ext == "png":
+                        out_ext = "jpg"
+                        output_path = output_path.with_suffix(".jpg")
+                    success = self._compress_to_limit(img, output_path)
+                    if not success:
+                        return ConversionResult(
+                            source_path=str(image_path),
+                            success=False,
+                            error_message=f"Could not compress below {self.max_size_mb}MB",
+                            original_size_mb=original_size_mb,
+                        )
 
                 converted_size_mb = output_path.stat().st_size / (1024 * 1024)
                 self.logger.debug(
@@ -200,12 +211,12 @@ class ImageConverter:
         return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
     def _compress_to_limit(self, img: Image.Image, output_path: Path) -> bool:
-        """Save with decreasing quality until <10MB."""
+        """Save with decreasing quality until under max_size_mb."""
         for quality in range(self.JPG_QUALITY, 69, -5):  # 95, 90, 85, 80, 75, 70
             img.save(output_path, format="JPEG", quality=quality, optimize=True)
             size_mb = output_path.stat().st_size / (1024 * 1024)
 
-            if size_mb <= self.MAX_SIZE_MB:
+            if size_mb <= self.max_size_mb:
                 if quality < self.JPG_QUALITY:
                     self.logger.info(f"Compressed to quality {quality} ({size_mb:.2f}MB)")
                 return True
@@ -507,21 +518,15 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error(f"Source directory not found: {args.source_dir}")
         return 1
 
-    # Connect to TV
+    # Connect to TV and ensure art mode
     client = SamsungFrameClient(timeout=args.timeout)
     logger.info(f"Connecting to TV at {client.host}:{client.port} (timeout={args.timeout}s)...")
     if not client.connect():
         logger.error("Failed to connect to TV")
         return 1
 
-    # Verify TV art API is responsive before starting
-    try:
-        logger.info("Verifying TV connection...")
-        client.get_available_art_strict()
-        logger.info("TV connection verified and stable")
-    except Exception as e:
-        logger.error(f"TV connection test failed: {e}")
-        logger.error("TV appears connected but art API is not responding - check TV status")
+    if not client.ensure_art_mode():
+        logger.error("TV connected but art mode not available — check TV status")
         return 1
 
     # Discover images
@@ -601,7 +606,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                 logger.error("Failed to reconnect to TV")
                 return 1
 
-        matte = args.matte or cfg.samsung_frame.default_matte
+        matte = args.matte
         logger.info(f"Uploading {processed_count} images from temp dir...")
         upload_summary = client.upload_images_from_folder(temp_dir, matte=matte)
 
@@ -746,8 +751,8 @@ def main() -> int:
 
     parser.add_argument(
         "--matte",
-        default=None,
-        help=f"Matte style (default: {cfg.samsung_frame.default_matte})",
+        default=cfg.samsung_frame.default_matte,
+        help="Matte style (default: %(default)s)",
     )
 
     parser.add_argument(
