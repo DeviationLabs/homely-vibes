@@ -682,9 +682,7 @@ class SamsungFrameClient:
                 if "slideshow_image_changed" in err_str:
                     self.logger.info("Slideshow confirmed running (image changed event)")
                     return True
-                self.logger.warning(
-                    f"Slideshow attempt {attempt}/3 failed: {e}"
-                )
+                self.logger.warning(f"Slideshow attempt {attempt}/3 failed: {e}")
                 time.sleep(2)
 
         self.logger.error("Failed to start slideshow after 3 attempts")
