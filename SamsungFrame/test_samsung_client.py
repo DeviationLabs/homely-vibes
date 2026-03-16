@@ -682,14 +682,37 @@ class TestReboot:
 
 class TestRebootAndReconnect:
     @patch("time.sleep")
-    def test_reboot_fails_aborts_early(self, _sleep: Mock) -> None:
-        """reboot() returns False only when not connected (tv is None)."""
+    def test_reboot_fails_wol_fallback(self, _sleep: Mock) -> None:
+        """When not connected, falls back to WoL. Aborts if WoL also fails."""
         client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        # tv is None — reboot() returns False, _reboot_and_reconnect aborts
 
-        result = client._reboot_and_reconnect()
+        with patch.object(client, "_send_wol", return_value=False):
+            result = client._reboot_and_reconnect()
 
         assert result is False
+
+    @patch("time.sleep")
+    @patch("SamsungFrame.samsung_client.SamsungTVWS")
+    @patch("os.path.exists", return_value=True)
+    @patch("os.chmod")
+    def test_reboot_fails_wol_succeeds(
+        self, _chmod: Mock, _exists: Mock, mock_tv_cls: Mock, _sleep: Mock
+    ) -> None:
+        """When not connected, WoL wakes TV and reconnects."""
+        mock_tv = Mock()
+        mock_tv.art().supported.return_value = True
+        mock_tv.art().available.return_value = [{"content_id": "MY_F001"}]
+        mock_tv_cls.return_value = mock_tv
+
+        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+
+        with (
+            patch.object(client, "_send_wol", return_value=True),
+            patch.object(client, "_wait_for_power", return_value=True),
+        ):
+            result = client._reboot_and_reconnect()
+
+        assert result is True
 
     @patch("time.sleep")
     @patch("SamsungFrame.samsung_client.SamsungTVWS")

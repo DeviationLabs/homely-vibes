@@ -535,8 +535,11 @@ class SamsungFrameClient:
     def _reboot_and_reconnect(self, max_attempts: int = 3) -> bool:
         """Reboot TV, poll for power cycle, reconnect into art mode."""
         if not self.reboot():
-            self.logger.error("Reboot command failed — cannot proceed")
-            return False
+            # No WebSocket connection — try WoL to wake TV instead
+            self.logger.info("Cannot reboot (not connected) — trying WoL wake...")
+            if not self._send_wol():
+                self.logger.error("No connection and WoL failed — cannot proceed")
+                return False
 
         # Wait for TV to go down (or timeout — it may already be restarting)
         self._wait_for_power(target_on=False, timeout=15, poll_interval=2)
