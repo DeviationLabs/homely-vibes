@@ -615,6 +615,22 @@ class TestConnectReady:
             assert client.connect_ready() is True
 
     @patch("time.sleep")
+    def test_standby_art_fails_reboots(self, _sleep: Mock) -> None:
+        """Phase 2: standby connect ok but art fails — falls back to reboot."""
+        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+
+        connect_results = iter([False, True])
+
+        with (
+            patch.object(client, "connect", side_effect=lambda: next(connect_results)),
+            patch.object(client, "_is_tv_reachable", return_value=True),
+            patch.object(client, "ensure_art_mode", return_value=False),
+            patch.object(client, "_reboot_and_reconnect", return_value=True) as reboot_mock,
+        ):
+            assert client.connect_ready() is True
+            reboot_mock.assert_called_once()
+
+    @patch("time.sleep")
     def test_all_phases_fail(self, _sleep: Mock) -> None:
         client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
 
@@ -642,7 +658,8 @@ class TestReboot:
         mock_tv.hold_key.assert_called_once_with("KEY_POWER", 5)
         mock_tv.close.assert_called_once()
 
-    def test_reboot_hold_key_fails(self) -> None:
+    def test_reboot_hold_key_exception_is_success(self) -> None:
+        """WebSocket drops mid-hold when TV reboots — exception is expected."""
         mock_tv = Mock()
         mock_tv.hold_key.side_effect = OSError("Connection lost")
         client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
@@ -650,7 +667,7 @@ class TestReboot:
 
         result = client.reboot()
 
-        assert result is False
+        assert result is True
         mock_tv.close.assert_called_once()
 
     def test_reboot_closes_connection_on_success(self) -> None:
@@ -666,9 +683,9 @@ class TestReboot:
 class TestRebootAndReconnect:
     @patch("time.sleep")
     def test_reboot_fails_aborts_early(self, _sleep: Mock) -> None:
+        """reboot() returns False only when not connected (tv is None)."""
         client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = Mock()
-        client.tv.hold_key.side_effect = OSError("fail")
+        # tv is None — reboot() returns False, _reboot_and_reconnect aborts
 
         result = client._reboot_and_reconnect()
 

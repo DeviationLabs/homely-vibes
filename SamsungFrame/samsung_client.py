@@ -173,7 +173,10 @@ class SamsungFrameClient:
             self.logger.info("TV in standby, waiting for WebSocket...")
             time.sleep(5)
             if self.connect():
-                return self.ensure_art_mode()
+                if self.ensure_art_mode():
+                    return True
+                self.logger.warning("Standby connect ok but art mode failed — rebooting...")
+                return self._reboot_and_reconnect()
 
         # Phase 3: TV unreachable — try Wake-on-LAN
         if self._send_wol():
@@ -183,7 +186,10 @@ class SamsungFrameClient:
             # Give WebSocket time to come up after power-on
             time.sleep(5)
             if self.connect():
-                return self.ensure_art_mode()
+                if self.ensure_art_mode():
+                    return True
+                self.logger.warning("WoL connect ok but art mode failed — rebooting...")
+                return self._reboot_and_reconnect()
 
         self.logger.error("Cannot reach TV — verify power and network")
         return False
@@ -859,8 +865,9 @@ class SamsungFrameClient:
     def reboot(self) -> bool:
         """Hard reboot TV via 5s power hold. Does not wait for TV to come back.
 
-        Returns:
-            True if hold_key was sent successfully, False otherwise
+        hold_key sends Press, sleeps 5s, sends Release. The TV reboots mid-hold,
+        dropping the WebSocket — the resulting exception is the expected success path.
+        Always returns True once hold_key is called.
         """
         if not self.tv:
             self.logger.error("Not connected to TV - call connect() first")
@@ -869,12 +876,11 @@ class SamsungFrameClient:
         try:
             self.logger.info("Sending hold_key(KEY_POWER, 5) for hard reboot...")
             self.tv.hold_key("KEY_POWER", 5)
-            return True
         except Exception as e:
-            self.logger.error(f"hold_key failed: {e}")
-            return False
+            self.logger.info(f"hold_key interrupted (expected during reboot): {e}")
         finally:
             self.close()
+        return True
 
     def close(self) -> None:
         """Close connection to TV."""
