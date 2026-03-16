@@ -431,25 +431,59 @@ class SamsungFrameClient:
         time.sleep(2)
         return self.connect()
 
-    def _reboot_and_reconnect(self, max_attempts: int = 5) -> bool:
-        """Reboot TV and reconnect with exponential backoff (max 5min between attempts)."""
-        self.reboot()
-        backoff = 30
+    def _wait_for_power(self, target_on: bool, timeout: int = 120, poll_interval: int = 3) -> bool:
+        """Poll REST API until TV power state matches target or timeout.
 
+        REST API (HTTP GET on port 8001) works without WebSocket — lightweight check.
+        """
+        from samsungtvws.rest import SamsungTVRest
+        from samsungtvws.exceptions import HttpApiError
+
+        rest = SamsungTVRest(self.host, port=8001, timeout=5)
+        state_name = "on" if target_on else "off"
+        elapsed = 0
+
+        while elapsed < timeout:
+            try:
+                is_on = rest.rest_power_state()
+                if is_on == target_on:
+                    self.logger.info(f"TV power state is {state_name}")
+                    return True
+            except (HttpApiError, Exception):
+                if not target_on:
+                    # Connection refused = TV is off
+                    self.logger.info("TV is off (REST unreachable)")
+                    return True
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+        self.logger.warning(f"Timed out waiting for TV to be {state_name}")
+        return False
+
+    def _reboot_and_reconnect(self, max_attempts: int = 3) -> bool:
+        """Reboot TV, poll for power cycle, reconnect into art mode."""
+        self.reboot()
+
+        # Wait for TV to go down (or timeout — it may already be restarting)
+        self._wait_for_power(target_on=False, timeout=15, poll_interval=2)
+
+        # Wait for TV to come back up
+        if not self._wait_for_power(target_on=True, timeout=120, poll_interval=5):
+            self.logger.error("TV did not come back after reboot")
+            return False
+
+        # TV is up — connect and get into art mode
         for attempt in range(1, max_attempts + 1):
-            self.logger.info(
-                f"Waiting {backoff}s for TV to restart (attempt {attempt}/{max_attempts})..."
-            )
-            time.sleep(backoff)
+            self.logger.info(f"Connecting to art mode (attempt {attempt}/{max_attempts})...")
             try:
                 if self.connect() and self.ensure_art_mode():
                     self.logger.info("Reconnected after reboot, art mode verified")
                     return True
             except Exception:
                 self.close()
-            backoff = min(backoff * 2, 300)
+            time.sleep(5)
 
-        self.logger.error("TV did not recover after reboot")
+        self.logger.error("TV is up but art mode failed")
         return False
 
     def get_available_art_strict(self) -> List[Dict[str, Any]]:
@@ -580,6 +614,15 @@ class SamsungFrameClient:
                 self.logger.error(f"Failed to update matte for art ID {content_id}: {e}")
                 failed += 1
 
+            time.sleep(1)
+            try:
+                self.ping()
+            except Exception:
+                self.logger.warning("Connection lost, reconnecting...")
+                if not self._reconnect():
+                    self.logger.error("Reconnect failed — stopping matte updates")
+                    break
+
         self.logger.info(
             f"Matte update complete: {updated} updated, {skipped} skipped, {failed} failed"
         )
@@ -591,15 +634,26 @@ class SamsungFrameClient:
             return False
 
         try:
+            status = self.tv.art().get_artmode()
+            if status == "on":
+                self.logger.info("Already in art mode")
+                return True
+        except Exception:
+            pass
+
+        try:
             self.tv.art().set_artmode(True)
             self.logger.info("Art mode enabled")
             return True
         except Exception as e:
+            if "timed out" in str(e).lower():
+                self.logger.debug("Art mode set timed out (likely already in art mode)")
+                return True
             self.logger.error(f"Error enabling art mode: {e}")
             return False
 
     def start_slideshow(self, duration: int = 15, shuffle: bool = True) -> bool:
-        """Start slideshow with automatic image cycling.
+        """Start slideshow with automatic image cycling. Retries up to 3 times.
 
         Args:
             duration: Time in minutes between image changes (default: 15)
@@ -612,18 +666,29 @@ class SamsungFrameClient:
             self.logger.error("Not connected to TV - call connect() first")
             return False
 
-        try:
-            self.enable_art_mode()
-            # Start slideshow for user photos (category 2)
-            self.tv.art().set_slideshow_status(duration=duration, type=shuffle, category=2)
-            self.logger.info(
-                f"Slideshow started: {duration}min interval, "
-                f"{'shuffle' if shuffle else 'sequential'} mode"
-            )
-            return True
-        except Exception as e:
-            self.logger.error(f"Error starting slideshow: {e}")
-            return False
+        self.enable_art_mode()
+
+        for attempt in range(1, 4):
+            try:
+                self.tv.art().set_slideshow_status(duration=duration, type=shuffle, category=2)
+                self.logger.info(
+                    f"Slideshow started: {duration}min interval, "
+                    f"{'shuffle' if shuffle else 'sequential'} mode"
+                )
+                return True
+            except Exception as e:
+                # slideshow_image_changed response means it's actually working
+                err_str = str(e)
+                if "slideshow_image_changed" in err_str:
+                    self.logger.info("Slideshow confirmed running (image changed event)")
+                    return True
+                self.logger.warning(
+                    f"Slideshow attempt {attempt}/3 failed: {e}"
+                )
+                time.sleep(2)
+
+        self.logger.error("Failed to start slideshow after 3 attempts")
+        return False
 
     def cycle_images(
         self, period: int = 15, user_photos_only: bool = True, shuffle: bool = True
@@ -737,14 +802,10 @@ class SamsungFrameClient:
         return {"total": len(art_list), "downloaded": downloaded, "failed": failed}
 
     def reboot(self) -> bool:
-        """Reboot TV via long power hold, then ensure art mode on return.
-
-        Strategy: hold_key 5s triggers hard reboot on Samsung TVs regardless
-        of current mode (art or TV). After reboot, reconnect and switch to
-        art mode via ensure_art_mode().
+        """Hard reboot TV via 5s power hold. Does not wait for TV to come back.
 
         Returns:
-            True if TV rebooted and returned to art mode
+            True if command was sent
         """
         if not self.tv:
             self.logger.error("Not connected to TV - call connect() first")
@@ -755,6 +816,7 @@ class SamsungFrameClient:
             self.tv.hold_key("KEY_POWER", 5)
         except Exception:
             pass
+
         self.close()
         return True
 

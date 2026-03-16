@@ -45,18 +45,18 @@ def main() -> int:
     )
 
     matte_parser = subparsers.add_parser(
-        "update-mattes", help="Update matte style for user-uploaded art (use --all for all art)"
+        "update-mattes", help="Update matte style for user-uploaded art"
     )
     matte_parser.add_argument(
         "--matte",
         type=str,
-        default=None,
-        help=f"Matte style (default: {cfg.samsung_frame.default_matte})",
+        default=cfg.samsung_frame.default_matte,
+        help="Matte style (default: %(default)s)",
     )
     matte_parser.add_argument(
-        "--all",
+        "--include-preinstalled",
         action="store_true",
-        help="Update all art (including Samsung pre-installed art)",
+        help="Include Samsung pre-installed art",
     )
 
     cycle_parser = subparsers.add_parser(
@@ -279,7 +279,6 @@ def download_thumbnails(args: argparse.Namespace) -> int:
 
 def update_mattes(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
-    cfg = get_config()
 
     try:
         client = SamsungFrameClient()
@@ -289,8 +288,8 @@ def update_mattes(args: argparse.Namespace) -> int:
             logger.error(f"Failed to connect to TV at {client.host}")
             return 1
 
-        matte = args.matte or cfg.samsung_frame.default_matte
-        user_photos_only = not args.all
+        matte = args.matte
+        user_photos_only = not args.include_preinstalled
 
         if user_photos_only:
             logger.info(f"Updating user-uploaded art mattes to '{matte}'...")
@@ -409,12 +408,8 @@ def reboot_tv(_args: argparse.Namespace) -> int:
         client = SamsungFrameClient()
         logger.info(f"Connecting to Samsung Frame TV at {client.host}...")
 
-        # Send reboot if TV is reachable, then always reconnect into art mode
-        if client.connect():
-            client.reboot()
-        else:
-            logger.info("TV not reachable — will attempt to reconnect")
-
+        # _reboot_and_reconnect handles the full flow: reboot + wait + reconnect
+        client.connect()
         if client._reboot_and_reconnect():
             logger.info("TV rebooted and in art mode")
             client.close()
