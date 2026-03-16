@@ -49,6 +49,15 @@ def main() -> int:
     subparsers.add_parser("list-mattes", help="List available matte styles")
     subparsers.add_parser("reboot", help="Reboot the TV")
 
+    purge_parser = subparsers.add_parser("purge", help="Delete user art older than N days")
+    purge_parser.add_argument(
+        "--days",
+        type=int,
+        default=1,
+        help="Delete art older than this many days (default: %(default)s)",
+    )
+    purge_parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
+
     delete_parser = subparsers.add_parser("delete-all", help="Delete all user-uploaded art from TV")
     delete_parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
 
@@ -135,6 +144,8 @@ def main() -> int:
         return reboot_tv(args)
     elif args.command == "delete-all":
         return delete_all(args)
+    elif args.command == "purge":
+        return purge_art(args)
 
     return 0
 
@@ -336,6 +347,52 @@ def delete_all(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Error deleting art: {e}")
+        return 1
+
+
+def purge_art(args: argparse.Namespace) -> int:
+    logger = get_logger(__name__)
+
+    try:
+        with tv_connection() as client:
+            from SamsungFrame.batch_upload import delete_art_by_ids, get_stale_art_ids
+
+            art_list = client.get_available_art()
+            max_age_hours = args.days * 24
+            stale_ids = get_stale_art_ids(art_list, max_age_hours=max_age_hours)
+
+            if not stale_ids:
+                logger.info(f"No user art older than {args.days} day(s)")
+                return 0
+
+            min_images = cfg.samsung_frame.min_images
+            user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
+            remaining = len(user_art) - len(stale_ids)
+            if remaining < min_images:
+                keep_count = min_images - remaining
+                stale_ids = stale_ids[keep_count:]
+                logger.info(f"Keeping {keep_count} stale images to maintain min {min_images}")
+
+            if not stale_ids:
+                logger.info("No art to purge after applying min_images safety")
+                return 0
+
+            logger.info(f"Found {len(stale_ids)} art items older than {args.days} day(s)")
+            if not args.force:
+                confirm = input(f"Delete {len(stale_ids)} items? [y/N] ")
+                if confirm.lower() != "y":
+                    logger.info("Purge cancelled")
+                    return 0
+
+            result = delete_art_by_ids(client, stale_ids)
+            logger.info(
+                f"Results: {result['deleted']} deleted, "
+                f"{result['failed']} failed (Total: {result['total']})"
+            )
+            return 0 if result["failed"] == 0 else 1
+
+    except Exception as e:
+        logger.error(f"Error purging art: {e}")
         return 1
 
 
