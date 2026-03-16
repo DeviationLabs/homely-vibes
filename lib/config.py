@@ -182,6 +182,7 @@ class SamsungFrameConfig:
     """Samsung Frame TV configuration"""
 
     ip: str
+    mac: str
     port: int
     token_file: str
     default_matte: str
