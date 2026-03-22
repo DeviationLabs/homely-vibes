@@ -88,7 +88,7 @@ class HeartbeatMonitor:
         self.pushover.send_message(
             message,
             title=title,
-            priority=1,  # High priority
+            priority=2,  # Emergency — nodes down
         )
         self.last_notification_time = time.time()
         logger.info(f"Sent notification: {message}")

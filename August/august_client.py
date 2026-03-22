@@ -36,6 +36,7 @@ class AugustClient:
         self.logger = get_logger(__name__)
         self.session: Optional[aiohttp.ClientSession] = None
         self.api: Optional[ApiAsync] = None
+        self.api_auth: Optional[ApiAsync] = None
         self.authenticator: Optional[AuthenticatorAsync] = None
         self.access_token: Optional[str] = None
         self.locks: Dict[str, Lock] = {}
@@ -69,12 +70,16 @@ class AugustClient:
         if self.session is None:
             cfg = get_config()
             self.session = aiohttp.ClientSession()
-            self.api = ApiAsync(self.session)
+            from yalexs.const import Brand
+
+            # Auth uses AUGUST brand, but API endpoints moved to YALE_AUGUST
+            self.api_auth = ApiAsync(self.session, brand=Brand.AUGUST)
+            self.api = ApiAsync(self.session, brand=Brand.YALE_AUGUST)
             # Use token caching to persist authentication across restarts
             cache_file = cfg.august.token_file
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
             self.authenticator = AuthenticatorAsync(
-                self.api,
+                self.api_auth,
                 "email",
                 self.email,
                 self.password,
@@ -89,6 +94,7 @@ class AugustClient:
             await self.session.close()
             self.session = None
             self.api = None
+            self.api_auth = None
             self.authenticator = None
 
     async def authenticate(self) -> bool:

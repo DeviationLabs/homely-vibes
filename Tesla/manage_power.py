@@ -354,7 +354,7 @@ def main() -> None:
             manager.pushover.send_message(
                 f"Powerwall monitoring error: {e}",
                 title="Powerwall Alert",
-                priority=1,
+                priority=2,
             )
 
     finally:
