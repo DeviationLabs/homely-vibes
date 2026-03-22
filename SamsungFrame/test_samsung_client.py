@@ -596,10 +596,10 @@ class TestTimeout:
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("os.path.exists", return_value=True)
     @patch("os.chmod")
-    def test_timeout_passed_to_tv(
-        self, _chmod: Mock, _exists: Mock, mock_tv_cls: Mock
-    ) -> None:
-        mock_tv_cls.return_value = Mock(art=Mock(return_value=Mock(supported=Mock(return_value=True))))
+    def test_timeout_passed_to_tv(self, _chmod: Mock, _exists: Mock, mock_tv_cls: Mock) -> None:
+        mock_tv_cls.return_value = Mock(
+            art=Mock(return_value=Mock(supported=Mock(return_value=True)))
+        )
 
         client = make_client(timeout=120)
         client.connect()
