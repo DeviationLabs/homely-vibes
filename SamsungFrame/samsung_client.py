@@ -223,8 +223,9 @@ class SamsungFrameClient:
         Handles wake-from-off via WoL/SmartThings, standby via REST detection,
         and direct WebSocket connect when TV is already on.
         """
-        self._send_wol()
-        self._smartthings_power_on()
+        wol_sent = self._send_wol()
+        st_sent = self._smartthings_power_on()
+        woke = wol_sent or st_sent
 
         if self.connect():
             return True
@@ -236,8 +237,8 @@ class SamsungFrameClient:
             if self.connect():
                 return True
 
-        # TV still unreachable — wait for WoL/SmartThings to take effect
-        if self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
+        # TV still unreachable — only wait if a wake signal was actually sent
+        if woke and self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
             time.sleep(5)
             return self.connect()
 
