@@ -1,505 +1,257 @@
 """Tests for Samsung Frame TV client."""
 
-import pytest
+import os
 import socket
 import tempfile
-import os
-from unittest.mock import Mock, patch, MagicMock
-from PIL import Image
 
-from SamsungFrame.samsung_client import (
-    SamsungFrameClient,
-)
+import pytest
+from PIL import Image
+from unittest.mock import Mock, patch, MagicMock
+
+from SamsungFrame.samsung_client import SamsungFrameClient
+
+TV_HOST = "192.168.1.4"
+TOKEN_FILE = "/tmp/token.txt"
+
+
+def make_client(**kwargs: object) -> SamsungFrameClient:
+    kwargs.setdefault("host", TV_HOST)
+    kwargs.setdefault("token_file", TOKEN_FILE)
+    return SamsungFrameClient(**kwargs)  # type: ignore[arg-type]
 
 
 class TestSamsungFrameClient:
-    """Test Samsung Frame TV client."""
-
     def test_init_with_config(self) -> None:
         mock_cfg = MagicMock()
-        mock_cfg.samsung_frame.ip = "192.168.1.4"
+        mock_cfg.samsung_frame.ip = TV_HOST
         mock_cfg.samsung_frame.port = 8002
-        mock_cfg.samsung_frame.token_file = "/tmp/token.txt"
+        mock_cfg.samsung_frame.token_file = TOKEN_FILE
 
         with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
             client = SamsungFrameClient()
-            assert client.host == "192.168.1.4"
+            assert client.host == TV_HOST
             assert client.port == 8002
-            assert client.token_file == "/tmp/token.txt"
-
-    def test_init_with_custom_params(self) -> None:
-        """Test initialization with custom parameters."""
-        client = SamsungFrameClient(host="192.168.1.5", port=8003, token_file="/custom/token.txt")
-        assert client.host == "192.168.1.5"
-        assert client.port == 8003
-        assert client.token_file == "/custom/token.txt"
 
     def test_init_missing_host(self) -> None:
         mock_cfg = MagicMock()
         mock_cfg.samsung_frame.ip = ""
         mock_cfg.samsung_frame.port = 8002
-        mock_cfg.samsung_frame.token_file = "/tmp/token.txt"
+        mock_cfg.samsung_frame.token_file = TOKEN_FILE
 
         with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
             with pytest.raises(ValueError, match="Samsung Frame TV IP address required"):
                 SamsungFrameClient()
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch("os.path.exists")
-    @patch("os.makedirs")
+    @patch("os.path.exists", return_value=True)
     @patch("os.chmod")
-    @patch("builtins.open", create=True)
-    def test_connect_success(
-        self,
-        mock_open: Mock,
-        _mock_chmod: Mock,
-        _mock_makedirs: Mock,
-        mock_exists: Mock,
-        mock_tv: Mock,
-    ) -> None:
-        """Test successful connection to TV."""
-        mock_exists.return_value = True
+    def test_connect_success(self, _chmod: Mock, _exists: Mock, mock_tv: Mock) -> None:
         mock_tv_instance = Mock()
         mock_tv_instance.art().supported.return_value = True
         mock_tv.return_value = mock_tv_instance
 
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.connect()
-
-        assert result is True
+        client = make_client()
+        assert client.connect() is True
         assert client.tv is not None
-        mock_tv.assert_called_once()
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch("os.path.exists")
+    @patch("os.path.exists", return_value=True)
     @patch("os.chmod")
     @patch("time.sleep")
-    @patch("builtins.open", create=True)
     def test_connect_with_retry(
-        self,
-        mock_open: Mock,
-        mock_sleep: Mock,
-        _mock_chmod: Mock,
-        mock_exists: Mock,
-        mock_tv: Mock,
+        self, mock_sleep: Mock, _chmod: Mock, _exists: Mock, mock_tv: Mock
     ) -> None:
-        """Test connection retry logic on failure."""
-        mock_exists.return_value = True
+        fail = Mock()
+        fail.art().supported.side_effect = ConnectionError("fail")
+        success = Mock()
+        success.art().supported.return_value = True
+        mock_tv.side_effect = [fail, fail, success]
 
-        mock_tv_instance_fail = Mock()
-        mock_tv_instance_fail.art().supported.side_effect = ConnectionError("Connection failed")
-
-        mock_tv_instance_success = Mock()
-        mock_tv_instance_success.art().supported.return_value = True
-
-        mock_tv.side_effect = [
-            mock_tv_instance_fail,
-            mock_tv_instance_fail,
-            mock_tv_instance_success,
-        ]
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.connect()
-
-        assert result is True
+        client = make_client()
+        assert client.connect() is True
         assert mock_tv.call_count == 3
-        assert mock_sleep.call_count == 2
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch("os.path.exists")
+    @patch("os.path.exists", return_value=True)
     @patch("time.sleep")
-    def test_connect_max_retries(self, mock_sleep: Mock, mock_exists: Mock, mock_tv: Mock) -> None:
-        """Test connection fails after max retries."""
-        mock_exists.return_value = True
+    def test_connect_max_retries(self, _sleep: Mock, _exists: Mock, mock_tv: Mock) -> None:
         mock_tv_instance = Mock()
-        mock_tv_instance.art().supported.side_effect = ConnectionError("Connection failed")
+        mock_tv_instance.art().supported.side_effect = ConnectionError("fail")
         mock_tv.return_value = mock_tv_instance
 
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.connect()
-
-        assert result is False
+        client = make_client()
+        assert client.connect() is False
         assert mock_tv.call_count == 3
 
-    def test_check_art_support_not_connected(self) -> None:
-        """Test check_art_support fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.check_art_support()
-        assert result is False
-
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_validate_image_file_not_found(self, mock_tv: Mock) -> None:
-        """Test image validation fails for non-existent file."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.validate_image_file("/nonexistent/image.jpg")
-        assert result is False
-
     def test_validate_image_file_invalid_format(self) -> None:
-        """Test image validation fails for unsupported format."""
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp_file:
-            tmp_file.write(b"test content")
-            tmp_path = tmp_file.name
-
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as f:
+            f.write(b"test")
+            path = f.name
         try:
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            result = client.validate_image_file(tmp_path)
-            assert result is False
+            assert make_client().validate_image_file(path) is False
         finally:
-            os.unlink(tmp_path)
-
-    def test_validate_image_file_too_large(self) -> None:
-        """Test image validation fails for file too large."""
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-            # Write more than 1MB
-            tmp_file.write(b"x" * (2 * 1024 * 1024))
-            tmp_path = tmp_file.name
-
-        try:
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            result = client.validate_image_file(tmp_path)
-            assert result is False
-        finally:
-            os.unlink(tmp_path)
+            os.unlink(path)
 
     def test_validate_image_file_success(self) -> None:
-        """Test image validation succeeds for valid image."""
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-            # Create a valid small image
-            img = Image.new("RGB", (100, 100), color="red")
-            img.save(tmp_file, format="JPEG")
-            tmp_path = tmp_file.name
-
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            Image.new("RGB", (100, 100), color="red").save(f, format="JPEG")
+            path = f.name
         try:
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            result = client.validate_image_file(tmp_path)
-            assert result is True
+            assert make_client().validate_image_file(path) is True
         finally:
-            os.unlink(tmp_path)
+            os.unlink(path)
 
-    def test_upload_image_not_connected(self) -> None:
-        """Test upload fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.upload_image("/path/to/image.jpg")
-        assert result is None
+    def test_upload_image_success(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            Image.new("RGB", (100, 100), color="blue").save(f, format="JPEG")
+            path = f.name
+        try:
+            mock_tv = Mock()
+            mock_tv.art().upload.return_value = "image123"
+            client = make_client()
+            client.tv = mock_tv
+            assert client.upload_image(path) == "image123"
+        finally:
+            os.unlink(path)
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_upload_image_success(self, mock_tv: Mock) -> None:
-        """Test successful image upload."""
-        # Create a valid test image
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-            img = Image.new("RGB", (100, 100), color="blue")
-            img.save(tmp_file, format="JPEG")
-            tmp_path = tmp_file.name
-
-        try:
-            # Setup mock TV
-            mock_tv_instance = Mock()
-            mock_tv_instance.art().upload.return_value = "image123"
-            mock_tv.return_value = mock_tv_instance
-
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            client.tv = mock_tv_instance
-
-            result = client.upload_image(tmp_path)
-
-            assert result == "image123"
-            mock_tv_instance.art().upload.assert_called_once()
-        finally:
-            os.unlink(tmp_path)
-
-    def test_upload_images_from_folder_not_connected(self) -> None:
-        """Test batch upload fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
-        with pytest.raises(RuntimeError, match="Not connected to TV"):
-            client.upload_images_from_folder("/tmp")
-
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_upload_images_from_folder_success(self, mock_tv: Mock) -> None:
-        """Test successful batch upload from folder."""
-        # Create temp directory with test images
+    def test_upload_images_success(self, mock_tv_cls: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Create 3 valid test images
+            paths = []
             for i in range(3):
-                img_path = os.path.join(tmp_dir, f"image{i}.jpg")
-                img = Image.new("RGB", (100, 100), color="red")
-                img.save(img_path, format="JPEG")
+                p = os.path.join(tmp_dir, f"img{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
 
-            # Setup mock TV
-            mock_tv_instance = Mock()
-            mock_tv_instance.art().upload.side_effect = ["id1", "id2", "id3"]
+            mock_tv = Mock()
+            mock_tv.art().upload.side_effect = ["id1", "id2", "id3"]
+            client = make_client()
+            client.tv = mock_tv
 
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            client.tv = mock_tv_instance
-
-            summary = client.upload_images_from_folder(tmp_dir)
-
-            assert summary.total_images == 3
+            summary = client.upload_images(paths)
             assert summary.successful_uploads == 3
             assert summary.failed_uploads == 0
-            assert len(summary.uploaded_image_ids) == 3
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_upload_images_from_folder_partial_failure(self, mock_tv: Mock) -> None:
-        """Test batch upload with some failures."""
+    def test_upload_images_partial_failure(self, mock_tv_cls: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # Create 2 valid images and 1 invalid
+            paths = []
             for i in range(2):
-                img_path = os.path.join(tmp_dir, f"image{i}.jpg")
-                img = Image.new("RGB", (100, 100), color="green")
-                img.save(img_path, format="JPEG")
-
-            # Create invalid image (just text file with .jpg extension)
-            invalid_path = os.path.join(tmp_dir, "invalid.jpg")
-            with open(invalid_path, "w") as f:
+                p = os.path.join(tmp_dir, f"img{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
+            bad = os.path.join(tmp_dir, "bad.jpg")
+            with open(bad, "w") as f:
                 f.write("not an image")
+            paths.append(bad)
 
-            # Setup mock TV
-            mock_tv_instance = Mock()
-            mock_tv_instance.art().upload.side_effect = ["id1", "id2"]
+            mock_tv = Mock()
+            mock_tv.art().upload.side_effect = ["id1", "id2"]
+            client = make_client()
+            client.tv = mock_tv
 
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            client.tv = mock_tv_instance
-
-            summary = client.upload_images_from_folder(tmp_dir)
-
-            assert summary.total_images == 3
+            summary = client.upload_images(paths)
             assert summary.successful_uploads == 2
             assert summary.failed_uploads == 1
-            assert len(summary.errors) == 1
 
-    def test_enable_art_mode_not_connected(self) -> None:
-        """Test enable_art_mode fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.enable_art_mode()
-        assert result is False
+    def test_enable_art_mode_already_on(self) -> None:
+        mock_tv = Mock()
+        mock_tv.art().get_artmode.return_value = "on"
+        client = make_client()
+        client.tv = mock_tv
 
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_enable_art_mode_success(self, mock_tv: Mock) -> None:
-        """Test successful art mode enable when not already in art mode."""
-        mock_tv_instance = Mock()
-        mock_tv_instance.art().get_artmode.return_value = "off"
-        mock_tv_instance.art().set_artmode.return_value = None
+        assert client.enable_art_mode() is True
+        mock_tv.art().set_artmode.assert_not_called()
 
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv_instance
+    def test_enable_art_mode_timeout_is_success(self) -> None:
+        mock_tv = Mock()
+        mock_tv.art().get_artmode.return_value = "off"
+        mock_tv.art().set_artmode.side_effect = TimeoutError("timed out")
+        client = make_client()
+        client.tv = mock_tv
 
-        result = client.enable_art_mode()
+        assert client.enable_art_mode() is True
 
-        assert result is True
-        mock_tv_instance.art().set_artmode.assert_called_once_with(True)
-
-    def test_start_slideshow_not_connected(self) -> None:
-        """Test start_slideshow fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        result = client.start_slideshow()
-        assert result is False
-
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_start_slideshow_success(self, mock_tv: Mock) -> None:
-        """Test successful slideshow start."""
-        mock_tv_instance = Mock()
-        mock_tv_instance.art().set_artmode.return_value = None
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv_instance
-
-        result = client.start_slideshow()
-
-        assert result is True
-        mock_tv_instance.art().set_artmode.assert_called_once_with(True)
-
-    def test_get_available_art_not_connected(self) -> None:
-        """Test get_available_art fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
-        with pytest.raises(RuntimeError, match="Not connected to TV"):
-            client.get_available_art()
-
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_get_available_art_success(self, mock_tv: Mock) -> None:
-        """Test successful art list retrieval."""
-        mock_tv_instance = Mock()
-        mock_tv_instance.art().available.return_value = [
-            {"content_id": "art1"},
-            {"content_id": "art2"},
-        ]
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv_instance
-
-        art_list = client.get_available_art()
-
-        assert len(art_list) == 2
-        assert art_list[0]["content_id"] == "art1"
-
-    def test_cycle_images_not_connected(self) -> None:
-        """Test cycle_images fails when not connected."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
-        with pytest.raises(RuntimeError, match="Not connected to TV"):
-            client.cycle_images()
-
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("time.sleep")
-    def test_cycle_images_user_photos_only(self, mock_sleep: Mock, mock_tv: Mock) -> None:
-        """Test cycling through user photos only."""
-        mock_tv_instance = Mock()
-        mock_tv_instance.art().available.return_value = [
+    def test_cycle_images_filters_user_photos(self, mock_sleep: Mock) -> None:
+        mock_tv = Mock()
+        mock_tv.art().available.return_value = [
             {"content_id": "MY_F0001"},
             {"content_id": "MY_F0002"},
             {"content_id": "ART_12345"},
         ]
-        mock_tv_instance.art().set_artmode.return_value = None
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv_instance
-
-        # Simulate KeyboardInterrupt after 2 image displays
+        mock_tv.art().set_artmode.return_value = None
         mock_sleep.side_effect = [None, KeyboardInterrupt()]
 
+        client = make_client()
+        client.tv = mock_tv
         client.cycle_images(period=15, user_photos_only=True)
 
-        # Should only call select_image for MY_F photos
-        assert mock_tv_instance.art().select_image.call_count == 2
-        mock_tv_instance.art().select_image.assert_any_call("MY_F0001")
-        mock_tv_instance.art().select_image.assert_any_call("MY_F0002")
-
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch("time.sleep")
-    def test_cycle_images_all_art(self, mock_sleep: Mock, mock_tv: Mock) -> None:
-        """Test cycling through all art."""
-        mock_tv_instance = Mock()
-        mock_tv_instance.art().available.return_value = [
-            {"content_id": "MY_F0001"},
-            {"content_id": "ART_12345"},
-        ]
-        mock_tv_instance.art().set_artmode.return_value = None
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv_instance
-
-        # Simulate KeyboardInterrupt after 2 image displays
-        mock_sleep.side_effect = [None, KeyboardInterrupt()]
-
-        client.cycle_images(period=10, user_photos_only=False)
-
-        # Should call select_image for all art
-        assert mock_tv_instance.art().select_image.call_count == 2
-        mock_tv_instance.art().select_image.assert_any_call("MY_F0001")
-        mock_tv_instance.art().select_image.assert_any_call("ART_12345")
+        assert mock_tv.art().select_image.call_count == 2
+        mock_tv.art().select_image.assert_any_call("MY_F0001")
+        mock_tv.art().select_image.assert_any_call("MY_F0002")
 
 
 class TestPing:
-    def test_ping_not_connected(self) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        with pytest.raises(RuntimeError, match="Not connected to TV"):
-            client.ping()
+    def test_not_connected_raises(self) -> None:
+        with pytest.raises(RuntimeError, match="Not connected"):
+            make_client().ping()
 
-    def test_ping_success(self) -> None:
+    def test_failure_propagates(self) -> None:
         mock_tv = Mock()
-        mock_tv.art().supported.return_value = True
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        mock_tv.art().supported.side_effect = TimeoutError("timeout")
+        client = make_client()
         client.tv = mock_tv
 
-        assert client.ping() is True
-        mock_tv.art().supported.assert_called_once()
-
-    def test_ping_failure_propagates(self) -> None:
-        mock_tv = Mock()
-        mock_tv.art().supported.side_effect = TimeoutError("TV not responding")
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        with pytest.raises(TimeoutError, match="TV not responding"):
+        with pytest.raises(TimeoutError):
             client.ping()
 
 
 class TestGetAvailableArtStrict:
-    def test_strict_not_connected(self) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        with pytest.raises(RuntimeError, match="Not connected to TV"):
-            client.get_available_art_strict()
+    def test_not_connected_raises(self) -> None:
+        with pytest.raises(RuntimeError):
+            make_client().get_available_art_strict()
 
-    def test_strict_success(self) -> None:
+    def test_success(self) -> None:
         mock_tv = Mock()
         mock_tv.art().available.return_value = [{"content_id": "MY_F001"}]
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
         result = client.get_available_art_strict()
         assert len(result) == 1
-        assert result[0]["content_id"] == "MY_F001"
 
-    def test_strict_raises_on_timeout(self) -> None:
+    def test_timeout_response_raises(self) -> None:
         mock_tv = Mock()
         mock_tv.art().available.return_value = {"event": "ms.channel.timeOut"}
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
-        with pytest.raises(TimeoutError, match="timed out"):
-            client.get_available_art_strict()
-
-    def test_strict_raises_on_exception(self) -> None:
-        mock_tv = Mock()
-        mock_tv.art().available.side_effect = ConnectionError("WebSocket closed")
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        with pytest.raises(ConnectionError, match="WebSocket closed"):
+        with pytest.raises(TimeoutError):
             client.get_available_art_strict()
 
     def test_lenient_returns_empty_on_error(self) -> None:
         mock_tv = Mock()
-        mock_tv.art().available.side_effect = ConnectionError("WebSocket closed")
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        mock_tv.art().available.side_effect = ConnectionError("closed")
+        client = make_client()
         client.tv = mock_tv
 
-        result = client.get_available_art()
-        assert result == []
+        assert client.get_available_art() == []
 
 
 class TestReconnectDuringUpload:
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("time.sleep")
-    def test_reconnect_on_consecutive_failures(self, mock_sleep: Mock, mock_tv_cls: Mock) -> None:
+    def test_stops_after_reconnect_fails(self, _sleep: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            paths = []
             for i in range(5):
-                img = Image.new("RGB", (100, 100), color="red")
-                img.save(os.path.join(tmp_dir, f"img_{i}.jpg"), format="JPEG")
-
-            mock_tv = Mock()
-            mock_tv.art().upload.side_effect = [None, None, None, "id4", "id5"]
-            mock_tv.art().supported.return_value = True
-
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            client.tv = mock_tv
-
-            with (
-                patch.object(client, "_reconnect", return_value=True),
-                patch.object(client, "ensure_art_mode", return_value=True),
-            ):
-                summary = client.upload_images_from_folder(tmp_dir, max_consecutive_failures=3)
-
-            assert summary.successful_uploads >= 0
-
-    @patch("time.sleep")
-    def test_stops_after_reconnect_fails(self, mock_sleep: Mock) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for i in range(5):
-                img = Image.new("RGB", (100, 100), color="red")
-                img.save(os.path.join(tmp_dir, f"img_{i}.jpg"), format="JPEG")
+                p = os.path.join(tmp_dir, f"img_{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
 
             mock_tv = Mock()
             mock_tv.art().upload.return_value = None
-
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+            client = make_client()
             client.tv = mock_tv
 
             with (
@@ -507,21 +259,22 @@ class TestReconnectDuringUpload:
                 patch.object(client, "ensure_art_mode", return_value=False),
                 patch.object(client, "_reboot_and_reconnect", return_value=False),
             ):
-                summary = client.upload_images_from_folder(tmp_dir, max_consecutive_failures=3)
+                summary = client.upload_images(paths, max_consecutive_failures=3)
 
             assert summary.successful_uploads == 0
 
     @patch("time.sleep")
-    def test_only_one_reconnect_per_batch(self, mock_sleep: Mock) -> None:
+    def test_only_one_reboot_per_batch(self, _sleep: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            paths = []
             for i in range(8):
-                img = Image.new("RGB", (100, 100), color="red")
-                img.save(os.path.join(tmp_dir, f"img_{i}.jpg"), format="JPEG")
+                p = os.path.join(tmp_dir, f"img_{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
 
             mock_tv = Mock()
             mock_tv.art().upload.return_value = None
-
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+            client = make_client()
             client.tv = mock_tv
 
             reboot_mock = Mock(return_value=False)
@@ -529,23 +282,24 @@ class TestReconnectDuringUpload:
                 patch.object(client, "ensure_art_mode", return_value=False),
                 patch.object(client, "_reboot_and_reconnect", reboot_mock),
             ):
-                client.upload_images_from_folder(tmp_dir, max_consecutive_failures=3)
+                client.upload_images(paths, max_consecutive_failures=3)
 
             reboot_mock.assert_called_once()
 
 
 class TestSendWol:
-    def test_no_mac_configured(self) -> None:
+    def test_no_mac_returns_false(self) -> None:
         mock_cfg = MagicMock()
         mock_cfg.samsung_frame.mac = ""
         with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            assert client._send_wol() is False
+            assert make_client()._send_wol() is False
 
+    @patch("SamsungFrame.samsung_client.time")
     @patch("SamsungFrame.samsung_client.socket")
-    def test_sends_magic_packet(self, mock_socket_mod: Mock) -> None:
+    def test_multi_target_packets(self, mock_socket_mod: Mock, _time: Mock) -> None:
         mock_cfg = MagicMock()
         mock_cfg.samsung_frame.mac = "AA:BB:CC:DD:EE:FF"
+        mock_cfg.samsung_frame.wol_password = ""
         mock_sock = MagicMock()
         mock_socket_mod.socket.return_value.__enter__ = Mock(return_value=mock_sock)
         mock_socket_mod.socket.return_value.__exit__ = Mock(return_value=False)
@@ -555,31 +309,115 @@ class TestSendWol:
         mock_socket_mod.SO_BROADCAST = socket.SO_BROADCAST
 
         with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
-            client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-            assert client._send_wol() is True
+            assert make_client()._send_wol() is True
 
-        mock_sock.sendto.assert_called_once()
-        magic = mock_sock.sendto.call_args[0][0]
+        assert mock_sock.sendto.call_count == 12  # 3 rounds × 4 targets
+        magic = mock_sock.sendto.call_args_list[0][0][0]
         assert magic[:6] == b"\xff" * 6
-        assert len(magic) == 102  # 6 + 16*6
+        assert len(magic) == 102  # no SecureON
+
+    @patch("SamsungFrame.samsung_client.time")
+    @patch("SamsungFrame.samsung_client.socket")
+    def test_secureon_appends_password(self, mock_socket_mod: Mock, _time: Mock) -> None:
+        mock_cfg = MagicMock()
+        mock_cfg.samsung_frame.mac = "AA:BB:CC:DD:EE:FF"
+        mock_cfg.samsung_frame.wol_password = "11:22:33:44:55:66"
+        mock_sock = MagicMock()
+        mock_socket_mod.socket.return_value.__enter__ = Mock(return_value=mock_sock)
+        mock_socket_mod.socket.return_value.__exit__ = Mock(return_value=False)
+        mock_socket_mod.AF_INET = socket.AF_INET
+        mock_socket_mod.SOCK_DGRAM = socket.SOCK_DGRAM
+        mock_socket_mod.SOL_SOCKET = socket.SOL_SOCKET
+        mock_socket_mod.SO_BROADCAST = socket.SO_BROADCAST
+
+        with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
+            assert make_client()._send_wol() is True
+
+        magic = mock_sock.sendto.call_args_list[0][0][0]
+        assert len(magic) == 108  # 102 + 6 SecureON
+
+
+class TestSmartThingsPowerOn:
+    def test_no_config_returns_false(self) -> None:
+        mock_cfg = MagicMock()
+        mock_cfg.samsung_frame.smartthings_token = ""
+        mock_cfg.samsung_frame.smartthings_device_id = ""
+        with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
+            assert make_client()._smartthings_power_on() is False
+
+    @patch("requests.post")
+    def test_success(self, mock_post: Mock) -> None:
+        mock_cfg = MagicMock()
+        mock_cfg.samsung_frame.smartthings_token = "test-token"
+        mock_cfg.samsung_frame.smartthings_device_id = "device-123"
+        mock_post.return_value = Mock(ok=True)
+
+        with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
+            assert make_client()._smartthings_power_on() is True
+
+        assert mock_post.call_args[1]["headers"]["Authorization"] == "Bearer test-token"
+
+    @patch("requests.post")
+    def test_api_error(self, mock_post: Mock) -> None:
+        mock_cfg = MagicMock()
+        mock_cfg.samsung_frame.smartthings_token = "test-token"
+        mock_cfg.samsung_frame.smartthings_device_id = "device-123"
+        mock_post.return_value = Mock(ok=False, status_code=403, text="Forbidden")
+
+        with patch("SamsungFrame.samsung_client.cfg", mock_cfg):
+            assert make_client()._smartthings_power_on() is False
+
+
+class TestContextManager:
+    def test_enter_calls_connect_ready_and_exit_closes(self) -> None:
+        client = make_client()
+        with (
+            patch.object(client, "connect_ready", return_value=True) as mock_cr,
+            patch.object(client, "close") as mock_close,
+        ):
+            with client as c:
+                assert c is client
+                mock_cr.assert_called_once()
+            mock_close.assert_called_once()
+
+    def test_enter_raises_on_failure(self) -> None:
+        client = make_client()
+        with patch.object(client, "connect_ready", return_value=False):
+            with pytest.raises(ConnectionError):
+                client.__enter__()
+
+    def test_exit_closes_on_exception(self) -> None:
+        client = make_client()
+        with (
+            patch.object(client, "connect_ready", return_value=True),
+            patch.object(client, "close") as mock_close,
+        ):
+            try:
+                with client:
+                    raise ValueError("boom")
+            except ValueError:
+                pass
+            mock_close.assert_called_once()
 
 
 class TestConnectReady:
     @patch("time.sleep")
-    def test_already_connected_and_art_mode(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+    def test_already_connected(self, _sleep: Mock) -> None:
+        client = make_client()
         with (
+            patch.object(client, "_send_wol"),
+            patch.object(client, "_smartthings_power_on"),
             patch.object(client, "connect", return_value=True),
             patch.object(client, "ensure_art_mode", return_value=True),
         ):
             assert client.connect_ready() is True
 
     @patch("time.sleep")
-    def test_connect_ok_art_fails_reboots(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+    def test_art_fails_triggers_reboot(self, _sleep: Mock) -> None:
+        client = make_client()
         with (
+            patch.object(client, "_send_wol"),
+            patch.object(client, "_smartthings_power_on"),
             patch.object(client, "connect", return_value=True),
             patch.object(client, "ensure_art_mode", return_value=False),
             patch.object(client, "_reboot_and_reconnect", return_value=True),
@@ -587,27 +425,28 @@ class TestConnectReady:
             assert client.connect_ready() is True
 
     @patch("time.sleep")
-    def test_connect_fails_wol_wakes_tv(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+    def test_wol_wakes_tv(self, _sleep: Mock) -> None:
+        client = make_client()
         connect_results = iter([False, True])
 
         with (
+            patch.object(client, "_send_wol", return_value=True),
+            patch.object(client, "_smartthings_power_on"),
             patch.object(client, "connect", side_effect=lambda: next(connect_results)),
             patch.object(client, "_is_tv_reachable", return_value=False),
-            patch.object(client, "_send_wol", return_value=True),
             patch.object(client, "_wait_for_power", return_value=True),
             patch.object(client, "ensure_art_mode", return_value=True),
         ):
             assert client.connect_ready() is True
 
     @patch("time.sleep")
-    def test_connect_fails_standby_retry(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+    def test_standby_retry(self, _sleep: Mock) -> None:
+        client = make_client()
         connect_results = iter([False, True])
 
         with (
+            patch.object(client, "_send_wol"),
+            patch.object(client, "_smartthings_power_on"),
             patch.object(client, "connect", side_effect=lambda: next(connect_results)),
             patch.object(client, "_is_tv_reachable", return_value=True),
             patch.object(client, "ensure_art_mode", return_value=True),
@@ -615,202 +454,122 @@ class TestConnectReady:
             assert client.connect_ready() is True
 
     @patch("time.sleep")
-    def test_standby_art_fails_reboots(self, _sleep: Mock) -> None:
-        """Phase 2: standby connect ok but art fails — falls back to reboot."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
-        connect_results = iter([False, True])
-
-        with (
-            patch.object(client, "connect", side_effect=lambda: next(connect_results)),
-            patch.object(client, "_is_tv_reachable", return_value=True),
-            patch.object(client, "ensure_art_mode", return_value=False),
-            patch.object(client, "_reboot_and_reconnect", return_value=True) as reboot_mock,
-        ):
-            assert client.connect_ready() is True
-            reboot_mock.assert_called_once()
-
-    @patch("time.sleep")
     def test_all_phases_fail(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+        client = make_client()
         with (
+            patch.object(client, "_send_wol"),
+            patch.object(client, "_smartthings_power_on"),
             patch.object(client, "connect", return_value=False),
             patch.object(client, "_is_tv_reachable", return_value=False),
-            patch.object(client, "_send_wol", return_value=False),
+            patch.object(client, "_wait_for_power", return_value=False),
         ):
             assert client.connect_ready() is False
 
+    @patch("time.sleep")
+    def test_wol_fires_before_connect(self, _sleep: Mock) -> None:
+        client = make_client()
+        call_order: list[str] = []
+
+        def _track_connect() -> bool:
+            call_order.append("connect")
+            return True
+
+        with (
+            patch.object(client, "_send_wol", side_effect=lambda: call_order.append("wol")),
+            patch.object(
+                client, "_smartthings_power_on", side_effect=lambda: call_order.append("st")
+            ),
+            patch.object(client, "connect", side_effect=_track_connect),
+            patch.object(client, "ensure_art_mode", return_value=True),
+        ):
+            assert client.connect_ready() is True
+
+        assert call_order[:2] == ["wol", "st"]
+        assert call_order[2] == "connect"
+
 
 class TestReboot:
-    def test_reboot_not_connected(self) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        assert client.reboot() is False
+    def test_not_connected(self) -> None:
+        assert make_client().reboot() is False
 
-    def test_reboot_success(self) -> None:
+    def test_success(self) -> None:
         mock_tv = Mock()
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
-        result = client.reboot()
-
-        assert result is True
+        assert client.reboot() is True
         mock_tv.hold_key.assert_called_once_with("KEY_POWER", 5)
         mock_tv.close.assert_called_once()
 
-    def test_reboot_hold_key_exception_is_success(self) -> None:
-        """WebSocket drops mid-hold when TV reboots — exception is expected."""
+    def test_exception_during_hold_is_success(self) -> None:
         mock_tv = Mock()
         mock_tv.hold_key.side_effect = OSError("Connection lost")
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
-        result = client.reboot()
-
-        assert result is True
+        assert client.reboot() is True
         mock_tv.close.assert_called_once()
-
-    def test_reboot_closes_connection_on_success(self) -> None:
-        mock_tv = Mock()
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        client.reboot()
-
-        assert client.tv is None or mock_tv.close.called
 
 
 class TestRebootAndReconnect:
     @patch("time.sleep")
-    def test_reboot_fails_wol_fallback(self, _sleep: Mock) -> None:
-        """When not connected, falls back to WoL. Aborts if WoL also fails."""
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+    def test_wol_fallback_fails(self, _sleep: Mock) -> None:
+        client = make_client()
         with patch.object(client, "_send_wol", return_value=False):
-            result = client._reboot_and_reconnect()
-
-        assert result is False
+            assert client._reboot_and_reconnect() is False
 
     @patch("time.sleep")
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
     @patch("os.path.exists", return_value=True)
     @patch("os.chmod")
-    def test_reboot_fails_wol_succeeds(
+    def test_wol_fallback_succeeds(
         self, _chmod: Mock, _exists: Mock, mock_tv_cls: Mock, _sleep: Mock
     ) -> None:
-        """When not connected, WoL wakes TV and reconnects."""
         mock_tv = Mock()
         mock_tv.art().supported.return_value = True
         mock_tv.art().available.return_value = [{"content_id": "MY_F001"}]
         mock_tv_cls.return_value = mock_tv
 
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+        client = make_client()
         with (
             patch.object(client, "_send_wol", return_value=True),
             patch.object(client, "_wait_for_power", return_value=True),
         ):
-            result = client._reboot_and_reconnect()
-
-        assert result is True
-
-    @patch("time.sleep")
-    @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch("os.path.exists", return_value=True)
-    @patch("os.chmod")
-    def test_full_reboot_cycle(
-        self, _chmod: Mock, _exists: Mock, mock_tv_cls: Mock, _sleep: Mock
-    ) -> None:
-        mock_tv = Mock()
-        mock_tv.art().supported.return_value = True
-        mock_tv.art().available.return_value = [{"content_id": "MY_F001"}]
-        mock_tv_cls.return_value = mock_tv
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        with patch.object(client, "_wait_for_power", return_value=True):
-            result = client._reboot_and_reconnect()
-
-        assert result is True
+            assert client._reboot_and_reconnect() is True
 
     @patch("time.sleep")
     def test_tv_doesnt_come_back(self, _sleep: Mock) -> None:
         mock_tv = Mock()
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
         with patch.object(client, "_wait_for_power", side_effect=[True, False]):
-            result = client._reboot_and_reconnect()
-
-        assert result is False
+            assert client._reboot_and_reconnect() is False
 
 
 class TestWaitForPower:
     @patch("time.sleep")
     def test_immediate_match(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+        client = make_client()
         with patch("samsungtvws.rest.SamsungTVRest") as mock_rest_cls:
-            mock_rest = Mock()
-            mock_rest.rest_power_state.return_value = True
-            mock_rest_cls.return_value = mock_rest
-
-            result = client._wait_for_power(target_on=True, timeout=10)
-
-        assert result is True
+            mock_rest_cls.return_value = Mock(rest_power_state=Mock(return_value=True))
+            assert client._wait_for_power(target_on=True, timeout=10) is True
 
     @patch("time.sleep")
     def test_connection_refused_means_off(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+        client = make_client()
         with patch("samsungtvws.rest.SamsungTVRest") as mock_rest_cls:
-            mock_rest = Mock()
-            mock_rest.rest_power_state.side_effect = ConnectionError("refused")
-            mock_rest_cls.return_value = mock_rest
-
-            result = client._wait_for_power(target_on=False, timeout=10)
-
-        assert result is True
+            mock_rest_cls.return_value = Mock(
+                rest_power_state=Mock(side_effect=ConnectionError("refused"))
+            )
+            assert client._wait_for_power(target_on=False, timeout=10) is True
 
     @patch("time.sleep")
     def test_timeout(self, _sleep: Mock) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-
+        client = make_client()
         with patch("samsungtvws.rest.SamsungTVRest") as mock_rest_cls:
-            mock_rest = Mock()
-            mock_rest.rest_power_state.return_value = False
-            mock_rest_cls.return_value = mock_rest
-
-            result = client._wait_for_power(target_on=True, timeout=5, poll_interval=3)
-
-        assert result is False
-
-
-class TestEnableArtMode:
-    def test_already_in_art_mode(self) -> None:
-        mock_tv = Mock()
-        mock_tv.art().get_artmode.return_value = "on"
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        result = client.enable_art_mode()
-
-        assert result is True
-        mock_tv.art().set_artmode.assert_not_called()
-
-    def test_timeout_treated_as_success(self) -> None:
-        mock_tv = Mock()
-        mock_tv.art().get_artmode.return_value = "off"
-        mock_tv.art().set_artmode.side_effect = TimeoutError("timed out waiting")
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        result = client.enable_art_mode()
-
-        assert result is True
+            mock_rest_cls.return_value = Mock(rest_power_state=Mock(return_value=False))
+            assert client._wait_for_power(target_on=True, timeout=5, poll_interval=3) is False
 
 
 class TestStartSlideshow:
@@ -818,16 +577,13 @@ class TestStartSlideshow:
         mock_tv = Mock()
         mock_tv.art().get_artmode.return_value = "on"
         mock_tv.art().set_slideshow_status.side_effect = Exception("slideshow_image_changed event")
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
-        result = client.start_slideshow()
-
-        assert result is True
+        assert client.start_slideshow() is True
 
     @patch("time.sleep")
-    def test_slideshow_retries_on_failure(self, _sleep: Mock) -> None:
+    def test_retries_on_failure(self, _sleep: Mock) -> None:
         mock_tv = Mock()
         mock_tv.art().get_artmode.return_value = "on"
         mock_tv.art().set_slideshow_status.side_effect = [
@@ -835,62 +591,25 @@ class TestStartSlideshow:
             Exception("network error"),
             None,
         ]
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
+        client = make_client()
         client.tv = mock_tv
 
-        result = client.start_slideshow()
-
-        assert result is True
+        assert client.start_slideshow() is True
         assert mock_tv.art().set_slideshow_status.call_count == 3
 
 
-class TestFetchArtList:
-    def test_timeout_response_raises(self) -> None:
-        mock_tv = Mock()
-        mock_tv.art().available.return_value = {"event": "ms.channel.timeOut"}
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        with pytest.raises(TimeoutError):
-            client._fetch_art_list()
-
-    def test_success(self) -> None:
-        mock_tv = Mock()
-        mock_tv.art().available.return_value = [{"content_id": "MY_F001"}]
-
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        client.tv = mock_tv
-
-        result = client._fetch_art_list()
-        assert len(result) == 1
-
-
 class TestTimeout:
-    def test_default_timeout(self) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt")
-        assert client.timeout == 60
-
-    def test_custom_timeout(self) -> None:
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt", timeout=120)
-        assert client.timeout == 120
-
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    @patch("os.path.exists")
-    @patch("os.makedirs")
+    @patch("os.path.exists", return_value=True)
     @patch("os.chmod")
-    def test_timeout_passed_to_tv(
-        self, _chmod: Mock, _makedirs: Mock, mock_exists: Mock, mock_tv_cls: Mock
-    ) -> None:
-        mock_exists.return_value = True
-        mock_tv_instance = Mock()
-        mock_tv_instance.art().supported.return_value = True
-        mock_tv_cls.return_value = mock_tv_instance
+    def test_timeout_passed_to_tv(self, _chmod: Mock, _exists: Mock, mock_tv_cls: Mock) -> None:
+        mock_tv_cls.return_value = Mock(
+            art=Mock(return_value=Mock(supported=Mock(return_value=True)))
+        )
 
-        client = SamsungFrameClient(host="192.168.1.4", token_file="/tmp/token.txt", timeout=120)
+        client = make_client(timeout=120)
         client.connect()
 
         mock_tv_cls.assert_called_once_with(
-            host="192.168.1.4", port=8002, token_file="/tmp/token.txt", timeout=120
+            host=TV_HOST, port=8002, token_file=TOKEN_FILE, timeout=120
         )

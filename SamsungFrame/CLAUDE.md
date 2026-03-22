@@ -1,20 +1,29 @@
 # Samsung Frame TV Module
 
-## Bootstrap
-Always load config before making live API calls or constructing clients:
+## Bootstrap — Centralized Connection
+**All code MUST use `connect_ready()` or the context manager to connect.** Never call bare `connect()`.
+
 ```python
-from lib.config import get_config
-cfg = get_config()
-token_file = cfg.samsung_frame.token_file
-tv_ip = cfg.samsung_frame.ip
+# Context manager (preferred for CLI handlers):
+with SamsungFrameClient() as client:
+    client.get_available_art()
+# Calls connect_ready() on enter, close() on exit. Raises ConnectionError on failure.
+
+# Manual (for long-running ops like batch_upload that need mid-operation reconnect):
+client = SamsungFrameClient()
+client.connect_ready()  # WoL + SmartThings + connect + art mode
+# ... mid-operation reconnect:
+client.close()
+client.connect_ready()  # Same full bootstrap path
 ```
-Use `SamsungFrameClient()` which reads config automatically. Never hardcode paths or IPs.
+
+`connect_ready()` flow: fire WoL + SmartThings → try connect → check REST standby → wait for power → connect → ensure art mode. Config is read automatically — never hardcode IPs.
 
 ## Architecture
 - `samsung_client.py` — WebSocket client wrapping `samsungtvws` (NickWaterton fork v3.0.5)
 - `batch_upload.py` — Two-phase upload workflow (prepare temp dir -> upload)
 - `manage_samsung.py` — CLI entry point with subcommands
-- Config keys: `cfg.samsung_frame.ip`, `.port`, `.token_file`, `.default_matte`, `.min_images`, `.min_size_mb`, `.slideshow_delay_seconds`
+- Config keys: `cfg.samsung_frame.ip`, `.port`, `.mac`, `.token_file`, `.default_matte`, `.min_images`, `.min_size_mb`, `.slideshow_delay_seconds`, `.wol_password`, `.smartthings_token`, `.smartthings_device_id`
 
 ## TV Art API
 See `~/.claude/learnings/skills/samsung.md` for full API schema and protocol details.
