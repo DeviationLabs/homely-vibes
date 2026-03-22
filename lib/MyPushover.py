@@ -41,6 +41,9 @@ class Pushover:
 
             if priority != 0:
                 payload["priority"] = str(priority)
+                if priority == 2:
+                    payload["retry"] = "60"
+                    payload["expire"] = "3600"
 
             resp = requests.post(
                 "https://api.pushover.net/1/messages.json",
