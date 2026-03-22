@@ -105,7 +105,7 @@ class NodeChecker:
             pushover.send_message(
                 f"{self.mode.title()} Node check failed for {', '.join(failed_nodes)}",
                 title="Node Check",
-                priority=1,
+                priority=2,
             )
         else:
             self.log_message("All is well")
