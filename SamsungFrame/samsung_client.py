@@ -81,6 +81,15 @@ class SamsungFrameClient:
         self.logger = get_logger(__name__)
         self.logger.info(f"Samsung Frame client initialized for {self.host}:{self.port}")
 
+    def __enter__(self) -> "SamsungFrameClient":
+        """Context manager: connect_ready() and return client."""
+        if not self.connect_ready():
+            raise ConnectionError(f"Failed to get TV ready at {self.host}")
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
     def connect(self) -> bool:
         max_retries = 3
         retry_delay = 2
@@ -123,7 +132,11 @@ class SamsungFrameClient:
         return False
 
     def _send_wol(self) -> bool:
-        """Send Wake-on-LAN magic packet to TV."""
+        """Send Wake-on-LAN magic packets to TV.
+
+        Hardened strategy: sends 3 rounds to both broadcast and directed IP,
+        on ports 9 and 7, with optional SecureON password support.
+        """
         mac = cfg.samsung_frame.mac
         if not mac:
             self.logger.warning("No MAC address configured — cannot send Wake-on-LAN")
@@ -132,13 +145,64 @@ class SamsungFrameClient:
         try:
             mac_bytes = bytes.fromhex(mac.replace(":", "").replace("-", ""))
             magic = b"\xff" * 6 + mac_bytes * 16
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                s.sendto(magic, ("<broadcast>", 9))
-            self.logger.info(f"Wake-on-LAN sent to {mac}")
+
+            wol_password = getattr(cfg.samsung_frame, "wol_password", None)
+            if wol_password:
+                pwd_bytes = bytes.fromhex(wol_password.replace(":", "").replace("-", ""))
+                magic += pwd_bytes
+
+            targets = [("<broadcast>", 9), ("<broadcast>", 7)]
+            if self.host:
+                targets.extend([(self.host, 9), (self.host, 7)])
+
+            for attempt in range(3):
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                    for addr, port in targets:
+                        s.sendto(magic, (addr, port))
+                if attempt < 2:
+                    time.sleep(0.5)
+
+            self.logger.info(
+                f"Wake-on-LAN sent to {mac} (3 rounds, {len(targets)} targets"
+                f"{', SecureON' if wol_password else ''})"
+            )
             return True
         except Exception as e:
             self.logger.error(f"Wake-on-LAN failed: {e}")
+            return False
+
+    def _smartthings_power_on(self) -> bool:
+        """Power on TV via SmartThings cloud API (fallback when WoL fails)."""
+        token = getattr(cfg.samsung_frame, "smartthings_token", None)
+        device_id = getattr(cfg.samsung_frame, "smartthings_device_id", None)
+        if not token or not device_id:
+            return False
+
+        import requests
+
+        try:
+            resp = requests.post(
+                f"https://api.smartthings.com/v1/devices/{device_id}/commands",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "commands": [
+                        {
+                            "component": "main",
+                            "capability": "switch",
+                            "command": "on",
+                        }
+                    ]
+                },
+                timeout=10,
+            )
+            if resp.ok:
+                self.logger.info("SmartThings power-on command sent")
+                return True
+            self.logger.warning(f"SmartThings power-on failed: {resp.status_code} {resp.text}")
+            return False
+        except Exception as e:
+            self.logger.error(f"SmartThings API error: {e}")
             return False
 
     def _is_tv_reachable(self) -> bool:
@@ -160,16 +224,20 @@ class SamsungFrameClient:
                  TV on (regular) → connect → toggle to art mode
                  TV in art mode → connect → verify
         """
-        # Phase 1: Try normal connect + art mode
+        # Always send WoL first — cheap UDP, harmless if TV is already on,
+        # gives TV a head start waking while we attempt connect
+        self._send_wol()
+        self._smartthings_power_on()
+
+        # Phase 1: Try connect + art mode
         if self.connect():
             if self.ensure_art_mode():
                 return True
             self.logger.warning("Connected but art mode failed — rebooting...")
             return self._reboot_and_reconnect()
 
-        # Phase 2: Connect failed — check if TV is reachable at all
+        # Phase 2: Connect failed — check if TV is reachable via REST
         if self._is_tv_reachable():
-            # TV is in standby — REST works but WebSocket doesn't yet
             self.logger.info("TV in standby, waiting for WebSocket...")
             time.sleep(5)
             if self.connect():
@@ -178,17 +246,13 @@ class SamsungFrameClient:
                 self.logger.warning("Standby connect ok but art mode failed — rebooting...")
                 return self._reboot_and_reconnect()
 
-        # Phase 3: TV unreachable — try Wake-on-LAN
-        if self._send_wol():
-            if not self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
-                self.logger.error("TV did not wake up after WoL")
-                return False
-            # Give WebSocket time to come up after power-on
+        # Phase 3: TV still unreachable — wait for WoL/SmartThings to take effect
+        if self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
             time.sleep(5)
             if self.connect():
                 if self.ensure_art_mode():
                     return True
-                self.logger.warning("WoL connect ok but art mode failed — rebooting...")
+                self.logger.warning("Wake connect ok but art mode failed — rebooting...")
                 return self._reboot_and_reconnect()
 
         self.logger.error("Cannot reach TV — verify power and network")

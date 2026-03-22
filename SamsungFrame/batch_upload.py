@@ -521,12 +521,8 @@ def run_batch_upload(args: argparse.Namespace) -> int:
     # Connect to TV and ensure art mode
     client = SamsungFrameClient(timeout=args.timeout)
     logger.info(f"Connecting to TV at {client.host}:{client.port} (timeout={args.timeout}s)...")
-    if not client.connect():
+    if not client.connect_ready():
         logger.error("Failed to connect to TV")
-        return 1
-
-    if not client.ensure_art_mode():
-        logger.error("TV connected but art mode not available — check TV status")
         return 1
 
     # Discover images
@@ -602,7 +598,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         except Exception:
             logger.warning("TV connection stale after preparation, reconnecting...")
             client.close()
-            if not client.connect():
+            if not client.connect_ready():
                 logger.error("Failed to reconnect to TV")
                 return 1
 
@@ -619,7 +615,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             except Exception:
                 logger.warning("TV connection lost before purge, reconnecting...")
                 client.close()
-                if not client.connect():
+                if not client.connect_ready():
                     logger.error("Cannot reconnect for purge — skipping purge")
                     purge_ready = False
 

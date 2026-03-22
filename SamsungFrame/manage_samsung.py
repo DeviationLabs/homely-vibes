@@ -3,9 +3,6 @@
 
 import argparse
 import sys
-from contextlib import contextmanager
-from typing import Generator
-
 
 from SamsungFrame.samsung_client import SamsungFrameClient
 from lib.MyPushover import Pushover
@@ -17,20 +14,6 @@ pushover = Pushover(
     cfg.pushover.user,
     cfg.pushover.tokens.get("SamsungFrame", cfg.pushover.default_token),
 )
-
-
-@contextmanager
-def tv_connection() -> Generator[SamsungFrameClient, None, None]:
-    """Get TV to art-mode-ready state from any starting state, yield client, close on exit."""
-    logger = get_logger(__name__)
-    client = SamsungFrameClient()
-    logger.info(f"Preparing Samsung Frame TV at {client.host}...")
-    try:
-        if not client.connect_ready():
-            raise ConnectionError(f"Failed to get TV ready at {client.host}")
-        yield client
-    finally:
-        client.close()
 
 
 def main() -> int:
@@ -154,7 +137,7 @@ def show_status(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             logger.info("=" * 50)
             logger.info("TV STATUS")
             logger.info("=" * 50)
@@ -195,7 +178,7 @@ def list_art(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             logger.info("Retrieving available art...")
             art_list = client.get_available_art()
 
@@ -219,7 +202,7 @@ def list_mattes(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             logger.info("Retrieving available matte styles...")
             mattes = client.get_available_mattes()
 
@@ -242,7 +225,7 @@ def download_thumbnails(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             user_photos_only = not args.all
             if user_photos_only:
                 logger.info("Downloading thumbnails for user-uploaded photos only...")
@@ -267,7 +250,7 @@ def update_mattes(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             matte = args.matte
             user_photos_only = not args.include_preinstalled
 
@@ -295,7 +278,7 @@ def cycle_images(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             user_photos_only = not args.all
             shuffle = not args.no_shuffle
             client.cycle_images(
@@ -315,7 +298,7 @@ def start_slideshow(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             shuffle = not args.no_shuffle
             if client.start_slideshow(duration=args.duration, shuffle=shuffle):
                 logger.info("Slideshow started successfully")
@@ -333,7 +316,7 @@ def delete_all(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             from SamsungFrame.batch_upload import delete_all_art
 
             result = delete_all_art(client, force=args.force)
@@ -354,7 +337,7 @@ def purge_art(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             from SamsungFrame.batch_upload import delete_art_by_ids, get_stale_art_ids
 
             art_list = client.get_available_art()
@@ -400,7 +383,7 @@ def reboot_tv(_args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        with tv_connection() as client:
+        with SamsungFrameClient() as client:
             if client._reboot_and_reconnect():
                 logger.info("TV rebooted and in art mode")
                 return 0
