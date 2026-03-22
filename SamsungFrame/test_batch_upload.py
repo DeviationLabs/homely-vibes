@@ -12,7 +12,6 @@ from SamsungFrame.batch_upload import (
     discover_images,
     delete_all_art,
     trim_filename,
-    prepare_images_to_temp_dir,
     get_stale_art_ids,
 )
 from SamsungFrame.samsung_client import SamsungFrameClient
@@ -386,39 +385,6 @@ class TestFilenameTrimming:
         trim_filename("Photo.JPG", seen=seen)
         r2 = trim_filename("photo.jpg", seen=seen)
         assert "_1" in r2
-
-
-class TestPrepareImages:
-    """Test the two-phase prepare_images_to_temp_dir function."""
-
-    def test_jpg_copied_with_trimmed_name(self) -> None:
-        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as tmp:
-            img = Image.new("RGB", (100, 100), color="red")
-            long_name = "a" * 60 + ".jpg"
-            img.save(Path(src) / long_name, format="JPEG")
-
-            images = [Path(src) / long_name]
-            results, count = prepare_images_to_temp_dir(images, tmp)
-
-            assert count == 1
-            assert results[0].success
-            assert results[0].converted_path is not None
-            copied = Path(results[0].converted_path)
-            assert copied.exists()
-            assert len(copied.name) <= 50
-
-    def test_multiple_files_no_collision(self) -> None:
-        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as tmp:
-            for i in range(3):
-                img = Image.new("RGB", (100, 100), color="blue")
-                img.save(Path(src) / f"img_{i}.jpg", format="JPEG")
-
-            images = sorted(Path(src).glob("*.jpg"))
-            results, count = prepare_images_to_temp_dir(images, tmp)
-
-            assert count == 3
-            names = [Path(r.converted_path).name for r in results if r.converted_path]
-            assert len(set(names)) == 3
 
 
 class TestStaleArtFromApi:

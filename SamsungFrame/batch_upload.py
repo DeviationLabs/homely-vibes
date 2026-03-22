@@ -20,8 +20,6 @@ import pillow_heif
 from PIL import Image
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
-from tqdm import tqdm
-
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
 from lib.MyPushover import Pushover
 from lib.logger import get_logger
@@ -78,7 +76,12 @@ def trim_filename(name: str, max_length: int = 50, seen: Optional[set[str]] = No
 
 
 def _send_interrupt_notification(_signum: int, _frame: Optional[FrameType]) -> None:
-    """Signal handler to send notification on interrupt."""
+    """Signal handler to send notification on interrupt.
+
+    The upload loop in samsung_client catches KeyboardInterrupt and returns
+    partial results, so this handler only fires if interrupted outside the
+    upload loop (e.g. during preparation or purge).
+    """
     global _notification_sent
     if _current_summary and not _notification_sent:
         _notification_sent = True
@@ -106,6 +109,7 @@ class BatchUploadSummary(BaseModel):
     conversion_failures: int
     art_deleted: int
     art_delete_failures: int
+    total_art_on_tv: int
     upload_summary: ImageUploadSummary
     conversion_errors: List[Dict[str, str]]
 
@@ -459,46 +463,6 @@ def get_stale_art_ids(art_list: List[Dict[str, Any]], max_age_hours: int = 24) -
     return stale
 
 
-def prepare_images_to_temp_dir(
-    images: List[Path], temp_dir: str
-) -> tuple[List[ConversionResult], int]:
-    """Convert HEIC and copy JPG/PNG into temp_dir with trimmed filenames.
-
-    Returns:
-        (conversion_results, processed_count)
-    """
-    converter = ImageConverter(temp_dir)
-    results: List[ConversionResult] = []
-    processed = 0
-    seen: set[str] = set()
-
-    for image_path in tqdm(images, desc="Preparing images", unit="img"):
-        result = converter.convert_if_needed(image_path)
-        results.append(result)
-
-        if not result.success:
-            continue
-
-        processed += 1
-
-        if result.converted_path:
-            # HEIC was converted — rename to trimmed name
-            converted = Path(result.converted_path)
-            trimmed = trim_filename(converted.name, seen=seen)
-            final_path = Path(temp_dir) / trimmed
-            if converted != final_path:
-                converted.rename(final_path)
-            result.converted_path = str(final_path)
-        else:
-            # JPG/PNG — copy with trimmed name
-            trimmed = trim_filename(image_path.name, seen=seen)
-            final_path = Path(temp_dir) / trimmed
-            shutil.copy2(image_path, final_path)
-            result.converted_path = str(final_path)
-
-    return results, processed
-
-
 def run_batch_upload(args: argparse.Namespace) -> int:
     """Main workflow orchestration."""
     global _current_summary, _notification_sent
@@ -549,66 +513,52 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.error("No images remaining after start-index/max-files filtering")
         return 1
 
-    # --- Phase 1: Prepare files in temp dir (convert + trim filenames) ---
     art_deleted = 0
     art_delete_failures = 0
+    heic_converted = 0
+    conversion_errors: List[Dict[str, str]] = []
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        logger.info(f"Using temp directory: {temp_dir}")
-        conversion_results, processed_count = prepare_images_to_temp_dir(images, temp_dir)
+        converter = ImageConverter(temp_dir)
+        seen: set[str] = set()
 
-        heic_converted = sum(
-            1
-            for r in conversion_results
-            if r.success and Path(r.source_path).suffix.lower() == ".heic"
-        )
-        conversion_errors = [
-            {"file": Path(r.source_path).name, "error": r.error_message or "Unknown error"}
-            for r in conversion_results
-            if not r.success
-        ]
+        def prepare_one(source_path: str) -> Optional[str]:
+            """Convert/resize one image into temp dir, return upload-ready path."""
+            nonlocal heic_converted
+            image_path = Path(source_path)
+            result = converter.convert_if_needed(image_path)
 
-        if processed_count == 0:
-            logger.error("All conversions failed")
-            return 1
+            if not result.success:
+                conversion_errors.append(
+                    {"file": image_path.name, "error": result.error_message or "Unknown error"}
+                )
+                return None
 
-        # Update signal handler with conversion progress
-        _current_summary = BatchUploadSummary(
-            total_discovered=len(images),
-            total_filtered=len(images),
-            heic_converted=heic_converted,
-            conversion_failures=len(conversion_errors),
-            art_deleted=0,
-            art_delete_failures=0,
-            upload_summary=ImageUploadSummary(
-                total_images=processed_count,
-                successful_uploads=0,
-                failed_uploads=0,
-                uploaded_image_ids=[],
-                errors=[],
-            ),
-            conversion_errors=conversion_errors,
-        )
+            if image_path.suffix.lower() == ".heic":
+                heic_converted += 1
 
-        # --- Phase 2: Upload from temp dir ---
-        # Re-verify connection (may have gone stale during preparation)
-        try:
-            client.ping()
-            logger.info("TV connection still active")
-        except Exception:
-            logger.warning("TV connection stale after preparation, reconnecting...")
-            client.close()
-            if not client.connect_ready():
-                logger.error("Failed to reconnect to TV")
-                return 1
+            if result.converted_path:
+                converted = Path(result.converted_path)
+                trimmed = trim_filename(converted.name, seen=seen)
+                final_path = Path(temp_dir) / trimmed
+                if converted != final_path:
+                    converted.rename(final_path)
+                return str(final_path)
+
+            trimmed = trim_filename(image_path.name, seen=seen)
+            final_path = Path(temp_dir) / trimmed
+            shutil.copy2(image_path, final_path)
+            return str(final_path)
 
         matte = args.matte
-        logger.info(f"Uploading {processed_count} images from temp dir...")
-        upload_summary = client.upload_images_from_folder(temp_dir, matte=matte)
+        image_paths = [str(p) for p in images]
+        upload_summary = client.upload_images(image_paths, matte=matte, prepare_fn=prepare_one)
+        completed = upload_summary.successful_uploads + upload_summary.failed_uploads
+        interrupted = completed < upload_summary.total_images
 
         # --- Purge: delete stale art using image_date from TV API ---
         # Purge runs even if uploads were partially aborted
-        if not args.no_purge:
+        if not args.no_purge and not interrupted:
             purge_ready = True
             try:
                 client.ping()
@@ -643,6 +593,15 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                 else:
                     logger.info("No stale art to purge")
 
+        # --- Get current art count on TV ---
+        total_art_on_tv = 0
+        try:
+            client.ping()
+            art_list = client.get_available_art()
+            total_art_on_tv = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
+        except Exception:
+            pass
+
         # --- Summary ---
         summary = BatchUploadSummary(
             total_discovered=len(images),
@@ -651,12 +610,13 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             conversion_failures=len(conversion_errors),
             art_deleted=art_deleted,
             art_delete_failures=art_delete_failures,
+            total_art_on_tv=total_art_on_tv,
             upload_summary=upload_summary,
             conversion_errors=conversion_errors,
         )
         _current_summary = summary
 
-        send_batch_notification(summary)
+        send_batch_notification(summary, interrupted=interrupted)
 
         logger.info("=" * 50)
         logger.info("BATCH UPLOAD SUMMARY")
@@ -723,10 +683,10 @@ def send_batch_notification(summary: BatchUploadSummary, interrupted: bool = Fal
         title = "Samsung Batch Upload - Complete"
 
     message = (
-        f"✓ Uploaded: {summary.upload_summary.successful_uploads}\n"
-        f"✗ Failed: {total_failures}\n"
-        f"🔄 Converted: {summary.heic_converted} HEIC\n"
-        f"🗑 Deleted: {summary.art_deleted} existing"
+        f"✅ Uploaded: {summary.upload_summary.successful_uploads}\n"
+        f"❌ Failed: {total_failures}\n"
+        f"🗑 Deleted: {summary.art_deleted} stale\n"
+        f"🖼 Total on TV: {summary.total_art_on_tv}"
     )
 
     try:

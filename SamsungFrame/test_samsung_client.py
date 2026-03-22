@@ -115,38 +115,42 @@ class TestSamsungFrameClient:
             os.unlink(path)
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
-    def test_upload_images_from_folder_success(self, mock_tv_cls: Mock) -> None:
+    def test_upload_images_success(self, mock_tv_cls: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            paths = []
             for i in range(3):
-                Image.new("RGB", (100, 100)).save(
-                    os.path.join(tmp_dir, f"img{i}.jpg"), format="JPEG"
-                )
+                p = os.path.join(tmp_dir, f"img{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
 
             mock_tv = Mock()
             mock_tv.art().upload.side_effect = ["id1", "id2", "id3"]
             client = make_client()
             client.tv = mock_tv
 
-            summary = client.upload_images_from_folder(tmp_dir)
+            summary = client.upload_images(paths)
             assert summary.successful_uploads == 3
             assert summary.failed_uploads == 0
 
     @patch("SamsungFrame.samsung_client.SamsungTVWS")
     def test_upload_images_partial_failure(self, mock_tv_cls: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            paths = []
             for i in range(2):
-                Image.new("RGB", (100, 100)).save(
-                    os.path.join(tmp_dir, f"img{i}.jpg"), format="JPEG"
-                )
-            with open(os.path.join(tmp_dir, "bad.jpg"), "w") as f:
+                p = os.path.join(tmp_dir, f"img{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
+            bad = os.path.join(tmp_dir, "bad.jpg")
+            with open(bad, "w") as f:
                 f.write("not an image")
+            paths.append(bad)
 
             mock_tv = Mock()
             mock_tv.art().upload.side_effect = ["id1", "id2"]
             client = make_client()
             client.tv = mock_tv
 
-            summary = client.upload_images_from_folder(tmp_dir)
+            summary = client.upload_images(paths)
             assert summary.successful_uploads == 2
             assert summary.failed_uploads == 1
 
@@ -239,10 +243,11 @@ class TestReconnectDuringUpload:
     @patch("time.sleep")
     def test_stops_after_reconnect_fails(self, _sleep: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            paths = []
             for i in range(5):
-                Image.new("RGB", (100, 100)).save(
-                    os.path.join(tmp_dir, f"img_{i}.jpg"), format="JPEG"
-                )
+                p = os.path.join(tmp_dir, f"img_{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
 
             mock_tv = Mock()
             mock_tv.art().upload.return_value = None
@@ -254,17 +259,18 @@ class TestReconnectDuringUpload:
                 patch.object(client, "ensure_art_mode", return_value=False),
                 patch.object(client, "_reboot_and_reconnect", return_value=False),
             ):
-                summary = client.upload_images_from_folder(tmp_dir, max_consecutive_failures=3)
+                summary = client.upload_images(paths, max_consecutive_failures=3)
 
             assert summary.successful_uploads == 0
 
     @patch("time.sleep")
     def test_only_one_reboot_per_batch(self, _sleep: Mock) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
+            paths = []
             for i in range(8):
-                Image.new("RGB", (100, 100)).save(
-                    os.path.join(tmp_dir, f"img_{i}.jpg"), format="JPEG"
-                )
+                p = os.path.join(tmp_dir, f"img_{i}.jpg")
+                Image.new("RGB", (100, 100)).save(p, format="JPEG")
+                paths.append(p)
 
             mock_tv = Mock()
             mock_tv.art().upload.return_value = None
@@ -276,7 +282,7 @@ class TestReconnectDuringUpload:
                 patch.object(client, "ensure_art_mode", return_value=False),
                 patch.object(client, "_reboot_and_reconnect", reboot_mock),
             ):
-                client.upload_images_from_folder(tmp_dir, max_consecutive_failures=3)
+                client.upload_images(paths, max_consecutive_failures=3)
 
             reboot_mock.assert_called_once()
 

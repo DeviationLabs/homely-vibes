@@ -5,7 +5,7 @@ import signal
 import socket
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from PIL import Image
 from pydantic import BaseModel
@@ -371,29 +371,32 @@ class SamsungFrameClient:
             self.logger.error(f"Failed to upload {image_path}: {e}")
             return None
 
-    def upload_images_from_folder(
-        self, folder_path: str, matte: Optional[str] = None, max_consecutive_failures: int = 3
+    def upload_images(
+        self,
+        image_files: List[str],
+        matte: Optional[str] = None,
+        max_consecutive_failures: int = 3,
+        prepare_fn: Optional[Callable[[str], Optional[str]]] = None,
     ) -> ImageUploadSummary:
+        """Upload a list of image file paths to the TV.
+
+        Args:
+            image_files: List of absolute paths to source images
+            matte: Matte style override (default from config)
+            max_consecutive_failures: Failures before recovery attempt
+            prepare_fn: Optional callback to prep each image before upload.
+                        Takes source path, returns upload-ready path (or None to skip).
+        """
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
         cfg = get_config()
         matte = matte or cfg.samsung_frame.default_matte
 
-        if not os.path.isdir(folder_path):
-            raise ValueError(f"Folder not found: {folder_path}")
-
-        image_files: List[str] = []
-        for ext in cfg.samsung_frame.supported_formats:
-            image_files.extend(str(f) for f in Path(folder_path).glob(f"*.{ext}"))
-            image_files.extend(str(f) for f in Path(folder_path).glob(f"*.{ext.upper()}"))
-
-        image_files = sorted(set(image_files))
-
-        self.logger.info(f"Found {len(image_files)} images in {folder_path}")
+        self.logger.info(f"Uploading {len(image_files)} images")
 
         if not image_files:
-            self.logger.warning(f"No images found in {folder_path}")
+            self.logger.warning("No images to upload")
             return ImageUploadSummary(
                 total_images=0,
                 successful_uploads=0,
@@ -412,74 +415,94 @@ class SamsungFrameClient:
         max_pause = 30
 
         pbar = tqdm(image_files, desc="Uploading images", unit="img")
-        for image_path in pbar:
-            pbar.set_postfix_str(os.path.basename(image_path))
-            recovered = False
-            try:
-                image_id = self.upload_image(image_path, matte=matte)
-                if image_id:
-                    uploaded_ids.append(image_id)
-                    known_ids.add(image_id)
-                    consecutive_failures = 0
-                    self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
-                else:
+        try:
+            for image_path in pbar:
+                pbar.set_postfix_str(os.path.basename(image_path))
+                recovered = False
+                try:
+                    upload_path = image_path
+                    if prepare_fn:
+                        prepared = prepare_fn(image_path)
+                        if prepared is None:
+                            errors.append(
+                                {"file": os.path.basename(image_path), "error": "Prep failed"}
+                            )
+                            consecutive_failures += 1
+                            continue
+                        upload_path = prepared
+                    image_id = self.upload_image(upload_path, matte=matte)
+                    if image_id:
+                        uploaded_ids.append(image_id)
+                        known_ids.add(image_id)
+                        consecutive_failures = 0
+                        self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
+                    else:
+                        new_id = self._check_for_new_upload(known_ids)
+                        if new_id:
+                            uploaded_ids.append(new_id)
+                            known_ids.add(new_id)
+                            consecutive_failures = 0
+                            self.logger.debug(
+                                f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
+                            )
+                        else:
+                            recovered = True
+                            errors.append(
+                                {
+                                    "file": os.path.basename(image_path),
+                                    "error": "Upload returned None",
+                                }
+                            )
+                            consecutive_failures += 1
+                except Exception as e:
+                    self.logger.error(f"Error uploading {image_path}: {e}")
                     new_id = self._check_for_new_upload(known_ids)
                     if new_id:
                         uploaded_ids.append(new_id)
                         known_ids.add(new_id)
                         consecutive_failures = 0
                         self.logger.debug(
-                            f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
+                            f"Uploaded {os.path.basename(image_path)} (recovered from error)"
                         )
                     else:
                         recovered = True
-                        errors.append(
-                            {"file": os.path.basename(image_path), "error": "Upload returned None"}
-                        )
+                        errors.append({"file": os.path.basename(image_path), "error": str(e)})
                         consecutive_failures += 1
-            except Exception as e:
-                self.logger.error(f"Error uploading {image_path}: {e}")
-                new_id = self._check_for_new_upload(known_ids)
-                if new_id:
-                    uploaded_ids.append(new_id)
-                    known_ids.add(new_id)
-                    consecutive_failures = 0
-                    self.logger.debug(
-                        f"Uploaded {os.path.basename(image_path)} (recovered from error)"
-                    )
-                else:
-                    recovered = True
-                    errors.append({"file": os.path.basename(image_path), "error": str(e)})
-                    consecutive_failures += 1
-            finally:
-                if recovered:
-                    pause = min(pause + 5, max_pause)
-                    self.logger.info(f"TV needs cooldown, pausing {pause}s")
-                else:
-                    pause = max(pause - 1, min_pause)
-                time.sleep(pause)
-                if not self.ensure_art_mode():
-                    self.logger.warning("Lost art mode, attempting reboot recovery...")
-                    if not self._reboot_and_reconnect():
-                        self.logger.error("Cannot recover art mode — stopping uploads")
-                        break
+                finally:
+                    if recovered:
+                        pause = min(pause + 5, max_pause)
+                        self.logger.info(f"TV needs cooldown, pausing {pause}s")
+                    else:
+                        pause = max(pause - 1, min_pause)
+                    time.sleep(pause)
+                    if not self.ensure_art_mode():
+                        self.logger.warning("Lost art mode, attempting reboot recovery...")
+                        if not self._reboot_and_reconnect():
+                            self.logger.error("Cannot recover art mode — stopping uploads")
+                            break
 
-            if consecutive_failures >= max_consecutive_failures:
-                self.logger.warning(f"{consecutive_failures} consecutive failures — recovering...")
-                if self.ensure_art_mode():
-                    consecutive_failures = 0
-                    continue
-                if not rebooted:
-                    self.logger.warning("Art mode recovery failed — rebooting TV...")
-                    if self._reboot_and_reconnect():
-                        rebooted = True
+                if consecutive_failures >= max_consecutive_failures:
+                    self.logger.warning(
+                        f"{consecutive_failures} consecutive failures — recovering..."
+                    )
+                    if self.ensure_art_mode():
                         consecutive_failures = 0
                         continue
-                self.logger.error(
-                    f"{consecutive_failures} consecutive failures — "
-                    f"recovery failed, stopping uploads"
-                )
-                break
+                    if not rebooted:
+                        self.logger.warning("Art mode recovery failed — rebooting TV...")
+                        if self._reboot_and_reconnect():
+                            rebooted = True
+                            consecutive_failures = 0
+                            continue
+                    self.logger.error(
+                        f"{consecutive_failures} consecutive failures — "
+                        f"recovery failed, stopping uploads"
+                    )
+                    break
+        except (KeyboardInterrupt, SystemExit):
+            self.logger.warning(
+                f"Upload interrupted — {len(uploaded_ids)} successful, {len(errors)} failed"
+            )
 
         summary = ImageUploadSummary(
             total_images=len(image_files),
@@ -490,7 +513,8 @@ class SamsungFrameClient:
         )
 
         self.logger.info(
-            f"Upload complete: {summary.successful_uploads}/{summary.total_images} successful"
+            f"Upload {'interrupted' if len(uploaded_ids) + len(errors) < len(image_files) else 'complete'}"
+            f": {summary.successful_uploads}/{summary.total_images} successful"
         )
 
         return summary
