@@ -69,7 +69,11 @@ class TestAugustClient:
             await client._ensure_session()
 
             assert client.session == mock_session_instance
-            mock_api.assert_called_once_with(mock_session_instance)
+            from yalexs.const import Brand
+
+            assert mock_api.call_count == 2
+            mock_api.assert_any_call(mock_session_instance, brand=Brand.AUGUST)
+            mock_api.assert_any_call(mock_session_instance, brand=Brand.YALE_AUGUST)
             mock_auth.assert_called_once()
 
     @pytest.mark.asyncio
