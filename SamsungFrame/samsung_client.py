@@ -531,7 +531,7 @@ class SamsungFrameClient:
         # Already in art mode?
         try:
             self.get_available_art_strict()
-            self.logger.info("Art mode confirmed, API responding")
+            self.logger.debug("Art mode confirmed, API responding")
             return True
         except Exception:
             pass
@@ -647,7 +647,7 @@ class SamsungFrameClient:
 
         art_list = self._fetch_art_list()
         user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
-        self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
+        self.logger.debug(f"Retrieved {user_count} user uploaded images from TV")
         return art_list
 
     def get_available_art(self) -> List[Dict[str, Any]]:
@@ -657,7 +657,7 @@ class SamsungFrameClient:
         try:
             art_list = self._fetch_art_list()
             user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
-            self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
+            self.logger.debug(f"Retrieved {user_count} user uploaded images from TV")
             return art_list
         except Exception as e:
             self.logger.error(f"Error getting available art after retries: {e}")
