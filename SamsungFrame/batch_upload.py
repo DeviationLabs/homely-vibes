@@ -218,7 +218,7 @@ class ImageConverter:
 
             if size_mb <= self.max_size_mb:
                 if quality < self.JPG_QUALITY:
-                    self.logger.info(f"Compressed to quality {quality} ({size_mb:.2f}MB)")
+                    self.logger.debug(f"Compressed to quality {quality} ({size_mb:.2f}MB)")
                 return True
 
         return False
