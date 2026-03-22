@@ -216,6 +216,33 @@ class SamsungFrameClient:
         except Exception:
             return False
 
+    def _wake_and_connect(self) -> bool:
+        """Send WoL + SmartThings, then establish WebSocket connection.
+
+        This is the ONLY method that should be used to (re)connect to the TV.
+        Handles wake-from-off via WoL/SmartThings, standby via REST detection,
+        and direct WebSocket connect when TV is already on.
+        """
+        self._send_wol()
+        self._smartthings_power_on()
+
+        if self.connect():
+            return True
+
+        # Connect failed — check if TV is reachable via REST (standby)
+        if self._is_tv_reachable():
+            self.logger.info("TV in standby, waiting for WebSocket...")
+            time.sleep(5)
+            if self.connect():
+                return True
+
+        # TV still unreachable — wait for WoL/SmartThings to take effect
+        if self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
+            time.sleep(5)
+            return self.connect()
+
+        return False
+
     def connect_ready(self) -> bool:
         """Get TV to art-mode-ready state from any starting state.
 
@@ -224,36 +251,11 @@ class SamsungFrameClient:
                  TV on (regular) → connect → toggle to art mode
                  TV in art mode → connect → verify
         """
-        # Always send WoL first — cheap UDP, harmless if TV is already on,
-        # gives TV a head start waking while we attempt connect
-        self._send_wol()
-        self._smartthings_power_on()
-
-        # Phase 1: Try connect + art mode
-        if self.connect():
+        if self._wake_and_connect():
             if self.ensure_art_mode():
                 return True
             self.logger.warning("Connected but art mode failed — rebooting...")
             return self._reboot_and_reconnect()
-
-        # Phase 2: Connect failed — check if TV is reachable via REST
-        if self._is_tv_reachable():
-            self.logger.info("TV in standby, waiting for WebSocket...")
-            time.sleep(5)
-            if self.connect():
-                if self.ensure_art_mode():
-                    return True
-                self.logger.warning("Standby connect ok but art mode failed — rebooting...")
-                return self._reboot_and_reconnect()
-
-        # Phase 3: TV still unreachable — wait for WoL/SmartThings to take effect
-        if self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
-            time.sleep(5)
-            if self.connect():
-                if self.ensure_art_mode():
-                    return True
-                self.logger.warning("Wake connect ok but art mode failed — rebooting...")
-                return self._reboot_and_reconnect()
 
         self.logger.error("Cannot reach TV — verify power and network")
         return False
@@ -525,7 +527,7 @@ class SamsungFrameClient:
             True if TV is confirmed in art mode with art API responding
         """
         if not self.tv:
-            if not self.connect():
+            if not self._wake_and_connect():
                 return False
 
         # Already in art mode?
@@ -551,7 +553,7 @@ class SamsungFrameClient:
             self.logger.info(f"Waiting {wait}s for art mode (attempt {attempt}/3)...")
             time.sleep(wait)
             try:
-                if self.connect():
+                if self._wake_and_connect():
                     self.get_available_art_strict()
                     self.logger.info("Art mode activated via KEY_POWER toggle")
                     return True
@@ -566,7 +568,7 @@ class SamsungFrameClient:
         self.logger.info("Closing stale connection...")
         self.close()
         time.sleep(2)
-        return self.connect()
+        return self._wake_and_connect()
 
     def _wait_for_power(self, target_on: bool, timeout: int = 120, poll_interval: int = 3) -> bool:
         """Poll REST API until TV power state matches target or timeout.
@@ -617,7 +619,7 @@ class SamsungFrameClient:
         for attempt in range(1, max_attempts + 1):
             self.logger.info(f"Connecting to art mode (attempt {attempt}/{max_attempts})...")
             try:
-                if self.connect() and self.ensure_art_mode():
+                if self._wake_and_connect() and self.ensure_art_mode():
                     self.logger.info("Reconnected after reboot, art mode verified")
                     return True
             except Exception:
