@@ -5,7 +5,7 @@ import signal
 import socket
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from PIL import Image
 from pydantic import BaseModel
@@ -81,6 +81,15 @@ class SamsungFrameClient:
         self.logger = get_logger(__name__)
         self.logger.info(f"Samsung Frame client initialized for {self.host}:{self.port}")
 
+    def __enter__(self) -> "SamsungFrameClient":
+        """Context manager: connect_ready() and return client."""
+        if not self.connect_ready():
+            raise ConnectionError(f"Failed to get TV ready at {self.host}")
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
     def connect(self) -> bool:
         max_retries = 3
         retry_delay = 2
@@ -123,7 +132,11 @@ class SamsungFrameClient:
         return False
 
     def _send_wol(self) -> bool:
-        """Send Wake-on-LAN magic packet to TV."""
+        """Send Wake-on-LAN magic packets to TV.
+
+        Hardened strategy: sends 3 rounds to both broadcast and directed IP,
+        on ports 9 and 7, with optional SecureON password support.
+        """
         mac = cfg.samsung_frame.mac
         if not mac:
             self.logger.warning("No MAC address configured — cannot send Wake-on-LAN")
@@ -132,13 +145,64 @@ class SamsungFrameClient:
         try:
             mac_bytes = bytes.fromhex(mac.replace(":", "").replace("-", ""))
             magic = b"\xff" * 6 + mac_bytes * 16
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                s.sendto(magic, ("<broadcast>", 9))
-            self.logger.info(f"Wake-on-LAN sent to {mac}")
+
+            wol_password = getattr(cfg.samsung_frame, "wol_password", None)
+            if wol_password:
+                pwd_bytes = bytes.fromhex(wol_password.replace(":", "").replace("-", ""))
+                magic += pwd_bytes
+
+            targets = [("<broadcast>", 9), ("<broadcast>", 7)]
+            if self.host:
+                targets.extend([(self.host, 9), (self.host, 7)])
+
+            for attempt in range(3):
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                    for addr, port in targets:
+                        s.sendto(magic, (addr, port))
+                if attempt < 2:
+                    time.sleep(0.5)
+
+            self.logger.info(
+                f"Wake-on-LAN sent to {mac} (3 rounds, {len(targets)} targets"
+                f"{', SecureON' if wol_password else ''})"
+            )
             return True
         except Exception as e:
             self.logger.error(f"Wake-on-LAN failed: {e}")
+            return False
+
+    def _smartthings_power_on(self) -> bool:
+        """Power on TV via SmartThings cloud API (fallback when WoL fails)."""
+        token = getattr(cfg.samsung_frame, "smartthings_token", None)
+        device_id = getattr(cfg.samsung_frame, "smartthings_device_id", None)
+        if not token or not device_id:
+            return False
+
+        import requests
+
+        try:
+            resp = requests.post(
+                f"https://api.smartthings.com/v1/devices/{device_id}/commands",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "commands": [
+                        {
+                            "component": "main",
+                            "capability": "switch",
+                            "command": "on",
+                        }
+                    ]
+                },
+                timeout=10,
+            )
+            if resp.ok:
+                self.logger.info("SmartThings power-on command sent")
+                return True
+            self.logger.warning(f"SmartThings power-on failed: {resp.status_code} {resp.text}")
+            return False
+        except Exception as e:
+            self.logger.error(f"SmartThings API error: {e}")
             return False
 
     def _is_tv_reachable(self) -> bool:
@@ -152,6 +216,34 @@ class SamsungFrameClient:
         except Exception:
             return False
 
+    def _wake_and_connect(self) -> bool:
+        """Send WoL + SmartThings, then establish WebSocket connection.
+
+        This is the ONLY method that should be used to (re)connect to the TV.
+        Handles wake-from-off via WoL/SmartThings, standby via REST detection,
+        and direct WebSocket connect when TV is already on.
+        """
+        wol_sent = self._send_wol()
+        st_sent = self._smartthings_power_on()
+        woke = wol_sent or st_sent
+
+        if self.connect():
+            return True
+
+        # Connect failed — check if TV is reachable via REST (standby)
+        if self._is_tv_reachable():
+            self.logger.info("TV in standby, waiting for WebSocket...")
+            time.sleep(5)
+            if self.connect():
+                return True
+
+        # TV still unreachable — only wait if a wake signal was actually sent
+        if woke and self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
+            time.sleep(5)
+            return self.connect()
+
+        return False
+
     def connect_ready(self) -> bool:
         """Get TV to art-mode-ready state from any starting state.
 
@@ -160,36 +252,11 @@ class SamsungFrameClient:
                  TV on (regular) → connect → toggle to art mode
                  TV in art mode → connect → verify
         """
-        # Phase 1: Try normal connect + art mode
-        if self.connect():
+        if self._wake_and_connect():
             if self.ensure_art_mode():
                 return True
             self.logger.warning("Connected but art mode failed — rebooting...")
             return self._reboot_and_reconnect()
-
-        # Phase 2: Connect failed — check if TV is reachable at all
-        if self._is_tv_reachable():
-            # TV is in standby — REST works but WebSocket doesn't yet
-            self.logger.info("TV in standby, waiting for WebSocket...")
-            time.sleep(5)
-            if self.connect():
-                if self.ensure_art_mode():
-                    return True
-                self.logger.warning("Standby connect ok but art mode failed — rebooting...")
-                return self._reboot_and_reconnect()
-
-        # Phase 3: TV unreachable — try Wake-on-LAN
-        if self._send_wol():
-            if not self._wait_for_power(target_on=True, timeout=60, poll_interval=3):
-                self.logger.error("TV did not wake up after WoL")
-                return False
-            # Give WebSocket time to come up after power-on
-            time.sleep(5)
-            if self.connect():
-                if self.ensure_art_mode():
-                    return True
-                self.logger.warning("WoL connect ok but art mode failed — rebooting...")
-                return self._reboot_and_reconnect()
 
         self.logger.error("Cannot reach TV — verify power and network")
         return False
@@ -304,29 +371,32 @@ class SamsungFrameClient:
             self.logger.error(f"Failed to upload {image_path}: {e}")
             return None
 
-    def upload_images_from_folder(
-        self, folder_path: str, matte: Optional[str] = None, max_consecutive_failures: int = 3
+    def upload_images(
+        self,
+        image_files: List[str],
+        matte: Optional[str] = None,
+        max_consecutive_failures: int = 3,
+        prepare_fn: Optional[Callable[[str], Optional[str]]] = None,
     ) -> ImageUploadSummary:
+        """Upload a list of image file paths to the TV.
+
+        Args:
+            image_files: List of absolute paths to source images
+            matte: Matte style override (default from config)
+            max_consecutive_failures: Failures before recovery attempt
+            prepare_fn: Optional callback to prep each image before upload.
+                        Takes source path, returns upload-ready path (or None to skip).
+        """
         if not self.tv:
             raise RuntimeError("Not connected to TV - call connect() first")
 
         cfg = get_config()
         matte = matte or cfg.samsung_frame.default_matte
 
-        if not os.path.isdir(folder_path):
-            raise ValueError(f"Folder not found: {folder_path}")
-
-        image_files: List[str] = []
-        for ext in cfg.samsung_frame.supported_formats:
-            image_files.extend(str(f) for f in Path(folder_path).glob(f"*.{ext}"))
-            image_files.extend(str(f) for f in Path(folder_path).glob(f"*.{ext.upper()}"))
-
-        image_files = sorted(set(image_files))
-
-        self.logger.info(f"Found {len(image_files)} images in {folder_path}")
+        self.logger.info(f"Uploading {len(image_files)} images")
 
         if not image_files:
-            self.logger.warning(f"No images found in {folder_path}")
+            self.logger.warning("No images to upload")
             return ImageUploadSummary(
                 total_images=0,
                 successful_uploads=0,
@@ -345,74 +415,94 @@ class SamsungFrameClient:
         max_pause = 30
 
         pbar = tqdm(image_files, desc="Uploading images", unit="img")
-        for image_path in pbar:
-            pbar.set_postfix_str(os.path.basename(image_path))
-            recovered = False
-            try:
-                image_id = self.upload_image(image_path, matte=matte)
-                if image_id:
-                    uploaded_ids.append(image_id)
-                    known_ids.add(image_id)
-                    consecutive_failures = 0
-                    self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
-                else:
+        try:
+            for image_path in pbar:
+                pbar.set_postfix_str(os.path.basename(image_path))
+                recovered = False
+                try:
+                    upload_path = image_path
+                    if prepare_fn:
+                        prepared = prepare_fn(image_path)
+                        if prepared is None:
+                            errors.append(
+                                {"file": os.path.basename(image_path), "error": "Prep failed"}
+                            )
+                            consecutive_failures += 1
+                            continue
+                        upload_path = prepared
+                    image_id = self.upload_image(upload_path, matte=matte)
+                    if image_id:
+                        uploaded_ids.append(image_id)
+                        known_ids.add(image_id)
+                        consecutive_failures = 0
+                        self.logger.debug(f"Uploaded {os.path.basename(image_path)} -> {image_id}")
+                    else:
+                        new_id = self._check_for_new_upload(known_ids)
+                        if new_id:
+                            uploaded_ids.append(new_id)
+                            known_ids.add(new_id)
+                            consecutive_failures = 0
+                            self.logger.debug(
+                                f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
+                            )
+                        else:
+                            recovered = True
+                            errors.append(
+                                {
+                                    "file": os.path.basename(image_path),
+                                    "error": "Upload returned None",
+                                }
+                            )
+                            consecutive_failures += 1
+                except Exception as e:
+                    self.logger.error(f"Error uploading {image_path}: {e}")
                     new_id = self._check_for_new_upload(known_ids)
                     if new_id:
                         uploaded_ids.append(new_id)
                         known_ids.add(new_id)
                         consecutive_failures = 0
                         self.logger.debug(
-                            f"Uploaded {os.path.basename(image_path)} (recovered from timeout)"
+                            f"Uploaded {os.path.basename(image_path)} (recovered from error)"
                         )
                     else:
                         recovered = True
-                        errors.append(
-                            {"file": os.path.basename(image_path), "error": "Upload returned None"}
-                        )
+                        errors.append({"file": os.path.basename(image_path), "error": str(e)})
                         consecutive_failures += 1
-            except Exception as e:
-                self.logger.error(f"Error uploading {image_path}: {e}")
-                new_id = self._check_for_new_upload(known_ids)
-                if new_id:
-                    uploaded_ids.append(new_id)
-                    known_ids.add(new_id)
-                    consecutive_failures = 0
-                    self.logger.debug(
-                        f"Uploaded {os.path.basename(image_path)} (recovered from error)"
-                    )
-                else:
-                    recovered = True
-                    errors.append({"file": os.path.basename(image_path), "error": str(e)})
-                    consecutive_failures += 1
-            finally:
-                if recovered:
-                    pause = min(pause + 5, max_pause)
-                    self.logger.info(f"TV needs cooldown, pausing {pause}s")
-                else:
-                    pause = max(pause - 1, min_pause)
-                time.sleep(pause)
-                if not self.ensure_art_mode():
-                    self.logger.warning("Lost art mode, attempting reboot recovery...")
-                    if not self._reboot_and_reconnect():
-                        self.logger.error("Cannot recover art mode — stopping uploads")
-                        break
+                finally:
+                    if recovered:
+                        pause = min(pause + 5, max_pause)
+                        self.logger.info(f"TV needs cooldown, pausing {pause}s")
+                    else:
+                        pause = max(pause - 1, min_pause)
+                    time.sleep(pause)
+                    if not self.ensure_art_mode():
+                        self.logger.warning("Lost art mode, attempting reboot recovery...")
+                        if not self._reboot_and_reconnect():
+                            self.logger.error("Cannot recover art mode — stopping uploads")
+                            break
 
-            if consecutive_failures >= max_consecutive_failures:
-                self.logger.warning(f"{consecutive_failures} consecutive failures — recovering...")
-                if self.ensure_art_mode():
-                    consecutive_failures = 0
-                    continue
-                if not rebooted:
-                    self.logger.warning("Art mode recovery failed — rebooting TV...")
-                    if self._reboot_and_reconnect():
-                        rebooted = True
+                if consecutive_failures >= max_consecutive_failures:
+                    self.logger.warning(
+                        f"{consecutive_failures} consecutive failures — recovering..."
+                    )
+                    if self.ensure_art_mode():
                         consecutive_failures = 0
                         continue
-                self.logger.error(
-                    f"{consecutive_failures} consecutive failures — "
-                    f"recovery failed, stopping uploads"
-                )
-                break
+                    if not rebooted:
+                        self.logger.warning("Art mode recovery failed — rebooting TV...")
+                        if self._reboot_and_reconnect():
+                            rebooted = True
+                            consecutive_failures = 0
+                            continue
+                    self.logger.error(
+                        f"{consecutive_failures} consecutive failures — "
+                        f"recovery failed, stopping uploads"
+                    )
+                    break
+        except (KeyboardInterrupt, SystemExit):
+            self.logger.warning(
+                f"Upload interrupted — {len(uploaded_ids)} successful, {len(errors)} failed"
+            )
 
         summary = ImageUploadSummary(
             total_images=len(image_files),
@@ -423,7 +513,8 @@ class SamsungFrameClient:
         )
 
         self.logger.info(
-            f"Upload complete: {summary.successful_uploads}/{summary.total_images} successful"
+            f"Upload {'interrupted' if len(uploaded_ids) + len(errors) < len(image_files) else 'complete'}"
+            f": {summary.successful_uploads}/{summary.total_images} successful"
         )
 
         return summary
@@ -461,13 +552,13 @@ class SamsungFrameClient:
             True if TV is confirmed in art mode with art API responding
         """
         if not self.tv:
-            if not self.connect():
+            if not self._wake_and_connect():
                 return False
 
         # Already in art mode?
         try:
             self.get_available_art_strict()
-            self.logger.info("Art mode confirmed, API responding")
+            self.logger.debug("Art mode confirmed, API responding")
             return True
         except Exception:
             pass
@@ -487,7 +578,7 @@ class SamsungFrameClient:
             self.logger.info(f"Waiting {wait}s for art mode (attempt {attempt}/3)...")
             time.sleep(wait)
             try:
-                if self.connect():
+                if self._wake_and_connect():
                     self.get_available_art_strict()
                     self.logger.info("Art mode activated via KEY_POWER toggle")
                     return True
@@ -502,7 +593,7 @@ class SamsungFrameClient:
         self.logger.info("Closing stale connection...")
         self.close()
         time.sleep(2)
-        return self.connect()
+        return self._wake_and_connect()
 
     def _wait_for_power(self, target_on: bool, timeout: int = 120, poll_interval: int = 3) -> bool:
         """Poll REST API until TV power state matches target or timeout.
@@ -553,7 +644,7 @@ class SamsungFrameClient:
         for attempt in range(1, max_attempts + 1):
             self.logger.info(f"Connecting to art mode (attempt {attempt}/{max_attempts})...")
             try:
-                if self.connect() and self.ensure_art_mode():
+                if self._wake_and_connect() and self.ensure_art_mode():
                     self.logger.info("Reconnected after reboot, art mode verified")
                     return True
             except Exception:
@@ -583,7 +674,7 @@ class SamsungFrameClient:
 
         art_list = self._fetch_art_list()
         user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
-        self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
+        self.logger.debug(f"Retrieved {user_count} user uploaded images from TV")
         return art_list
 
     def get_available_art(self) -> List[Dict[str, Any]]:
@@ -593,7 +684,7 @@ class SamsungFrameClient:
         try:
             art_list = self._fetch_art_list()
             user_count = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
-            self.logger.info(f"Retrieved {user_count} user uploaded images from TV")
+            self.logger.debug(f"Retrieved {user_count} user uploaded images from TV")
             return art_list
         except Exception as e:
             self.logger.error(f"Error getting available art after retries: {e}")

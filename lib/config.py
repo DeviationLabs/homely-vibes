@@ -183,6 +183,9 @@ class SamsungFrameConfig:
 
     ip: str
     mac: str
+    wol_password: str
+    smartthings_token: str
+    smartthings_device_id: str
     port: int
     token_file: str
     default_matte: str
