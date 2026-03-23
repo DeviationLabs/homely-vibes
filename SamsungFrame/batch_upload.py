@@ -515,6 +515,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
     art_deleted = 0
     art_delete_failures = 0
+    total_art_on_tv = 0
     heic_converted = 0
     conversion_errors: List[Dict[str, str]] = []
 
@@ -556,51 +557,71 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         completed = upload_summary.successful_uploads + upload_summary.failed_uploads
         interrupted = completed < upload_summary.total_images
 
-        # --- Purge: delete stale art using image_date from TV API ---
-        # Purge runs even if uploads were partially aborted
-        if not args.no_purge and not interrupted:
-            purge_ready = True
+        # Set preliminary summary immediately so signal handler can send
+        # notification if a second Ctrl+C arrives during purge/art-count.
+        _current_summary = BatchUploadSummary(
+            total_discovered=len(images),
+            total_filtered=len(images),
+            heic_converted=heic_converted,
+            conversion_failures=len(conversion_errors),
+            art_deleted=0,
+            art_delete_failures=0,
+            total_art_on_tv=0,
+            upload_summary=upload_summary,
+            conversion_errors=conversion_errors,
+        )
+
+        try:
+            # --- Purge: delete stale art using image_date from TV API ---
+            # Purge runs even if uploads were partially aborted
+            if not args.no_purge and not interrupted:
+                purge_ready = True
+                try:
+                    client.ping()
+                except Exception:
+                    logger.warning("TV connection lost before purge, reconnecting...")
+                    client.close()
+                    if not client.connect_ready():
+                        logger.error("Cannot reconnect for purge — skipping purge")
+                        purge_ready = False
+
+                if purge_ready:
+                    art_list = client.get_available_art()
+                    user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
+                    stale_ids = get_stale_art_ids(art_list)
+
+                    min_images = cfg.samsung_frame.min_images
+                    remaining = len(user_art) - len(stale_ids)
+                    if remaining < min_images:
+                        keep_count = min_images - remaining
+                        stale_ids = stale_ids[keep_count:]
+                        logger.info(
+                            f"Keeping {keep_count} stale images to maintain min {min_images}"
+                        )
+
+                    if stale_ids:
+                        logger.info(f"Purging {len(stale_ids)} stale art items (>24h old)")
+                        try:
+                            result = delete_art_by_ids(client, stale_ids)
+                            art_deleted = result["deleted"]
+                            art_delete_failures = result["failed"]
+                        except Exception as e:
+                            logger.error(f"Error during purge: {e}")
+                            art_delete_failures = len(stale_ids)
+                    else:
+                        logger.info("No stale art to purge")
+
+            # --- Get current art count on TV ---
             try:
                 client.ping()
-            except Exception:
-                logger.warning("TV connection lost before purge, reconnecting...")
-                client.close()
-                if not client.connect_ready():
-                    logger.error("Cannot reconnect for purge — skipping purge")
-                    purge_ready = False
-
-            if purge_ready:
                 art_list = client.get_available_art()
-                user_art = [a for a in art_list if a.get("content_id", "").startswith("MY_F")]
-                stale_ids = get_stale_art_ids(art_list)
-
-                min_images = cfg.samsung_frame.min_images
-                remaining = len(user_art) - len(stale_ids)
-                if remaining < min_images:
-                    keep_count = min_images - remaining
-                    stale_ids = stale_ids[keep_count:]
-                    logger.info(f"Keeping {keep_count} stale images to maintain min {min_images}")
-
-                if stale_ids:
-                    logger.info(f"Purging {len(stale_ids)} stale art items (>24h old)")
-                    try:
-                        result = delete_art_by_ids(client, stale_ids)
-                        art_deleted = result["deleted"]
-                        art_delete_failures = result["failed"]
-                    except Exception as e:
-                        logger.error(f"Error during purge: {e}")
-                        art_delete_failures = len(stale_ids)
-                else:
-                    logger.info("No stale art to purge")
-
-        # --- Get current art count on TV ---
-        total_art_on_tv = 0
-        try:
-            client.ping()
-            art_list = client.get_available_art()
-            total_art_on_tv = sum(1 for a in art_list if a.get("content_id", "").startswith("MY_F"))
-        except Exception:
-            pass
+                total_art_on_tv = sum(
+                    1 for a in art_list if a.get("content_id", "").startswith("MY_F")
+                )
+            except Exception:
+                pass
+        except (KeyboardInterrupt, SystemExit):
+            interrupted = True
 
         # --- Summary ---
         summary = BatchUploadSummary(
@@ -616,7 +637,8 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         )
         _current_summary = summary
 
-        send_batch_notification(summary, interrupted=interrupted)
+        if not _notification_sent:
+            send_batch_notification(summary, interrupted=interrupted)
 
         logger.info("=" * 50)
         logger.info("BATCH UPLOAD SUMMARY")
