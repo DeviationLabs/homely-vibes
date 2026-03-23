@@ -515,6 +515,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
 
     art_deleted = 0
     art_delete_failures = 0
+    total_art_on_tv = 0
     heic_converted = 0
     conversion_errors: List[Dict[str, str]] = []
 
@@ -611,7 +612,6 @@ def run_batch_upload(args: argparse.Namespace) -> int:
                         logger.info("No stale art to purge")
 
             # --- Get current art count on TV ---
-            total_art_on_tv = 0
             try:
                 client.ping()
                 art_list = client.get_available_art()
@@ -637,7 +637,8 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         )
         _current_summary = summary
 
-        send_batch_notification(summary, interrupted=interrupted)
+        if not _notification_sent:
+            send_batch_notification(summary, interrupted=interrupted)
 
         logger.info("=" * 50)
         logger.info("BATCH UPLOAD SUMMARY")
