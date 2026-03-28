@@ -42,7 +42,7 @@ class Pushover:
             if priority != 0:
                 payload["priority"] = str(priority)
                 if priority == 2:
-                    payload["retry"] = "60"
+                    payload["retry"] = "1800"
                     payload["expire"] = "3600"
 
             resp = requests.post(
