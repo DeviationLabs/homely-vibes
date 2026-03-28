@@ -551,6 +551,7 @@ class SamsungFrameClient:
         Returns:
             True if TV is confirmed in art mode with art API responding
         """
+        self._send_wol()
         if not self.tv:
             if not self._wake_and_connect():
                 return False
