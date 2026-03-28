@@ -23,6 +23,8 @@ class NodeChecker:
         self.mode = mode
         self.nodes: List[GenericNode] = []
         self.messages: List[str] = []
+        self.reboot_failures: List[str] = []
+        self.recovery_failures: List[str] = []
 
         # Create nodes based on mode
         for name, config in cfg.node_check.node_configs.items():
@@ -46,10 +48,6 @@ class NodeChecker:
                 self.log_message(f"   {self.mode}: {node.name} online.")
             else:
                 self.log_message(f">> ERROR {self.mode}: {node.name} offline.")
-                pushover.send_message(
-                    f"{self.mode.title()} node {node.name} is offline",
-                    title="Node Check Failed",
-                )
                 all_healthy = False
 
         return all_healthy
@@ -73,10 +71,7 @@ class NodeChecker:
                 self.log_message(f"   Confirmed node is down: {node.name}")
             else:
                 self.log_message(f">> ERROR: Oops! Node did not reboot: {node.name}")
-                pushover.send_message(
-                    f"{self.mode.title()} node {node.name} failed to reboot",
-                    title="Node Reboot Failed",
-                )
+                self.reboot_failures.append(node.name)
 
         # Wait for nodes to come back up
         self.log_message("Sleep until nodes restart...")
@@ -87,10 +82,7 @@ class NodeChecker:
                 self.log_message(f"   {self.mode}: {node.name} back online.")
             else:
                 self.log_message(f">> ERROR: {self.mode}: {node.name} failed online.")
-                pushover.send_message(
-                    f"{self.mode.title()} node {node.name} failed to come back online after reboot",
-                    title="Node Recovery Failed",
-                )
+                self.recovery_failures.append(node.name)
                 all_recovered = False
 
         return all_recovered
@@ -114,6 +106,17 @@ class NodeChecker:
                     f"{self.mode.title()} node reboot completed successfully",
                     title=f"{self.mode.title()} Reboot Complete",
                 )
+
+        if self.reboot_failures:
+            pushover.send_message(
+                f"{self.mode.title()} nodes failed to reboot: {', '.join(self.reboot_failures)}",
+                title="Node Reboot Failed",
+            )
+        if self.recovery_failures:
+            pushover.send_message(
+                f"{self.mode.title()} nodes failed to recover: {', '.join(self.recovery_failures)}",
+                title="Node Recovery Failed",
+            )
 
         Mailer.sendmail(
             topic=f"[NodeCheck-{self.mode}]",
