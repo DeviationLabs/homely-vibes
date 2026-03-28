@@ -59,6 +59,7 @@ class HeartbeatMonitor:
 
         for node in self.monitored_nodes:
             try:
+                logger.debug(f"Checking {node.name} ({node.config.ip})...")
                 if not node.heartbeat():
                     down_nodes.add(node.name)
                     logger.warning(f"Node {node.name} is down")
@@ -134,7 +135,9 @@ class HeartbeatMonitor:
                     if self.last_down_nodes:
                         logger.info("All nodes are now healthy (recovery detected)")
                         self.send_recovery_notification(self.last_down_nodes)
-                    logger.debug("All nodes healthy")
+                    logger.info(
+                        f"All nodes healthy: {', '.join(sorted(n.name for n in self.monitored_nodes))}"
+                    )
 
                 self.last_down_nodes = current_down_nodes
 
