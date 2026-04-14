@@ -29,7 +29,6 @@ dependencies = [
     "tld>=0.13.1",
     "yalexs>=8.0.0",
     "aiohttp>=3.13.4",
-    "pytest>=9.0.3",
     "gpxpy>=1.5.0",
     "click>=8.0.0",
     "paramiko>=2.8.0",
@@ -37,8 +36,8 @@ dependencies = [
     "requests-oauthlib>=2.0.0",
     "websocket-client>=1.0.0",
     "samsungtvws @ git+https://github.com/NickWaterton/samsung-tv-ws-api.git",
-    "Pillow>=10.0.0",
     "pillow>=12.2.0",
+    "pillow-heif>=0.22.0",
     "omegaconf>=2.3.0",
 ]
 
