@@ -17,7 +17,7 @@ from types import FrameType
 from typing import Any, List, Dict, Optional
 
 import pillow_heif
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 from SamsungFrame.samsung_client import SamsungFrameClient, ImageUploadSummary
@@ -106,6 +106,7 @@ class BatchUploadSummary(BaseModel):
     total_discovered: int
     total_filtered: int
     heic_converted: int
+    portraits_skipped: int
     conversion_failures: int
     art_deleted: int
     art_delete_failures: int
@@ -134,13 +135,14 @@ class ImageConverter:
 
         try:
             with Image.open(image_path) as raw_img:
-                img: Image.Image = raw_img
+                img: Image.Image = ImageOps.exif_transpose(raw_img)
+                exif_rotated = img.size != raw_img.size
                 width, height = img.size
                 needs_resize = width > self.MAX_WIDTH or height > self.MAX_HEIGHT
                 needs_compress = original_size_mb > self.max_size_mb
                 is_heic = ext == ".heic"
 
-                if not needs_resize and not needs_compress and not is_heic:
+                if not needs_resize and not needs_compress and not is_heic and not exif_rotated:
                     return ConversionResult(
                         source_path=str(image_path),
                         converted_path=None,
@@ -517,7 +519,33 @@ def run_batch_upload(args: argparse.Namespace) -> int:
     art_delete_failures = 0
     total_art_on_tv = 0
     heic_converted = 0
+    portraits_skipped = 0
     conversion_errors: List[Dict[str, str]] = []
+
+    # Pre-filter portrait images before upload (avoids counting skips as failures)
+    if not args.include_portraits:
+        landscape_images = []
+        for p in images:
+            try:
+                with Image.open(p) as raw_img:
+                    oriented = ImageOps.exif_transpose(raw_img)
+                    w, h = oriented.size
+                    if h > w:
+                        portraits_skipped += 1
+                        logger.debug(f"Skipping portrait: {p.name} ({w}×{h})")
+                    else:
+                        landscape_images.append(p)
+            except Exception:
+                landscape_images.append(p)  # include on open error, converter will handle it
+        if portraits_skipped:
+            logger.info(
+                f"Skipped {portraits_skipped} portrait images (use --include-portraits to include)"
+            )
+        images = landscape_images
+
+    if not images:
+        logger.error("No images remaining after portrait filtering")
+        return 1
 
     with tempfile.TemporaryDirectory() as temp_dir:
         converter = ImageConverter(temp_dir)
@@ -563,6 +591,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             total_discovered=len(images),
             total_filtered=len(images),
             heic_converted=heic_converted,
+            portraits_skipped=portraits_skipped,
             conversion_failures=len(conversion_errors),
             art_deleted=0,
             art_delete_failures=0,
@@ -628,6 +657,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
             total_discovered=len(images),
             total_filtered=len(images),
             heic_converted=heic_converted,
+            portraits_skipped=portraits_skipped,
             conversion_failures=len(conversion_errors),
             art_deleted=art_deleted,
             art_delete_failures=art_delete_failures,
@@ -643,6 +673,7 @@ def run_batch_upload(args: argparse.Namespace) -> int:
         logger.info("=" * 50)
         logger.info("BATCH UPLOAD SUMMARY")
         logger.info(f"Discovered: {summary.total_discovered}")
+        logger.info(f"Portraits skipped: {summary.portraits_skipped}")
         logger.info(f"Converted: {summary.heic_converted} HEIC files")
         logger.info(f"Deleted: {summary.art_deleted} existing art")
         logger.info(
@@ -731,6 +762,13 @@ def main() -> int:
         "--matte",
         default=cfg.samsung_frame.default_matte,
         help="Matte style (default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--include-portraits",
+        action="store_true",
+        default=False,
+        help="Include portrait-orientation images (default: skip them; EXIF rotation always applied)",
     )
 
     parser.add_argument(

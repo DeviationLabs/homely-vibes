@@ -415,6 +415,20 @@ Connection attempts use exponential backoff:
 
 The slideshow uses the TV's configured rotation interval (fastest available). The interval cannot be customized via the API - adjust it directly on the TV's art mode settings.
 
+## Validated Batch Upload Sessions
+
+Cross-reference with `~/bin/_claude/shared-memory/skills/samsung.md` for full protocol notes.
+
+| Date | TV Model | Firmware | Images | Success | Runtime | Notes |
+|------|----------|----------|--------|---------|---------|-------|
+| 2026-04-23 | QN55LS03FADXZA (55" Frame) | unknown | 474 | 472 (99.6%) | 1h 38m | 2 WebSocket timeout failures; Art API toggled ×2; `ms.channel.timeOut` retry bug fixed same day |
+
+**Observed failure modes (all auto-recovered except where noted):**
+- `ms.channel.timeOut` on initial connect → retry with backoff (requires fix in `connect()`)
+- Mid-upload WebSocket timeout → 10s cooldown, skip image, continue *(image lost)*
+- Art API unresponsive mid-run → `KEY_POWER` toggle, reconnect, resume *(no image loss)*
+- `ms.channel.clientDisconnect` response → treated as failure, next image normal
+
 ## References
 
 - [NickWaterton samsung-tv-ws-api fork](https://github.com/NickWaterton/samsung-tv-ws-api) (v3.0.5+ used by this project)
