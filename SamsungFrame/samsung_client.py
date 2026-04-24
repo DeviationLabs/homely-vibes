@@ -125,7 +125,10 @@ class SamsungFrameClient:
                     retry_delay *= 2
             except Exception as e:
                 self.logger.error(f"Unexpected error connecting to TV: {e}")
-                return False
+                if attempt < max_retries - 1:
+                    self.logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
 
         self.logger.error(f"Failed to connect to TV at {self.host}:{self.port}")
         self.logger.error("Verify TV is powered on and on same network")
