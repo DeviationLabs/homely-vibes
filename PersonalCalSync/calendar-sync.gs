@@ -8,12 +8,12 @@
 // 1. Get your personal calendar's secret iCal URL:
 //    Personal Gmail → Calendar Settings → your calendar → Integrate calendar
 //    → Copy "Secret address in iCal format"
-// 2. Paste the URL below
+// 2. Run setPersonalIcalUrl('YOUR_URL_HERE') once to store it in Script Properties
 // 3. Run initialSync() once to grant permissions
 // 4. Add time-driven trigger: syncCalendar every 15 minutes
 // ============================================================
+var ICAL_URL_KEY = 'PERSONAL_ICAL_URL';
 
-var PERSONAL_ICAL_URL = 'PASTE_YOUR_SECRET_ICAL_URL_HERE';
 var BLOCKER_TAG = '[PERSONAL_SYNC:';
 var BLOCKER_PREFIX = '[P] ';
 var BLOCKER_TITLE_FALLBACK = 'Personal (Busy)';
@@ -76,7 +76,11 @@ function syncCalendar() {
 // --- ICS Fetching & Parsing ---
 
 function fetchPersonalEvents(startDate, endDate) {
-  var url = PERSONAL_ICAL_URL;
+  var url = PropertiesService.getScriptProperties().getProperty(ICAL_URL_KEY);
+  if (!url) {
+    Logger.log('iCal URL not set. Run setPersonalIcalUrl("YOUR_URL") first.');
+    return null;
+  }
   var response;
   try {
     response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
@@ -546,6 +550,16 @@ function updateBlockerIfNeeded(blocker, pe) {
 }
 
 // --- Entry Points ---
+
+function setPersonalIcalUrl(url) {
+  PropertiesService.getScriptProperties().setProperty(ICAL_URL_KEY, url);
+  Logger.log('iCal URL saved to Script Properties.');
+}
+
+function getPersonalIcalUrl() {
+  var url = PropertiesService.getScriptProperties().getProperty(ICAL_URL_KEY);
+  Logger.log('Stored iCal URL: ' + (url || '(not set)'));
+}
 
 function initialSync() {
   Logger.log('Running initial sync...');
