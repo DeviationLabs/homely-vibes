@@ -15,7 +15,7 @@
 
 var PERSONAL_ICAL_URL = 'PASTE_YOUR_SECRET_ICAL_URL_HERE';
 var BLOCKER_TAG = '[PERSONAL_SYNC:';
-var BLOCKER_TITLE = 'Personal (Busy)';
+var BLOCKER_TITLE_FALLBACK = 'Personal (Busy)';
 var SYNC_DAYS_AHEAD = 30;
 
 var BATCH_SIZE = 10;
@@ -27,9 +27,12 @@ function syncCalendar() {
   var endDate = new Date(now.getTime() + SYNC_DAYS_AHEAD * 24 * 60 * 60 * 1000);
 
   var personalEvents = fetchPersonalEvents(startDate, endDate);
-  if (personalEvents === null || personalEvents.length === 0) {
-    Logger.log('No personal events found.');
+  if (personalEvents === null) {
+    Logger.log('Failed to fetch personal events, skipping sync to preserve existing blockers.');
     return;
+  }
+  if (personalEvents.length === 0) {
+    Logger.log('No personal events found in window.');
   }
 
   Logger.log('Found ' + personalEvents.length + ' personal events in window.');
@@ -139,7 +142,8 @@ function parseICS(icsText, startDate, endDate) {
     var exdates = extractAllEXDATEs(block);
 
     if (rrule) {
-      var instances = expandRRule(rrule, dtStart, duration, isAllDay, exdates, startDate, endDate, uid, overridesByUid[uid] || {});
+      var masterTitle = extractICSField(block, 'SUMMARY');
+      var instances = expandRRule(rrule, dtStart, duration, isAllDay, exdates, startDate, endDate, uid, overridesByUid[uid] || {}, masterTitle);
       for (var j = 0; j < instances.length; j++) {
         events.push(instances[j]);
       }
@@ -148,8 +152,10 @@ function parseICS(icsText, startDate, endDate) {
         dtEnd = new Date(dtStart.getTime() + duration);
       }
       if (dtEnd >= startDate && dtStart <= endDate) {
+        var title = extractICSField(block, 'SUMMARY');
         events.push({
           uid: uid,
+          title: title || BLOCKER_TITLE_FALLBACK,
           start: dtStart,
           end: dtEnd,
           isAllDay: isAllDay
@@ -196,7 +202,7 @@ function isDeclinedEvent(block) {
 
 // --- RRULE Expansion ---
 
-function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, windowEnd, uid, overrides) {
+function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, windowEnd, uid, overrides, masterTitle) {
   var parts = parseRRuleParts(rrule);
   var freq = parts['FREQ'];
   var interval = parseInt(parts['INTERVAL'] || '1');
@@ -230,6 +236,7 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
         var instanceEnd = new Date(candidate.getTime() + duration);
 
         // Check for override (modified instance)
+        var instanceTitle = masterTitle;
         var override = overrides[candidate.getTime()];
         if (override) {
           var ovStart = extractICSDateTime(override, 'DTSTART');
@@ -241,10 +248,13 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
             candidate = ovStart;
             instanceEnd = ovEnd || new Date(ovStart.getTime() + duration);
           }
+          var ovTitle = extractICSField(override, 'SUMMARY');
+          if (ovTitle) instanceTitle = ovTitle;
         }
 
         instances.push({
           uid: uid + '_' + candidate.getTime(),
+          title: instanceTitle || BLOCKER_TITLE_FALLBACK,
           start: candidate,
           end: instanceEnd,
           isAllDay: isAllDay
@@ -488,9 +498,9 @@ function createBlocker(enterpriseCal, pe) {
   var blocker;
 
   if (pe.isAllDay) {
-    blocker = enterpriseCal.createAllDayEvent(BLOCKER_TITLE, pe.start, pe.end);
+    blocker = enterpriseCal.createAllDayEvent(pe.title, pe.start, pe.end);
   } else {
-    blocker = enterpriseCal.createEvent(BLOCKER_TITLE, pe.start, pe.end);
+    blocker = enterpriseCal.createEvent(pe.title, pe.start, pe.end);
   }
 
   blocker.setDescription(description);
@@ -498,7 +508,7 @@ function createBlocker(enterpriseCal, pe) {
   blocker.setVisibility(CalendarApp.Visibility.PRIVATE);
   blocker.removeAllReminders();
 
-  Logger.log('Created blocker: ' + pe.start);
+  Logger.log('Created blocker: ' + pe.title + ' @ ' + pe.start);
   return blocker;
 }
 
@@ -519,8 +529,13 @@ function updateBlockerIfNeeded(blocker, pe) {
     }
   }
 
+  if (blocker.getTitle() !== pe.title) {
+    blocker.setTitle(pe.title);
+    changed = true;
+  }
+
   if (changed) {
-    Logger.log('Updated blocker: ' + pe.start);
+    Logger.log('Updated blocker: ' + pe.title + ' @ ' + pe.start);
   }
 }
 
