@@ -551,16 +551,6 @@ function updateBlockerIfNeeded(blocker, pe) {
 
 // --- Entry Points ---
 
-function setPersonalIcalUrl(url) {
-  PropertiesService.getScriptProperties().setProperty(ICAL_URL_KEY, url);
-  Logger.log('iCal URL saved to Script Properties.');
-}
-
-function getPersonalIcalUrl() {
-  var url = PropertiesService.getScriptProperties().getProperty(ICAL_URL_KEY);
-  Logger.log('Stored iCal URL: ' + (url || '(not set)'));
-}
-
 function initialSync() {
   Logger.log('Running initial sync...');
   syncCalendar();
