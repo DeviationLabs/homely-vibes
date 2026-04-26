@@ -30,16 +30,30 @@ Enterprise Google Workspace often blocks external calendar access via `CalendarA
 1. Open [script.google.com](https://script.google.com) logged in as your **enterprise** account
 2. New Project → delete placeholder code
 3. Paste contents of `calendar-sync.gs`
-4. Replace `PASTE_YOUR_SECRET_ICAL_URL_HERE` with your secret iCal URL
-5. Save
+4. Save
 
-### 3. Run initial sync
+### 3. Store the iCal URL in Script Properties
+
+The URL is stored in Apps Script's encrypted Script Properties — not in the code — so it survives future `clasp push` deployments.
+
+1. In the Apps Script editor → **Project Settings** (gear icon on left) → **Script Properties**
+2. Click **Add script property**
+3. Property: `PERSONAL_ICAL_URL` — Value: your secret iCal URL from step 1
+4. Click **Save script properties**
+
+Also save it in `config/local.yaml` (gitignored) so it's backed up locally:
+```yaml
+personal_cal_sync:
+  ical_url: "your_secret_ical_url_here"
+```
+
+### 4. Run initial sync
 
 1. Select `initialSync` from the function dropdown → click **Run**
 2. Approve calendar permissions when prompted
 3. Check your enterprise calendar for red blocker events
 
-### 4. Set up automatic sync
+### 5. Set up automatic sync
 
 1. Left sidebar → **Triggers** (clock icon) → **Add Trigger**
 2. Function: `syncCalendar`
@@ -101,13 +115,13 @@ To trigger an immediate sync after pushing (instead of waiting for the 15-minute
 
 ### `.clasp.json` and secrets
 
-`.clasp.json` contains the script ID (not sensitive) but no credentials. The iCal URL lives only inside the Apps Script editor and is never committed to this repo.
+`.clasp.json` contains the script ID (not sensitive) but no credentials. The iCal URL lives in Apps Script's Script Properties (encrypted, never in source code) and in `config/local.yaml` (gitignored) as a local backup.
 
 ## Configuration
 
 | Variable | Default | Description |
 |---|---|---|
-| `PERSONAL_ICAL_URL` | — | Your secret iCal URL |
+| `PERSONAL_ICAL_URL` | — | Secret iCal URL — stored in Script Properties, not source code |
 | `BLOCKER_TITLE_FALLBACK` | `Personal (Busy)` | Title used only if SUMMARY is missing from iCal |
 | `SYNC_DAYS_AHEAD` | `30` | How far ahead to sync |
 | `BATCH_SIZE` | `10` | Events created before pausing |
