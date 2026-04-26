@@ -8,13 +8,14 @@
 // 1. Get your personal calendar's secret iCal URL:
 //    Personal Gmail → Calendar Settings → your calendar → Integrate calendar
 //    → Copy "Secret address in iCal format"
-// 2. Paste the URL below
+// 2. Set PERSONAL_ICAL_URL in Project Settings → Script Properties
 // 3. Run initialSync() once to grant permissions
 // 4. Add time-driven trigger: syncCalendar every 15 minutes
 // ============================================================
+var ICAL_URL_KEY = 'PERSONAL_ICAL_URL';
 
-var PERSONAL_ICAL_URL = 'PASTE_YOUR_SECRET_ICAL_URL_HERE';
 var BLOCKER_TAG = '[PERSONAL_SYNC:';
+var BLOCKER_PREFIX = '[P] ';
 var BLOCKER_TITLE_FALLBACK = 'Personal (Busy)';
 var SYNC_DAYS_AHEAD = 30;
 
@@ -75,7 +76,11 @@ function syncCalendar() {
 // --- ICS Fetching & Parsing ---
 
 function fetchPersonalEvents(startDate, endDate) {
-  var url = PERSONAL_ICAL_URL;
+  var url = PropertiesService.getScriptProperties().getProperty(ICAL_URL_KEY);
+  if (!url) {
+    Logger.log('iCal URL not set. Run setPersonalIcalUrl("YOUR_URL") first.');
+    return null;
+  }
   var response;
   try {
     response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
@@ -155,7 +160,7 @@ function parseICS(icsText, startDate, endDate) {
         var title = extractICSField(block, 'SUMMARY');
         events.push({
           uid: uid,
-          title: title || BLOCKER_TITLE_FALLBACK,
+          title: title ? BLOCKER_PREFIX + title : BLOCKER_TITLE_FALLBACK,
           start: dtStart,
           end: dtEnd,
           isAllDay: isAllDay
@@ -236,7 +241,7 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
         var instanceEnd = new Date(candidate.getTime() + duration);
 
         // Check for override (modified instance)
-        var instanceTitle = masterTitle;
+        var instanceTitle = masterTitle ? BLOCKER_PREFIX + masterTitle : null;
         var override = overrides[candidate.getTime()];
         if (override) {
           var ovStart = extractICSDateTime(override, 'DTSTART');
@@ -249,7 +254,7 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
             instanceEnd = ovEnd || new Date(ovStart.getTime() + duration);
           }
           var ovTitle = extractICSField(override, 'SUMMARY');
-          if (ovTitle) instanceTitle = ovTitle;
+          if (ovTitle) instanceTitle = BLOCKER_PREFIX + ovTitle;
         }
 
         instances.push({
@@ -531,6 +536,11 @@ function updateBlockerIfNeeded(blocker, pe) {
 
   if (blocker.getTitle() !== pe.title) {
     blocker.setTitle(pe.title);
+    changed = true;
+  }
+
+  if (blocker.getColor() !== CalendarApp.EventColor.RED) {
+    blocker.setColor(CalendarApp.EventColor.RED);
     changed = true;
   }
 
