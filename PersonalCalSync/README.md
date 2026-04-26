@@ -60,7 +60,11 @@ After initial setup, use [`clasp`](https://github.com/google/clasp) to push loca
 npm install -g @google/clasp
 ```
 
-**2. Log in** (opens browser — sign in as your **enterprise** Google account, the one that owns the Apps Script project):
+**2. Enable the Apps Script API** on your enterprise account:
+
+Visit [script.google.com/home/usersettings](https://script.google.com/home/usersettings) and toggle **Google Apps Script API** to **On**. Without this, `clasp push` will fail with a 403. Only needed once per Google account.
+
+**3. Log in** (opens browser — sign in as your **enterprise** Google account, the one that owns the Apps Script project):
 
 ```bash
 clasp login
@@ -68,16 +72,16 @@ clasp login
 
 Credentials are saved to `~/.clasprc.json`. You only need to do this once per machine.
 
-**3. Find your Script ID:** `script.google.com` → your project → **Project Settings** → **IDs** → Script ID.
+**4. Find your Script ID:** `script.google.com` → your project → **Project Settings** → **IDs** → Script ID.
 
-**4. Store it in `config/local.yaml`** (gitignored) so Claude can run deploys for you without being asked:
+**5. Store it in `config/local.yaml`** (gitignored) so Claude can run deploys for you without being asked:
 
 ```yaml
 personal_cal_sync:
   script_id: "your_script_id_here"
 ```
 
-**5. Link this directory** to your Apps Script project:
+**6. Link this directory** to your Apps Script project:
 
 ```bash
 cd PersonalCalSync
