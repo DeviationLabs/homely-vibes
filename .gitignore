@@ -35,3 +35,6 @@ config/samsung_upload_history.json
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# clasp (Google Apps Script CLI) — script ID is local, not shared
+PersonalCalSync/.clasp.json
