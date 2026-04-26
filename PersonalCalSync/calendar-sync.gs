@@ -8,7 +8,7 @@
 // 1. Get your personal calendar's secret iCal URL:
 //    Personal Gmail → Calendar Settings → your calendar → Integrate calendar
 //    → Copy "Secret address in iCal format"
-// 2. Run setPersonalIcalUrl('YOUR_URL_HERE') once to store it in Script Properties
+// 2. Set PERSONAL_ICAL_URL in Project Settings → Script Properties
 // 3. Run initialSync() once to grant permissions
 // 4. Add time-driven trigger: syncCalendar every 15 minutes
 // ============================================================
