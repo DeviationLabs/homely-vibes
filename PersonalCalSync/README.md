@@ -59,11 +59,20 @@ npm install -g @google/clasp
 clasp login   # opens browser, log in as your enterprise account
 ```
 
-Then link this directory to your existing Apps Script project:
+Find your Script ID: `script.google.com` → your project → **Project Settings** → **IDs** → Script ID.
+
+Store it in `config/local.yaml` (gitignored) so Claude can run deploys for you:
+
+```yaml
+personal_cal_sync:
+  script_id: "your_script_id_here"
+```
+
+Then link this directory to your Apps Script project:
 
 ```bash
 cd PersonalCalSync
-clasp clone <SCRIPT_ID>   # Script ID is in script.google.com → Project Settings → IDs
+clasp clone <SCRIPT_ID>   # same ID as above
 ```
 
 This creates `.clasp.json` (gitignored — contains your script ID) and `appsscript.json`.
