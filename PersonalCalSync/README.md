@@ -54,21 +54,30 @@ After initial setup, use [`clasp`](https://github.com/google/clasp) to push loca
 
 ### One-time clasp setup
 
+**1. Install clasp:**
+
 ```bash
 npm install -g @google/clasp
-clasp login   # opens browser, log in as your enterprise account
 ```
 
-Find your Script ID: `script.google.com` → your project → **Project Settings** → **IDs** → Script ID.
+**2. Log in** (opens browser — sign in as your **enterprise** Google account, the one that owns the Apps Script project):
 
-Store it in `config/local.yaml` (gitignored) so Claude can run deploys for you:
+```bash
+clasp login
+```
+
+Credentials are saved to `~/.clasprc.json`. You only need to do this once per machine.
+
+**3. Find your Script ID:** `script.google.com` → your project → **Project Settings** → **IDs** → Script ID.
+
+**4. Store it in `config/local.yaml`** (gitignored) so Claude can run deploys for you without being asked:
 
 ```yaml
 personal_cal_sync:
   script_id: "your_script_id_here"
 ```
 
-Then link this directory to your Apps Script project:
+**5. Link this directory** to your Apps Script project:
 
 ```bash
 cd PersonalCalSync
@@ -84,7 +93,7 @@ cd PersonalCalSync
 clasp push        # uploads calendar-sync.gs to Apps Script
 ```
 
-Verify in the Apps Script editor that the file updated, then run `initialSync` manually once to confirm the new code works before the trigger picks it up.
+To trigger an immediate sync after pushing (instead of waiting for the 15-minute timer), open the Apps Script editor, select `initialSync` from the function dropdown, and click **Run**.
 
 ### `.clasp.json` and secrets
 
