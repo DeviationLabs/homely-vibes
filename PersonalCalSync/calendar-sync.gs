@@ -15,6 +15,7 @@
 
 var PERSONAL_ICAL_URL = 'PASTE_YOUR_SECRET_ICAL_URL_HERE';
 var BLOCKER_TAG = '[PERSONAL_SYNC:';
+var BLOCKER_PREFIX = '[personal] ';
 var BLOCKER_TITLE_FALLBACK = 'Personal (Busy)';
 var SYNC_DAYS_AHEAD = 30;
 
@@ -155,7 +156,7 @@ function parseICS(icsText, startDate, endDate) {
         var title = extractICSField(block, 'SUMMARY');
         events.push({
           uid: uid,
-          title: title || BLOCKER_TITLE_FALLBACK,
+          title: title ? BLOCKER_PREFIX + title : BLOCKER_TITLE_FALLBACK,
           start: dtStart,
           end: dtEnd,
           isAllDay: isAllDay
@@ -236,7 +237,7 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
         var instanceEnd = new Date(candidate.getTime() + duration);
 
         // Check for override (modified instance)
-        var instanceTitle = masterTitle;
+        var instanceTitle = masterTitle ? BLOCKER_PREFIX + masterTitle : null;
         var override = overrides[candidate.getTime()];
         if (override) {
           var ovStart = extractICSDateTime(override, 'DTSTART');
@@ -249,7 +250,7 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
             instanceEnd = ovEnd || new Date(ovStart.getTime() + duration);
           }
           var ovTitle = extractICSField(override, 'SUMMARY');
-          if (ovTitle) instanceTitle = ovTitle;
+          if (ovTitle) instanceTitle = BLOCKER_PREFIX + ovTitle;
         }
 
         instances.push({
@@ -531,6 +532,11 @@ function updateBlockerIfNeeded(blocker, pe) {
 
   if (blocker.getTitle() !== pe.title) {
     blocker.setTitle(pe.title);
+    changed = true;
+  }
+
+  if (blocker.getColor() !== CalendarApp.EventColor.RED) {
+    blocker.setColor(CalendarApp.EventColor.RED);
     changed = true;
   }
 
