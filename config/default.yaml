@@ -218,6 +218,10 @@ flume:
   user_email: ""  
   password: ""  
 
+# === PersonalCalSync (Google Apps Script) ===
+personal_cal_sync:
+  script_id: ""   # Apps Script project ID — override in config/local.yaml
+
 # === Constants ===
 my_external_ip: "hoiboi.tplinkdns.com"
 seconds_in_day: 86400
