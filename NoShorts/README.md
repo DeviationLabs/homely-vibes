@@ -10,8 +10,7 @@ An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navig
 - **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a user tap
 - **SPA navigation guard**: intercepts `pushState`/`replaceState` to drop `/shorts` navigations
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0
-- **Search bar**: tap the magnifying glass to expand an animated inline search field
-- **Toolbar**: back, forward, search, home (→ All Subscriptions), reload
+- **Top toolbar**: 4 shortcuts (Playlists, Liked Videos, All Subscriptions, Account/Login) — pinned above the WebView. YouTube's own header and bottom pivot bar handle search and back/forward; we don't duplicate them.
 - **Google sign-in**: works natively in-app (no Safari handoff required)
 - **DNS bypass**: in-app DoH proxy lets WKWebView reach `youtube.com` even when system DNS (e.g. NextDNS) blocks it — used to block YouTube in Chrome while keeping it accessible here
 
