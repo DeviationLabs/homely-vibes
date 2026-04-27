@@ -1,15 +1,16 @@
 # NoShorts
 
-An iOS app that wraps YouTube in a `WKWebView` and blocks all Shorts content — navigation, feed shelves, and autoplay.
+An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navigation, feed shelves, autoplay), and lands on the Subscriptions feed instead of the algorithmic home page.
 
 ## Features
 
 - **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM
+- **Subscriptions as default landing**: app launches into `/feed/subscriptions`. Any navigation to `/` (algorithmic home feed) — including the Home button and the YouTube logo — is rewritten back to Subscriptions, in the navigation delegate and the SPA `pushState`/`replaceState` interceptors.
 - **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a user tap
-- **SPA navigation guard**: intercepts `pushState`/`replaceState` to prevent in-app Shorts navigation
+- **SPA navigation guard**: intercepts `pushState`/`replaceState` to prevent in-app Shorts navigation and to rewrite home → subscriptions
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0
 - **Search bar**: tap the magnifying glass to expand an animated inline search field
-- **Toolbar**: back, forward, search, home, reload
+- **Toolbar**: back, forward, search, home (→ Subscriptions), reload
 - **Google sign-in**: works natively in-app (no Safari handoff required)
 - **DNS bypass**: in-app DoH proxy lets WKWebView reach `youtube.com` even when system DNS (e.g. NextDNS) blocks it — used to block YouTube in Chrome while keeping it accessible here
 
@@ -33,14 +34,14 @@ Two `WKUserScript` injections run on every page:
 **`atDocumentStart` (`earlyScript`)**:
 - Injects CSS to hide Shorts elements before first paint (`.pivot-shorts`, `ytm-shorts-lockup-view-model`, etc.)
 - Intercepts `HTMLVideoElement.prototype.play()` — blocked unless called within 1.5s of a user touch/click
-- Intercepts `history.pushState`/`replaceState` to drop any navigation to `/shorts`
+- Intercepts `history.pushState`/`replaceState` to drop any navigation to `/shorts` and rewrite navigations to `/` (home) → `/feed/subscriptions`
 - Removes `window.webkit` for `accounts.google.com` only, so Google's sign-in flow doesn't detect WKWebView
 
 **`atDocumentEnd` (`shortsBlockScript`)**:
 - DOM removal of all Shorts-related elements
 - Debounced `MutationObserver` (300ms) re-runs removal as YouTube's SPA loads new content
 
-`WKNavigationDelegate` also intercepts full-page navigations to `/shorts` and redirects home.
+`WKNavigationDelegate` also intercepts full-page navigations to `/shorts` (→ Subscriptions) and to `/` or empty paths on `*.youtube.com` (→ Subscriptions).
 
 ## Architecture Notes / Gotchas
 
