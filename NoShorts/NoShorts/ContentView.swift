@@ -140,7 +140,7 @@ struct YouTubeWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let wv = model.webView
         wv.navigationDelegate = context.coordinator
-        model.goHome()
+        model.goPlaylists()
         return wv
     }
 
@@ -161,9 +161,8 @@ struct YouTubeWebView: UIViewRepresentable {
                 let isHome = Self.isYouTubeHome(url)
                 let isWatch = Self.isWatchPage(url)
                 Task { @MainActor in
-                    if isHome { self.model.goHome() }
+                    if isHome { self.model.goPlaylists() }
                     if isWatch { Self.setOrientation(.landscape) }
-                    else if !isHome { Self.setOrientation(.allButUpsideDown) }
                 }
             }
         }
@@ -187,8 +186,8 @@ struct YouTubeWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = action.request.url else { return .allow }
-            if url.path.hasPrefix("/shorts") { model.goHome(); return .cancel }
-            if Self.isYouTubeHome(url) { model.goHome(); return .cancel }
+            if url.path.hasPrefix("/shorts") { model.goPlaylists(); return .cancel }
+            if Self.isYouTubeHome(url) { model.goPlaylists(); return .cancel }
             return .allow
         }
 
