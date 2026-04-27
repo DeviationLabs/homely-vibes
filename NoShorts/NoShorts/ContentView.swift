@@ -25,6 +25,7 @@ private let earlyScript = """
         ytm-rich-section-renderer:has(ytm-shorts-lockup-view-model),
         ytm-rich-item-renderer:has(ytm-shorts-lockup-view-model) { display:none!important; }
         ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts] { display:none!important; }
+        ytm-pivot-bar-renderer { display:none!important; }
     `;
     (document.head || document.documentElement).appendChild(s);
 
@@ -38,7 +39,8 @@ private let earlyScript = """
         return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
     };
 
-    // Block SPA navigation to /shorts
+    // Block SPA navigation to /shorts. Home (/) is handled in Swift via KVO on
+    // webView.url so we catch it regardless of who triggered the URL change.
     const _push = history.pushState.bind(history);
     const _replace = history.replaceState.bind(history);
     const isShorts = (u) => u && String(u).startsWith('/shorts');
@@ -119,7 +121,10 @@ final class WebViewModel {
         webView.load(URLRequest(url: url))
     }
 
-    func goHome() { load("https://www.youtube.com") }
+    func goHome() { load("https://www.youtube.com/feed/channels") }
+    func goPlaylists() { load("https://www.youtube.com/feed/playlists") }
+    func goLiked() { load("https://www.youtube.com/playlist?list=LL") }
+    func goAccount() { load("https://www.youtube.com/account") }
 
     func search(_ query: String) {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
@@ -144,11 +149,46 @@ struct YouTubeWebView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         let model: WebViewModel
-        init(model: WebViewModel) { self.model = model }
+        private var urlObservation: NSKeyValueObservation?
+
+        init(model: WebViewModel) {
+            self.model = model
+            super.init()
+            // Catch SPA URL changes (history.pushState / replaceState). decidePolicyFor
+            // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
+            urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
+                guard let self, let url = change.newValue ?? nil else { return }
+                let isHome = Self.isYouTubeHome(url)
+                let isWatch = Self.isWatchPage(url)
+                Task { @MainActor in
+                    if isHome { self.model.goHome() }
+                    if isWatch { Self.setOrientation(.landscape) }
+                    else if !isHome { Self.setOrientation(.allButUpsideDown) }
+                }
+            }
+        }
+
+        deinit { urlObservation?.invalidate() }
+
+        nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
+            (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
+        }
+
+        nonisolated static func isWatchPage(_ url: URL) -> Bool {
+            (url.host?.hasSuffix("youtube.com") == true) && url.path.hasPrefix("/watch")
+        }
+
+        @MainActor
+        static func setOrientation(_ mask: UIInterfaceOrientationMask) {
+            for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+            }
+        }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = action.request.url else { return .allow }
             if url.path.hasPrefix("/shorts") { model.goHome(); return .cancel }
+            if Self.isYouTubeHome(url) { model.goHome(); return .cancel }
             return .allow
         }
 
@@ -176,8 +216,9 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
+                topToolbar
                 YouTubeWebView(model: model)
-                toolbar
+                bottomToolbar
             }
 
             if model.isLoading {
@@ -185,11 +226,11 @@ struct ContentView: View {
                     .progressViewStyle(.linear)
                     .tint(.red)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 4)
+                    .padding(.top, 52)
             }
 
             countdownBadge
-                .padding(.top, 8)
+                .padding(.top, 60)  // 52pt top toolbar + 8pt gap
                 .padding(.trailing, 12)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -197,10 +238,21 @@ struct ContentView: View {
         .onDisappear { timer?.invalidate() }
     }
 
-    private var toolbar: some View {
+    private var topToolbar: some View {
+        HStack(spacing: 0) {
+            toolbarButton("play.square.stack.fill", enabled: true) { model.goPlaylists() }
+            toolbarButton("hand.thumbsup.fill", enabled: true) { model.goLiked() }
+            toolbarButton("square.grid.3x3.fill", enabled: true) { model.goHome() }
+            toolbarButton("person.crop.circle.fill", enabled: true) { model.goAccount() }
+        }
+        .frame(height: 52)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var bottomToolbar: some View {
         HStack(spacing: 0) {
             if isSearching {
-                // Expanded search bar
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
