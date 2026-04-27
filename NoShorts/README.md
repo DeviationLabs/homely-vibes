@@ -1,15 +1,18 @@
 # NoShorts
 
-An iOS app that wraps YouTube in a `WKWebView` and blocks all Shorts content — navigation, feed shelves, and autoplay.
+An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navigation, feed shelves, autoplay), and lands on the **All Subscriptions** channel grid (`/feed/channels`) instead of the algorithmic home page.
 
 ## Features
 
 - **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM
+- **All Subscriptions as default landing**: app launches into `/feed/channels` (the channel grid, not the videos feed). Any navigation to `/` (algorithmic home) — including YouTube's own in-page Home tab, the YouTube logo, the toolbar Home button, post-login redirects — is caught and rewritten via KVO on `webView.url` (catches SPA `pushState`) plus `WKNavigationDelegate` (catches full-page navs).
+- **Auto-rotate to landscape on video play**: tapping a video (URL → `/watch?v=...`) calls `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))` to force landscape immediately. Off the watch page, orientation is unlocked (`.allButUpsideDown`) so manual rotation works.
 - **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a user tap
-- **SPA navigation guard**: intercepts `pushState`/`replaceState` to prevent in-app Shorts navigation
+- **SPA navigation guard**: intercepts `pushState`/`replaceState` to drop `/shorts` navigations
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0
-- **Search bar**: tap the magnifying glass to expand an animated inline search field
-- **Toolbar**: back, forward, search, home, reload
+- **Top toolbar**: 4 destination shortcuts — Playlists (`/feed/playlists`), Liked Videos (`/playlist?list=LL`), All Subscriptions (`/feed/channels`), Account/Login (`/account`)
+- **Bottom toolbar**: back, forward, search (expands inline), home (→ All Subscriptions), reload
+- **Search bar**: tap the magnifying glass in the bottom toolbar to expand an animated inline search field
 - **Google sign-in**: works natively in-app (no Safari handoff required)
 - **DNS bypass**: in-app DoH proxy lets WKWebView reach `youtube.com` even when system DNS (e.g. NextDNS) blocks it — used to block YouTube in Chrome while keeping it accessible here
 
@@ -40,7 +43,9 @@ Two `WKUserScript` injections run on every page:
 - DOM removal of all Shorts-related elements
 - Debounced `MutationObserver` (300ms) re-runs removal as YouTube's SPA loads new content
 
-`WKNavigationDelegate` also intercepts full-page navigations to `/shorts` and redirects home.
+`WKNavigationDelegate` intercepts full-page navigations to `/shorts` and to `/` (or empty path) on `*.youtube.com`, redirecting both to the All Subscriptions grid.
+
+A `KVO` observer on `webView.url` catches SPA URL changes (`history.pushState`/`replaceState` from YouTube's own Home tab) — `decidePolicyFor` does NOT fire for SPA navigations, so KVO is the catch-all. When the URL becomes `/`, the observer calls `goHome()` to force a real navigation; rewriting the URL alone wouldn't stop YouTube's home content from being rendered.
 
 ## Architecture Notes / Gotchas
 
