@@ -7,25 +7,31 @@ import SwiftUI
 import WebKit
 import Observation
 
-// Runs at document start: remove WKWebView fingerprint + inject CSS to hide Shorts before paint
+// Runs at document start: remove WKWebView fingerprint + inject persistent CSS
 private let earlyScript = """
 (function() {
-    try { Object.defineProperty(window, 'webkit', { get: () => undefined, configurable: true }); } catch(e) {}
+    // Remove fingerprint only for Google sign-in pages; keep webkit intact for YouTube
+    if (window.location.hostname.includes('accounts.google')) {
+        try { Object.defineProperty(window, 'webkit', { get: () => undefined, configurable: true }); } catch(e) {}
+    }
     const s = document.createElement('style');
+    s.id = 'no-shorts';
     s.textContent = `
         ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model-v2,
         ytm-shorts-shelf-renderer, ytm-rich-section-renderer:has(ytm-reel-shelf-renderer),
-        ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts] { display:none!important; }
+        ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts],
+        [aria-label="Shorts"][href="/shorts"],
+        a[title="Shorts"][href="/shorts"] { display:none!important; }
     `;
     (document.head || document.documentElement).appendChild(s);
 })();
 """
 
-// Runs at document end: DOM cleanup + MutationObserver + interval sweep
+// Runs at document end: DOM cleanup with debounced MutationObserver (no interval)
 private let shortsBlockScript = """
 (function() {
     function removeShorts() {
-        // Bottom nav Shorts tab — walk up from anchor to nearest custom element or li
+        // Nav tab: find a[href="/shorts"] and remove nearest meaningful container
         document.querySelectorAll('a[href="/shorts"]').forEach(a => {
             let el = a;
             for (let i = 0; i < 6; i++) {
@@ -36,34 +42,32 @@ private let shortsBlockScript = """
                     el.remove(); return;
                 }
             }
-            a.style.display = 'none'; // fallback
+            a.style.display = 'none';
         });
-
+        // Also target by aria/title attributes
+        document.querySelectorAll('[aria-label="Shorts"], [title="Shorts"]').forEach(el => {
+            const item = el.closest('ytd-guide-entry-renderer, ytd-mini-guide-entry-renderer, ytm-pivot-bar-item-renderer, [role="tab"], li');
+            if (item) item.remove();
+        });
         // Desktop sidebar
         document.querySelectorAll('ytd-mini-guide-entry-renderer, ytd-guide-entry-renderer').forEach(el => {
-            const a = el.querySelector('a[href="/shorts"]') ||
-                      (el.shadowRoot && el.shadowRoot.querySelector('a[href="/shorts"]'));
-            if (a || el.textContent?.trim() === 'Shorts') el.remove();
+            if (el.querySelector('a[href="/shorts"]') || el.textContent?.trim() === 'Shorts') el.remove();
         });
-
-        // Shorts shelves
-        document.querySelectorAll(`
-            ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model-v2,
-            ytm-shorts-shelf-renderer,
-            ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]
-        `).forEach(e => e.remove());
-
-        // Shorts cards in feed (mobile + desktop)
-        document.querySelectorAll(
-            'ytm-video-with-context-renderer, ytm-compact-video-renderer, ytd-rich-item-renderer, ytd-video-renderer'
-        ).forEach(item => {
+        // Shelves
+        document.querySelectorAll('ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model-v2, ytm-shorts-shelf-renderer, ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]').forEach(e => e.remove());
+        // Feed cards
+        document.querySelectorAll('ytm-video-with-context-renderer, ytm-compact-video-renderer, ytd-rich-item-renderer, ytd-video-renderer').forEach(item => {
             if (item.querySelector('a[href*="/shorts/"]')) item.remove();
         });
     }
 
     removeShorts();
-    new MutationObserver(removeShorts).observe(document.body, { childList: true, subtree: true });
-    setInterval(removeShorts, 800);
+    // Debounced observer — coalesces bursts of DOM changes into one cleanup call
+    let debounce;
+    new MutationObserver(() => {
+        clearTimeout(debounce);
+        debounce = setTimeout(removeShorts, 300);
+    }).observe(document.body, { childList: true, subtree: true });
 })();
 """
 
@@ -78,7 +82,7 @@ final class WebViewModel {
 
     init() {
         let config = WKWebViewConfiguration()
-        config.mediaTypesRequiringUserActionForPlayback = .all  // no autoplay
+        config.mediaTypesRequiringUserActionForPlayback = .video  // block video autoplay, allow user taps
         config.userContentController.addUserScript(
             WKUserScript(source: earlyScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
