@@ -61,6 +61,7 @@ uv run python RachioFlume/main.py
 | 📅 **PersonalCalSync** | Google Apps Script that syncs personal calendar events to enterprise calendar as private busy-blockers, preserving real event titles visible only to you. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/PersonalCalSync/README.md) |
 | 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RachioFlume/README.md) |
 | 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/SamsungFrame/README.md) |
+| 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/NoShorts/README.md) |
 | ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/Tesla/README.md) |
 | 📊 **WaterLogging** | Comprehensive data collection scripts for Rachio, Flume, and Tuya smart water devices. | - |
 | 📈 **WaterParser** | Advanced water usage data processing, statistical analysis, and interactive HTML report generation. | - |
