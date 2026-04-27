@@ -84,6 +84,8 @@ final class WebViewModel {
     @ObservationIgnored let webView: WKWebView
     @ObservationIgnored private let proxy = LocalProxy()
     var isLoading = false
+    var canGoBack = false
+    var canGoForward = false
 
     init() {
         let config = WKWebViewConfiguration()
@@ -122,6 +124,11 @@ final class WebViewModel {
     func goPlaylists() { load("https://www.youtube.com/feed/playlists") }
     func goLiked() { load("https://www.youtube.com/playlist?list=LL") }
     func goAccount() { load("https://www.youtube.com/account") }
+
+    func search(_ query: String) {
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        load("https://www.youtube.com/results?search_query=\(encoded)")
+    }
 }
 
 struct YouTubeWebView: UIViewRepresentable {
@@ -189,6 +196,8 @@ struct YouTubeWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
             webView.evaluateJavaScript(shortsBlockScript)
             model.isLoading = false
+            model.canGoBack = webView.canGoBack
+            model.canGoForward = webView.canGoForward
         }
 
         func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) { model.isLoading = false }
@@ -199,12 +208,16 @@ struct ContentView: View {
     @State private var model = WebViewModel()
     @State private var remaining: TimeInterval = sessionDuration
     @State private var timer: Timer?
+    @State private var searchText = ""
+    @State private var isSearching = false
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                toolbar
+                topToolbar
                 YouTubeWebView(model: model)
+                bottomToolbar
             }
 
             if model.isLoading {
@@ -224,16 +237,63 @@ struct ContentView: View {
         .onDisappear { timer?.invalidate() }
     }
 
-    private var toolbar: some View {
+    private var topToolbar: some View {
         HStack(spacing: 0) {
-            toolbarButton("play.square.stack.fill") { model.goPlaylists() }
-            toolbarButton("hand.thumbsup.fill") { model.goLiked() }
-            toolbarButton("square.grid.3x3.fill") { model.goHome() }
-            toolbarButton("person.crop.circle.fill") { model.goAccount() }
+            toolbarButton("play.square.stack.fill", enabled: true) { model.goPlaylists() }
+            toolbarButton("hand.thumbsup.fill", enabled: true) { model.goLiked() }
+            toolbarButton("square.grid.3x3.fill", enabled: true) { model.goHome() }
+            toolbarButton("person.crop.circle.fill", enabled: true) { model.goAccount() }
         }
         .frame(height: 52)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var bottomToolbar: some View {
+        HStack(spacing: 0) {
+            if isSearching {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 12)
+                    TextField("Search YouTube", text: $searchText)
+                        .focused($searchFocused)
+                        .submitLabel(.search)
+                        .onSubmit {
+                            if !searchText.isEmpty { model.search(searchText) }
+                            isSearching = false
+                            searchText = ""
+                        }
+                    Button {
+                        isSearching = false
+                        searchText = ""
+                        searchFocused = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 12)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 12)
+            } else {
+                toolbarButton("chevron.left", enabled: model.canGoBack) { model.webView.goBack() }
+                toolbarButton("chevron.right", enabled: model.canGoForward) { model.webView.goForward() }
+                toolbarButton("magnifyingglass", enabled: true) {
+                    isSearching = true
+                    searchFocused = true
+                }
+                toolbarButton("house.fill", enabled: true) { model.goHome() }
+                toolbarButton("arrow.clockwise", enabled: true) { model.webView.reload() }
+            }
+        }
+        .frame(height: 52)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+        .animation(.easeInOut(duration: 0.2), value: isSearching)
     }
 
     private var countdownBadge: some View {
@@ -257,15 +317,16 @@ struct ContentView: View {
         }
     }
 
-    private func toolbarButton(_ icon: String, action: @escaping () -> Void) -> some View {
+    private func toolbarButton(_ icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color.red)
+                .foregroundStyle(enabled ? Color.red : Color.secondary.opacity(0.4))
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .contentShape(Rectangle())
         }
+        .disabled(!enabled)
     }
 }
 
