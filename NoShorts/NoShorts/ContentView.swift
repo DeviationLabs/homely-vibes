@@ -6,7 +6,15 @@
 import SwiftUI
 import WebKit
 import Observation
-import SafariServices
+
+// Injected at document start — removes WKWebView fingerprint Google uses to block sign-in
+private let fingerprintScript = """
+(function() {
+    try {
+        Object.defineProperty(window, 'webkit', { get: () => undefined, configurable: true });
+    } catch(e) {}
+})();
+"""
 
 // Mobile YouTube selectors — matches ytm-* components used on mobile web
 private let shortsBlockScript = """
@@ -57,14 +65,17 @@ final class WebViewModel {
     var isLoading = false
     var canGoBack = false
     var canGoForward = false
-    var googleSignInURL: URL?
 
     init() {
         let config = WKWebViewConfiguration()
-        let script = WKUserScript(source: shortsBlockScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
-        config.userContentController.addUserScript(script)
+        // Remove WKWebView fingerprint before any page script runs
+        config.userContentController.addUserScript(
+            WKUserScript(source: fingerprintScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        )
+        config.userContentController.addUserScript(
+            WKUserScript(source: shortsBlockScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        )
         let wv = WKWebView(frame: .zero, configuration: config)
-        // Mobile Safari UA — Google allows sign-in; mobile YouTube UI
         wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         self.webView = wv
     }
@@ -102,11 +113,6 @@ struct YouTubeWebView: UIViewRepresentable {
                 model.goHome()
                 return .cancel
             }
-            // Open Google sign-in in SFSafariViewController so Google trusts the flow
-            if url.host?.contains("accounts.google.com") == true {
-                model.googleSignInURL = url
-                return .cancel
-            }
             return .allow
         }
 
@@ -125,12 +131,6 @@ struct YouTubeWebView: UIViewRepresentable {
             model.isLoading = false
         }
     }
-}
-
-struct SafariView: UIViewControllerRepresentable {
-    let url: URL
-    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
-    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
 
 struct ContentView: View {
@@ -152,15 +152,6 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 4)
             }
-        }
-        .sheet(item: Binding(
-            get: { model.googleSignInURL.map { IdentifiableURL($0) } },
-            set: { _ in
-                model.googleSignInURL = nil
-                model.webView.reload()  // Reload YouTube after sign-in
-            }
-        )) { item in
-            SafariView(url: item.url)
         }
     }
 
@@ -187,12 +178,6 @@ struct ContentView: View {
         }
         .disabled(!enabled)
     }
-}
-
-struct IdentifiableURL: Identifiable {
-    let id = UUID()
-    let url: URL
-    init(_ url: URL) { self.url = url }
 }
 
 #Preview {
