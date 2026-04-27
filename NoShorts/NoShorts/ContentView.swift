@@ -38,19 +38,13 @@ private let earlyScript = """
         return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
     };
 
-    // Block SPA navigation: /shorts -> drop, / (home) -> rewrite to subscriptions
+    // Block SPA navigation to /shorts. Home (/) is handled in Swift via KVO on
+    // webView.url so we catch it regardless of who triggered the URL change.
     const _push = history.pushState.bind(history);
     const _replace = history.replaceState.bind(history);
-    const SUBS = '/feed/subscriptions';
     const isShorts = (u) => u && String(u).startsWith('/shorts');
-    const isHome = (u) => {
-        if (!u) return false;
-        const s = String(u);
-        return s === '/' || s === '' || s === window.location.origin || s === window.location.origin + '/';
-    };
-    const rewrite = (u) => isHome(u) ? SUBS : u;
-    history.pushState = (s,t,u) => { if (isShorts(u)) return; _push(s,t,rewrite(u)); };
-    history.replaceState = (s,t,u) => { if (isShorts(u)) return; _replace(s,t,rewrite(u)); };
+    history.pushState = (s,t,u) => { if (!isShorts(u)) _push(s,t,u); };
+    history.replaceState = (s,t,u) => { if (!isShorts(u)) _replace(s,t,u); };
 })();
 """
 
@@ -126,7 +120,7 @@ final class WebViewModel {
         webView.load(URLRequest(url: url))
     }
 
-    func goHome() { load("https://www.youtube.com/feed/subscriptions") }
+    func goHome() { load("https://www.youtube.com/feed/channels") }
 
     func search(_ query: String) {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
@@ -151,17 +145,31 @@ struct YouTubeWebView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         let model: WebViewModel
-        init(model: WebViewModel) { self.model = model }
+        private var urlObservation: NSKeyValueObservation?
+
+        init(model: WebViewModel) {
+            self.model = model
+            super.init()
+            // Catch SPA URL changes (history.pushState / replaceState). decidePolicyFor
+            // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
+            urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
+                guard let self, let url = change.newValue ?? nil else { return }
+                if Self.isYouTubeHome(url) {
+                    Task { @MainActor in self.model.goHome() }
+                }
+            }
+        }
+
+        deinit { urlObservation?.invalidate() }
+
+        static func isYouTubeHome(_ url: URL) -> Bool {
+            (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
+        }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = action.request.url else { return .allow }
             if url.path.hasPrefix("/shorts") { model.goHome(); return .cancel }
-            // Block YouTube home: redirect / and empty path to subscriptions feed.
-            if url.host?.hasSuffix("youtube.com") == true,
-               url.path.isEmpty || url.path == "/" {
-                model.goHome()
-                return .cancel
-            }
+            if Self.isYouTubeHome(url) { model.goHome(); return .cancel }
             return .allow
         }
 
