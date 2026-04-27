@@ -229,7 +229,7 @@ struct ContentView: View {
             }
 
             countdownBadge
-                .padding(.top, 8)
+                .padding(.top, 60)  // 52pt top toolbar + 8pt gap
                 .padding(.trailing, 12)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
