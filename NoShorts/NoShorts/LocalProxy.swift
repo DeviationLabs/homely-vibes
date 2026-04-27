@@ -17,18 +17,26 @@ final class LocalProxy: @unchecked Sendable {
 
     func start() throws -> UInt16 {
         let params = NWParameters.tcp
-        params.requiredInterfaceType = .loopback
         let l = try NWListener(using: params, on: .any)
         l.newConnectionHandler = { [weak self] conn in self?.handle(conn) }
+
+        let sem = DispatchSemaphore(value: 0)
+        var didSignal = false
         l.stateUpdateHandler = { state in
-            if case .failed(let e) = state { NSLog("LocalProxy listener failed: \(e)") }
+            switch state {
+            case .ready, .failed, .cancelled:
+                if !didSignal { didSignal = true; sem.signal() }
+                if case .failed(let e) = state { NSLog("LocalProxy listener failed: \(e)") }
+            default: break
+            }
         }
         l.start(queue: queue)
 
-        // Wait briefly for port assignment
-        let deadline = Date().addingTimeInterval(2)
-        while l.port == nil && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
-        guard let p = l.port else { throw NSError(domain: "LocalProxy", code: -1) }
+        guard sem.wait(timeout: .now() + 3) == .success,
+              let p = l.port, p.rawValue > 0 else {
+            l.cancel()
+            throw NSError(domain: "LocalProxy", code: -1, userInfo: [NSLocalizedDescriptionKey: "listener not ready or port invalid"])
+        }
 
         self.listener = l
         self.port = p.rawValue
@@ -36,6 +44,7 @@ final class LocalProxy: @unchecked Sendable {
     }
 
     private func handle(_ client: NWConnection) {
+        NSLog("LocalProxy: incoming connection")
         client.start(queue: queue)
         readConnect(client, accumulated: Data())
     }
@@ -75,9 +84,10 @@ final class LocalProxy: @unchecked Sendable {
             guard let self else { return }
             do {
                 let ip = try await DoHResolver.shared.resolve(host)
+                NSLog("LocalProxy: CONNECT \(host):\(port) -> \(ip)")
                 self.openTunnel(client: client, host: host, ip: ip, port: port)
             } catch {
-                NSLog("DoH resolve failed for \(host): \(error)")
+                NSLog("LocalProxy: DoH resolve failed for \(host): \(error)")
                 self.sendError(client, "502 Bad Gateway")
             }
         }
