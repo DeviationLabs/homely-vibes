@@ -81,9 +81,57 @@ The goal: YouTube blocked in Chrome (and Safari, and every other browser on the 
 - iOS has no per-app DNS routing on a free developer account (`NEAppProxyProvider` requires paid entitlements)
 
 ### How this app works around it
-1. **System level**: install [NextDNS](https://nextdns.io) as a **DNS profile** (Settings → General → VPN & Device Management → DNS), and add `youtube.com` + `www.youtube.com` + `m.youtube.com` to the deny list. This blocks YouTube in Chrome, Safari, and any other browser.
+1. **System level**: install [NextDNS](https://nextdns.io) as a **DNS profile** and add `youtube.com` (+ subdomains) to the deny list. This blocks YouTube in Chrome, Safari, and any other browser. Full setup steps below.
 2. **App level**: this app runs an **in-process HTTP CONNECT proxy** on `127.0.0.1`. The proxy resolves hostnames via **DoH** (`https://dns.google/dns-query`) instead of system DNS, so it returns YouTube's real IP regardless of NextDNS filtering.
 3. **WKWebView wiring**: `WKWebsiteDataStore.proxyConfigurations` (iOS 17+) points the web view at the local proxy. All TLS traffic is tunneled through it.
+
+### NextDNS setup (full instructions)
+
+**1. Create a NextDNS account**
+- Go to [nextdns.io](https://nextdns.io) and sign up (free tier is sufficient — 300K queries/month per profile)
+- A new "config" is created automatically with a random ID like `abc123`
+
+**2. Configure the denylist**
+- In the NextDNS dashboard, open your config → **Denylist** tab
+- Add each of these entries (one per line):
+  - `youtube.com`
+  - `www.youtube.com`
+  - `m.youtube.com`
+  - `youtu.be`
+  - `youtubei.googleapis.com` (optional — blocks the YouTube app's API; only add if you want to also kill the native YouTube app)
+- NextDNS does **not** auto-block subdomains, so list the variants explicitly. Wildcards aren't supported in the basic denylist.
+
+**3. Install the NextDNS profile on iOS**
+
+Two options — pick one.
+
+*Option A: NextDNS iOS app (easiest)*
+- Install **NextDNS** from the App Store
+- Open the app, sign in with your NextDNS account (or paste your config ID)
+- Tap the big toggle to enable. iOS will prompt to install a DNS profile — tap **Allow**, then go to Settings and confirm install (Face ID / passcode)
+- Verify in Settings → General → **VPN & Device Management** → **DNS** — NextDNS should show as the active DNS profile
+
+*Option B: Configuration profile (no app)*
+- In the NextDNS dashboard → **Setup** tab → **iOS** section → tap **Download Configuration Profile**
+- Open the downloaded `.mobileconfig` on the iPhone, install via Settings prompt
+- Same end result; doesn't install an app
+
+**4. Verify NextDNS is active**
+- Settings → General → VPN & Device Management → DNS → should list NextDNS (not "Automatic")
+- Open Chrome/Safari → navigate to `youtube.com` → expect a "This site can't be reached" / DNS-failure error
+- Open NextDNS dashboard → **Logs** tab → you should see blocked queries for `youtube.com`
+
+**5. Verify the NoShorts app still works**
+- Launch this app — it should load YouTube successfully despite the system-wide block
+- If it doesn't, check Console.app (with iPhone connected) for `LocalProxy:` log lines:
+  - `LocalProxy listening on 127.0.0.1:NNNNN` — proxy started successfully (port should be > 0)
+  - `LocalProxy: incoming connection` — WKWebView reached the proxy
+  - `LocalProxy: CONNECT www.youtube.com:443 -> <ip>` — DoH resolved the host
+
+**Troubleshooting**
+- **YouTube loads in Chrome too**: NextDNS not active, or denylist not saved. Re-check step 4.
+- **App shows blank page**: proxy didn't bind (check logs for port 0 or `listener failed`); reinstall app.
+- **App loads YouTube but Chrome also loads it**: device might be on cellular with no NextDNS rules for cellular profile — set up the same NextDNS config for cellular in NextDNS dashboard → **Settings** → **iOS** → enable for both Wi-Fi and cellular.
 
 ### Components
 - [`DoHResolver.swift`](NoShorts/DoHResolver.swift) — minimal DNS-over-HTTPS client, raw DNS wire format over `URLSession`. Handles A records with TTL caching.
