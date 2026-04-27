@@ -162,7 +162,7 @@ struct YouTubeWebView: UIViewRepresentable {
 
         deinit { urlObservation?.invalidate() }
 
-        static func isYouTubeHome(_ url: URL) -> Bool {
+        nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
         }
 
