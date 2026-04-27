@@ -180,8 +180,10 @@ struct YouTubeWebView: UIViewRepresentable {
 
         @MainActor
         static func setOrientation(_ mask: UIInterfaceOrientationMask) {
+            AppDelegate.orientationLock = mask
             for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
                 scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+                scene.windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
         }
 
