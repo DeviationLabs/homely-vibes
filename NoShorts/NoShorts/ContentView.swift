@@ -6,11 +6,12 @@
 import SwiftUI
 import WebKit
 import Observation
+import SafariServices
 
+// Mobile YouTube selectors — matches ytm-* components used on mobile web
 private let shortsBlockScript = """
 (function() {
     function hasShortLink(el) {
-        // Check light DOM and open shadow DOM for /shorts links
         const check = (root) => {
             for (const a of root.querySelectorAll('a')) {
                 const href = a.getAttribute('href') || '';
@@ -22,25 +23,30 @@ private let shortsBlockScript = """
     }
 
     function removeShorts() {
-        // Sidebar nav items (mini guide + full guide) — check shadow DOM too
+        // Bottom nav Shorts tab (mobile)
+        document.querySelectorAll('a.pivot-bar-item-tab[href="/shorts"]').forEach(a => a.closest('.pivot-bar-item-tab-wrapper, .pivot-bar-item-tab')?.remove());
+        document.querySelectorAll('yt-tab-shape-view-model').forEach(el => {
+            if (hasShortLink(el) || el.textContent?.trim() === 'Shorts') el.remove();
+        });
+        // Desktop sidebar (mini guide + guide)
         document.querySelectorAll('ytd-mini-guide-entry-renderer, ytd-guide-entry-renderer').forEach(el => {
             if (hasShortLink(el) || el.textContent?.trim() === 'Shorts') el.remove();
         });
-        // Shorts shelf on home feed
-        document.querySelectorAll('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]').forEach(e => e.remove());
+        // Shorts shelf — mobile and desktop
+        document.querySelectorAll('ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model-v2, ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]').forEach(e => e.remove());
         // Shorts cards in home grid
-        document.querySelectorAll('ytd-rich-item-renderer').forEach(item => {
-            if (item.querySelector('a#thumbnail[href*="/shorts/"]')) item.remove();
+        document.querySelectorAll('ytm-video-with-context-renderer, ytd-rich-item-renderer').forEach(item => {
+            if (item.querySelector('a[href*="/shorts/"]')) item.remove();
         });
         // Shorts in search results
-        document.querySelectorAll('ytd-video-renderer a#thumbnail[href*="/shorts/"]').forEach(a => {
-            a.closest('ytd-video-renderer')?.remove();
+        document.querySelectorAll('a[href*="/shorts/"]').forEach(a => {
+            const card = a.closest('ytm-compact-video-renderer, ytd-video-renderer');
+            if (card) card.remove();
         });
     }
 
     removeShorts();
     new MutationObserver(removeShorts).observe(document.body, { childList: true, subtree: true });
-    // Periodic sweep catches SPA navigations where MutationObserver may miss shadow DOM updates
     setInterval(removeShorts, 800);
 })();
 """
@@ -51,13 +57,15 @@ final class WebViewModel {
     var isLoading = false
     var canGoBack = false
     var canGoForward = false
+    var googleSignInURL: URL?
 
     init() {
         let config = WKWebViewConfiguration()
         let script = WKUserScript(source: shortsBlockScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         config.userContentController.addUserScript(script)
         let wv = WKWebView(frame: .zero, configuration: config)
-        wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+        // Mobile Safari UA — Google allows sign-in; mobile YouTube UI
+        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         self.webView = wv
     }
 
@@ -86,12 +94,17 @@ struct YouTubeWebView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         let model: WebViewModel
-
         init(model: WebViewModel) { self.model = model }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
-            if let url = action.request.url, url.path.hasPrefix("/shorts") {
+            guard let url = action.request.url else { return .allow }
+            if url.path.hasPrefix("/shorts") {
                 model.goHome()
+                return .cancel
+            }
+            // Open Google sign-in in SFSafariViewController so Google trusts the flow
+            if url.host?.contains("accounts.google.com") == true {
+                model.googleSignInURL = url
                 return .cancel
             }
             return .allow
@@ -114,6 +127,12 @@ struct YouTubeWebView: UIViewRepresentable {
     }
 }
 
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
+}
+
 struct ContentView: View {
     @State private var model = WebViewModel()
 
@@ -121,7 +140,7 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 YouTubeWebView(model: model)
-                    .ignoresSafeArea(edges: .top)
+                    // No ignoresSafeArea — respect Dynamic Island / notch at top
 
                 toolbar
             }
@@ -131,31 +150,30 @@ struct ContentView: View {
                     .progressViewStyle(.linear)
                     .tint(.red)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 55)
+                    .padding(.top, 4)
             }
+        }
+        .sheet(item: Binding(
+            get: { model.googleSignInURL.map { IdentifiableURL($0) } },
+            set: { _ in
+                model.googleSignInURL = nil
+                model.webView.reload()  // Reload YouTube after sign-in
+            }
+        )) { item in
+            SafariView(url: item.url)
         }
     }
 
     private var toolbar: some View {
         HStack(spacing: 0) {
-            toolbarButton("chevron.left", enabled: model.canGoBack) {
-                model.webView.goBack()
-            }
-            toolbarButton("chevron.right", enabled: model.canGoForward) {
-                model.webView.goForward()
-            }
-            toolbarButton("house.fill", enabled: true) {
-                model.goHome()
-            }
-            toolbarButton("arrow.clockwise", enabled: true) {
-                model.webView.reload()
-            }
+            toolbarButton("chevron.left", enabled: model.canGoBack) { model.webView.goBack() }
+            toolbarButton("chevron.right", enabled: model.canGoForward) { model.webView.goForward() }
+            toolbarButton("house.fill", enabled: true) { model.goHome() }
+            toolbarButton("arrow.clockwise", enabled: true) { model.webView.reload() }
         }
         .frame(height: 52)
         .background(.bar)
-        .overlay(alignment: .top) {
-            Divider()
-        }
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func toolbarButton(_ icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
@@ -169,6 +187,12 @@ struct ContentView: View {
         }
         .disabled(!enabled)
     }
+}
+
+struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
+    init(_ url: URL) { self.url = url }
 }
 
 #Preview {
