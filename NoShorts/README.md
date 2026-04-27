@@ -11,6 +11,7 @@ An iOS app that wraps YouTube in a `WKWebView` and blocks all Shorts content —
 - **Search bar**: tap the magnifying glass to expand an animated inline search field
 - **Toolbar**: back, forward, search, home, reload
 - **Google sign-in**: works natively in-app (no Safari handoff required)
+- **DNS bypass**: in-app DoH proxy lets WKWebView reach `youtube.com` even when system DNS (e.g. NextDNS) blocks it — used to block YouTube in Chrome while keeping it accessible here
 
 ## Requirements
 
@@ -68,3 +69,40 @@ YouTube's mobile DOM uses custom elements not documented anywhere (`ytm-shorts-l
 
 ### Autoplay interception
 `mediaTypesRequiringUserActionForPlayback = .video` alone is insufficient — YouTube's player works around it. The JS-level `HTMLVideoElement.prototype.play()` override is the reliable fix. The 1.5s window after a touch/click allows legitimate user-initiated plays (including tap-to-play on feed thumbnails).
+
+## Block-YouTube-in-Chrome Setup (DNS bypass)
+
+The goal: YouTube blocked in Chrome (and Safari, and every other browser on the device), but still accessible inside this app.
+
+### Why this is hard on iOS
+- Chrome on iOS has no extensions and no per-site content blocking
+- Screen Time's "Never Allow" list requires "Limit Adult Websites" enabled, which has collateral damage
+- DNS-level blocking (NextDNS, Pi-hole, etc.) is system-wide — it affects WKWebView too, since WKWebView runs in a separate process and uses system DNS
+- iOS has no per-app DNS routing on a free developer account (`NEAppProxyProvider` requires paid entitlements)
+
+### How this app works around it
+1. **System level**: install [NextDNS](https://nextdns.io) as a **DNS profile** (Settings → General → VPN & Device Management → DNS), and add `youtube.com` + `www.youtube.com` + `m.youtube.com` to the deny list. This blocks YouTube in Chrome, Safari, and any other browser.
+2. **App level**: this app runs an **in-process HTTP CONNECT proxy** on `127.0.0.1`. The proxy resolves hostnames via **DoH** (`https://dns.google/dns-query`) instead of system DNS, so it returns YouTube's real IP regardless of NextDNS filtering.
+3. **WKWebView wiring**: `WKWebsiteDataStore.proxyConfigurations` (iOS 17+) points the web view at the local proxy. All TLS traffic is tunneled through it.
+
+### Components
+- [`DoHResolver.swift`](NoShorts/DoHResolver.swift) — minimal DNS-over-HTTPS client, raw DNS wire format over `URLSession`. Handles A records with TTL caching.
+- [`LocalProxy.swift`](NoShorts/LocalProxy.swift) — `NWListener` HTTP CONNECT proxy. Parses `CONNECT host:port`, resolves via DoH, opens an `NWConnection` to the IP, tunnels bytes both ways.
+- [`ContentView.swift`](NoShorts/ContentView.swift) — starts the proxy on `WebViewModel.init()` and assigns `WKWebsiteDataStore.default().proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy:)]`.
+
+### Why DoH bypasses NextDNS
+NextDNS as a DNS profile reroutes the system DNS resolver. But it does **not** intercept arbitrary HTTPS traffic. A POST to `https://dns.google/dns-query` is just regular HTTPS — the request body happens to contain a DNS wire-format query. NextDNS sees an HTTPS connection to `dns.google`, not a DNS query, so it doesn't filter the response.
+
+### Threat model (what this does and doesn't defend against)
+- ✅ Defends against: typing `youtube.com` in Chrome, clicking a YouTube link in any other app, tapping the YouTube app's web bridge
+- ❌ Does not defend against: someone with the device disabling NextDNS in Settings, or installing a different browser, or using cellular data with the NextDNS profile only configured for Wi-Fi
+- This is a self-control tool, not a hardened parental control. Determined bypass is trivial. The friction is the point.
+
+### Why not Network Extension / `NEAppProxyProvider`?
+Per-app VPN via `NEAppProxyProvider` would be the textbook iOS solution. It requires `com.apple.developer.networking.networkextension` with `app-proxy-provider`, which is gated behind a **paid** Apple Developer account ($99/yr). The DoH-proxy-in-app approach above achieves the same outcome on a free account.
+
+### Why DoH (DNS wire format), not DoH (JSON)?
+Google's DoH endpoint accepts both `application/dns-message` (RFC 1035 wire format) and `application/dns-json`. Wire format is ~50 bytes vs JSON's ~500 bytes per query, and avoids JSON parsing of arbitrary RDATA.
+
+### Why HTTP CONNECT, not full HTTP proxy?
+WKWebView using `proxyConfigurations` sends `CONNECT host:443` for HTTPS targets and tunnels TLS verbatim afterward. Since YouTube is HTTPS-only, supporting only CONNECT is sufficient. Plain HTTP requests (which would arrive without CONNECT) get a `405 Method Not Allowed`.

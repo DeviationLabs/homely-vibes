@@ -6,6 +6,7 @@
 import SwiftUI
 import WebKit
 import Observation
+import Network
 
 // Runs at document start: fingerprint removal + CSS + autoplay block + SPA navigation guard
 private let earlyScript = """
@@ -80,6 +81,7 @@ private let sessionDuration: TimeInterval = 30 * 60
 @Observable
 final class WebViewModel {
     @ObservationIgnored let webView: WKWebView
+    @ObservationIgnored private let proxy = LocalProxy()
     var isLoading = false
     var canGoBack = false
     var canGoForward = false
@@ -93,6 +95,20 @@ final class WebViewModel {
         config.userContentController.addUserScript(
             WKUserScript(source: shortsBlockScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         )
+
+        // Route WKWebView traffic through a local DoH-backed proxy so requests
+        // bypass system DNS (and any NextDNS-style filtering on youtube.com).
+        if let port = try? proxy.start() {
+            let endpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
+            let proxyConfig = ProxyConfiguration(httpCONNECTProxy: endpoint, tlsOptions: nil)
+            let dataStore = WKWebsiteDataStore.default()
+            dataStore.proxyConfigurations = [proxyConfig]
+            config.websiteDataStore = dataStore
+            NSLog("LocalProxy listening on 127.0.0.1:\(port)")
+        } else {
+            NSLog("LocalProxy failed to start; WKWebView will use system DNS")
+        }
+
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         self.webView = wv
