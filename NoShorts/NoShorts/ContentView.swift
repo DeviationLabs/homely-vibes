@@ -7,33 +7,42 @@ import SwiftUI
 import WebKit
 import Observation
 
-// Runs at document start: fingerprint removal + CSS targeting real mobile YouTube selectors
+// Runs at document start: fingerprint removal + CSS + autoplay block + SPA navigation guard
 private let earlyScript = """
 (function() {
     if (window.location.hostname.includes('accounts.google')) {
         try { Object.defineProperty(window, 'webkit', { get: () => undefined, configurable: true }); } catch(e) {}
     }
+
+    // CSS: hide Shorts before paint
     const s = document.createElement('style');
     s.id = 'no-shorts';
     s.textContent = `
-        /* Mobile nav Shorts tab — confirmed .pivot-shorts class */
         .pivot-shorts { display:none!important; }
-        /* Shorts content — confirmed element names via live DOM inspection */
         ytm-shorts-lockup-view-model,
         ytm-rich-shelf-renderer:has(ytm-shorts-lockup-view-model),
         ytm-rich-section-renderer:has(ytm-shorts-lockup-view-model),
         ytm-rich-item-renderer:has(ytm-shorts-lockup-view-model) { display:none!important; }
-        /* Desktop */
         ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts] { display:none!important; }
     `;
     (document.head || document.documentElement).appendChild(s);
 
-    // Intercept pushState/replaceState so SPA navigation to /shorts is blocked
+    // Block autoplay: intercept video.play() — only allow within 1.5s of a user touch/click
+    let lastInteraction = 0;
+    document.addEventListener('touchstart', () => { lastInteraction = Date.now(); }, { capture: true, passive: true });
+    document.addEventListener('click', () => { lastInteraction = Date.now(); }, { capture: true, passive: true });
+    const _play = HTMLVideoElement.prototype.play;
+    HTMLVideoElement.prototype.play = function() {
+        if (Date.now() - lastInteraction < 1500) return _play.call(this);
+        return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
+    };
+
+    // Block SPA navigation to /shorts
     const _push = history.pushState.bind(history);
     const _replace = history.replaceState.bind(history);
-    const blockShorts = (url) => url && String(url).startsWith('/shorts');
-    history.pushState = (s,t,u) => { if (!blockShorts(u)) _push(s,t,u); };
-    history.replaceState = (s,t,u) => { if (!blockShorts(u)) _replace(s,t,u); };
+    const isShorts = (u) => u && String(u).startsWith('/shorts');
+    history.pushState = (s,t,u) => { if (!isShorts(u)) _push(s,t,u); };
+    history.replaceState = (s,t,u) => { if (!isShorts(u)) _replace(s,t,u); };
 })();
 """
 
@@ -41,20 +50,16 @@ private let earlyScript = """
 private let shortsBlockScript = """
 (function() {
     function removeShorts() {
-        // Mobile bottom nav: .pivot-shorts (div, no href — confirmed via inspection)
         document.querySelectorAll('.pivot-shorts').forEach(e => e.remove());
-        // Desktop sidebar
         document.querySelectorAll('ytd-mini-guide-entry-renderer, ytd-guide-entry-renderer').forEach(el => {
             if (el.querySelector('a[href="/shorts"]') || el.textContent?.trim() === 'Shorts') el.remove();
         });
-        // Shorts elements — confirmed names via live DOM inspection
         document.querySelectorAll('ytm-shorts-lockup-view-model').forEach(e => {
             (e.closest('ytm-rich-item-renderer, ytm-rich-section-renderer, ytm-rich-shelf-renderer') || e).remove();
         });
         document.querySelectorAll('ytm-rich-shelf-renderer').forEach(el => {
             if (el.querySelector('ytm-shorts-lockup-view-model')) el.remove();
         });
-        // Desktop
         document.querySelectorAll('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]').forEach(e => e.remove());
         document.querySelectorAll('ytd-rich-item-renderer, ytd-video-renderer').forEach(item => {
             if (item.querySelector('a[href*="/shorts/"]')) item.remove();
@@ -70,7 +75,7 @@ private let shortsBlockScript = """
 })();
 """
 
-private let sessionDuration: TimeInterval = 30 * 60  // 30 minutes
+private let sessionDuration: TimeInterval = 30 * 60
 
 @Observable
 final class WebViewModel {
@@ -81,7 +86,7 @@ final class WebViewModel {
 
     init() {
         let config = WKWebViewConfiguration()
-        config.mediaTypesRequiringUserActionForPlayback = .video  // block video autoplay, allow user taps
+        config.mediaTypesRequiringUserActionForPlayback = .video
         config.userContentController.addUserScript(
             WKUserScript(source: earlyScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
@@ -99,6 +104,11 @@ final class WebViewModel {
     }
 
     func goHome() { load("https://www.youtube.com") }
+
+    func search(_ query: String) {
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        load("https://www.youtube.com/results?search_query=\(encoded)")
+    }
 }
 
 struct YouTubeWebView: UIViewRepresentable {
@@ -143,6 +153,9 @@ struct ContentView: View {
     @State private var model = WebViewModel()
     @State private var remaining: TimeInterval = sessionDuration
     @State private var timer: Timer?
+    @State private var searchText = ""
+    @State private var isSearching = false
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -159,7 +172,6 @@ struct ContentView: View {
                     .padding(.top, 4)
             }
 
-            // Countdown badge — top right, above YouTube header
             countdownBadge
                 .padding(.top, 8)
                 .padding(.trailing, 12)
@@ -167,6 +179,54 @@ struct ContentView: View {
         }
         .onAppear { startTimer() }
         .onDisappear { timer?.invalidate() }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 0) {
+            if isSearching {
+                // Expanded search bar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 12)
+                    TextField("Search YouTube", text: $searchText)
+                        .focused($searchFocused)
+                        .submitLabel(.search)
+                        .onSubmit {
+                            if !searchText.isEmpty { model.search(searchText) }
+                            isSearching = false
+                            searchText = ""
+                        }
+                    Button {
+                        isSearching = false
+                        searchText = ""
+                        searchFocused = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 12)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 12)
+            } else {
+                toolbarButton("chevron.left", enabled: model.canGoBack) { model.webView.goBack() }
+                toolbarButton("chevron.right", enabled: model.canGoForward) { model.webView.goForward() }
+                toolbarButton("magnifyingglass", enabled: true) {
+                    isSearching = true
+                    searchFocused = true
+                }
+                toolbarButton("house.fill", enabled: true) { model.goHome() }
+                toolbarButton("arrow.clockwise", enabled: true) { model.webView.reload() }
+            }
+        }
+        .frame(height: 52)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+        .animation(.easeInOut(duration: 0.2), value: isSearching)
     }
 
     private var countdownBadge: some View {
@@ -186,25 +246,8 @@ struct ContentView: View {
 
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            if remaining > 0 {
-                remaining -= 1
-            } else {
-                timer?.invalidate()
-                exit(0)
-            }
+            if remaining > 0 { remaining -= 1 } else { timer?.invalidate(); exit(0) }
         }
-    }
-
-    private var toolbar: some View {
-        HStack(spacing: 0) {
-            toolbarButton("chevron.left", enabled: model.canGoBack) { model.webView.goBack() }
-            toolbarButton("chevron.right", enabled: model.canGoForward) { model.webView.goForward() }
-            toolbarButton("house.fill", enabled: true) { model.goHome() }
-            toolbarButton("arrow.clockwise", enabled: true) { model.webView.reload() }
-        }
-        .frame(height: 52)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
     }
 
     private func toolbarButton(_ icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
