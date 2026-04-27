@@ -154,8 +154,12 @@ struct YouTubeWebView: UIViewRepresentable {
             // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
             urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
                 guard let self, let url = change.newValue ?? nil else { return }
-                if Self.isYouTubeHome(url) {
-                    Task { @MainActor in self.model.goHome() }
+                let isHome = Self.isYouTubeHome(url)
+                let isWatch = Self.isWatchPage(url)
+                Task { @MainActor in
+                    if isHome { self.model.goHome() }
+                    if isWatch { Self.setOrientation(.landscape) }
+                    else if !isHome { Self.setOrientation(.allButUpsideDown) }
                 }
             }
         }
@@ -164,6 +168,17 @@ struct YouTubeWebView: UIViewRepresentable {
 
         nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
+        }
+
+        nonisolated static func isWatchPage(_ url: URL) -> Bool {
+            (url.host?.hasSuffix("youtube.com") == true) && url.path.hasPrefix("/watch")
+        }
+
+        @MainActor
+        static func setOrientation(_ mask: UIInterfaceOrientationMask) {
+            for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+            }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {

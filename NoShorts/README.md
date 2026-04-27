@@ -6,6 +6,7 @@ An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navig
 
 - **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM
 - **All Subscriptions as default landing**: app launches into `/feed/channels` (the channel grid, not the videos feed). Any navigation to `/` (algorithmic home) — including YouTube's own in-page Home tab, the YouTube logo, the toolbar Home button, post-login redirects — is caught and rewritten via KVO on `webView.url` (catches SPA `pushState`) plus `WKNavigationDelegate` (catches full-page navs).
+- **Auto-rotate to landscape on video play**: tapping a video (URL → `/watch?v=...`) calls `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))` to force landscape immediately. Off the watch page, orientation is unlocked (`.allButUpsideDown`) so manual rotation works.
 - **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a user tap
 - **SPA navigation guard**: intercepts `pushState`/`replaceState` to drop `/shorts` navigations
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0
