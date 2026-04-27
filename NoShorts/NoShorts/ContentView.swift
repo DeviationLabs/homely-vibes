@@ -16,10 +16,13 @@ private let earlyScript = """
     const s = document.createElement('style');
     s.id = 'no-shorts';
     s.textContent = `
-        /* Mobile YouTube bottom nav Shorts tab — confirmed class via DOM inspection */
+        /* Mobile nav Shorts tab — confirmed .pivot-shorts class */
         .pivot-shorts { display:none!important; }
-        /* Mobile Shorts shelf */
-        ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model-v2, ytm-shorts-shelf-renderer { display:none!important; }
+        /* Shorts content — confirmed element names via live DOM inspection */
+        ytm-shorts-lockup-view-model,
+        ytm-rich-shelf-renderer:has(ytm-shorts-lockup-view-model),
+        ytm-rich-section-renderer:has(ytm-shorts-lockup-view-model),
+        ytm-rich-item-renderer:has(ytm-shorts-lockup-view-model) { display:none!important; }
         /* Desktop */
         ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts] { display:none!important; }
     `;
@@ -44,10 +47,16 @@ private let shortsBlockScript = """
         document.querySelectorAll('ytd-mini-guide-entry-renderer, ytd-guide-entry-renderer').forEach(el => {
             if (el.querySelector('a[href="/shorts"]') || el.textContent?.trim() === 'Shorts') el.remove();
         });
-        // Shelves (mobile + desktop)
-        document.querySelectorAll('ytm-reel-shelf-renderer, ytm-shorts-lockup-view-model-v2, ytm-shorts-shelf-renderer, ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]').forEach(e => e.remove());
-        // Feed cards containing Shorts links
-        document.querySelectorAll('ytm-video-with-context-renderer, ytm-compact-video-renderer, ytd-rich-item-renderer, ytd-video-renderer').forEach(item => {
+        // Shorts elements — confirmed names via live DOM inspection
+        document.querySelectorAll('ytm-shorts-lockup-view-model').forEach(e => {
+            (e.closest('ytm-rich-item-renderer, ytm-rich-section-renderer, ytm-rich-shelf-renderer') || e).remove();
+        });
+        document.querySelectorAll('ytm-rich-shelf-renderer').forEach(el => {
+            if (el.querySelector('ytm-shorts-lockup-view-model')) el.remove();
+        });
+        // Desktop
+        document.querySelectorAll('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]').forEach(e => e.remove());
+        document.querySelectorAll('ytd-rich-item-renderer, ytd-video-renderer').forEach(item => {
             if (item.querySelector('a[href*="/shorts/"]')) item.remove();
         });
     }
