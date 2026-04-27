@@ -162,7 +162,8 @@ struct YouTubeWebView: UIViewRepresentable {
                 let isWatch = Self.isWatchPage(url)
                 Task { @MainActor in
                     if isHome { self.model.goPlaylists() }
-                    if isWatch { Self.setOrientation(.landscape) }
+                    if isWatch { Self.setOrientation(.landscapeRight) }
+                    else if !isHome { Self.setOrientation(.portrait) }
                 }
             }
         }
