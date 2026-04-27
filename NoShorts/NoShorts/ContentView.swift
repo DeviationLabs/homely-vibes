@@ -25,6 +25,7 @@ private let earlyScript = """
         ytm-rich-section-renderer:has(ytm-shorts-lockup-view-model),
         ytm-rich-item-renderer:has(ytm-shorts-lockup-view-model) { display:none!important; }
         ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts] { display:none!important; }
+        ytm-pivot-bar-renderer { display:none!important; }
     `;
     (document.head || document.documentElement).appendChild(s);
 
