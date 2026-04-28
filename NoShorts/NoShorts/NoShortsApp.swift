@@ -32,23 +32,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             object: nil,
             queue: .main
         ) { note in
-            let window = note.object as? UIWindow
-            let cls = window.map { String(describing: type(of: $0)) } ?? "nil"
-            NSLog("NoShorts.window didBecomeVisible class=\(cls) lock=\(AppDelegate.orientationLock.rawValue)")
-            guard let scene = window?.windowScene else { return }
-            window?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            guard let window = note.object as? UIWindow, let scene = window.windowScene else { return }
+            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: AppDelegate.orientationLock)) { error in
-                NSLog("NoShorts.window didBecomeVisible geometryUpdate failed: \(error)")
+                NSLog("NoShorts.didBecomeVisible geometryUpdate failed: \(error)")
             }
-        }
-        NotificationCenter.default.addObserver(
-            forName: UIWindow.didBecomeHiddenNotification,
-            object: nil,
-            queue: .main
-        ) { note in
-            let window = note.object as? UIWindow
-            let cls = window.map { String(describing: type(of: $0)) } ?? "nil"
-            NSLog("NoShorts.window didBecomeHidden class=\(cls) lock=\(AppDelegate.orientationLock.rawValue)")
         }
         return true
     }
@@ -57,8 +45,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        let cls = window.map { String(describing: type(of: $0)) } ?? "nil"
-        NSLog("NoShorts.supportedOrientations window=\(cls) returning=\(AppDelegate.orientationLock.rawValue)")
-        return AppDelegate.orientationLock
+        AppDelegate.orientationLock
     }
 }
