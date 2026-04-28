@@ -199,6 +199,7 @@ struct YouTubeWebView: UIViewRepresentable {
 
         nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let kind = message.body as? String else { return }
+            NSLog("NoShorts.video event=\(kind)")
             Task { @MainActor in
                 switch kind {
                 case "play":
@@ -213,13 +214,14 @@ struct YouTubeWebView: UIViewRepresentable {
 
         @MainActor
         static func setOrientation(_ mask: UIInterfaceOrientationMask) {
+            NSLog("NoShorts.setOrientation mask=\(mask.rawValue)")
             AppDelegate.orientationLock = mask
             for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
                 for window in scene.windows {
                     window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
                 }
                 scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
-                    NSLog("requestGeometryUpdate(\(mask.rawValue)) failed: \(error)")
+                    NSLog("NoShorts.setOrientation requestGeometryUpdate(\(mask.rawValue)) failed: \(error)")
                 }
             }
         }
