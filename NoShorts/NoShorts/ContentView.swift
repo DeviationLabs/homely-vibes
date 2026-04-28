@@ -91,6 +91,9 @@ final class WebViewModel {
     init() {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = .video
+        // Without this, tapping play hands the video to AVPlayerViewController,
+        // whose own orientation handling overrides our AppDelegate gate.
+        config.allowsInlineMediaPlayback = true
         config.userContentController.addUserScript(
             WKUserScript(source: earlyScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
@@ -182,8 +185,10 @@ struct YouTubeWebView: UIViewRepresentable {
         static func setOrientation(_ mask: UIInterfaceOrientationMask) {
             AppDelegate.orientationLock = mask
             for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
                 scene.windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+                    NSLog("requestGeometryUpdate failed for mask \(mask.rawValue): \(error)")
+                }
             }
         }
 
@@ -201,6 +206,11 @@ struct YouTubeWebView: UIViewRepresentable {
             model.isLoading = false
             model.canGoBack = webView.canGoBack
             model.canGoForward = webView.canGoForward
+            // URL KVO can miss SPA back-out from a video; re-assert here too.
+            if let url = webView.url {
+                if Self.isWatchPage(url) { Self.setOrientation(.landscapeRight) }
+                else if !Self.isYouTubeHome(url) { Self.setOrientation(.portrait) }
+            }
         }
 
         func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) { model.isLoading = false }
