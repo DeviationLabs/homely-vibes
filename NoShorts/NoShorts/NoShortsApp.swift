@@ -8,9 +8,8 @@ import UIKit
 
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
-    // Source of truth for which orientations iOS will rotate to.
-    // Updated by ContentView as the user navigates between watch pages
-    // (landscape) and everything else (portrait).
+    // Lock for our own app window (browsing chrome). The AVPlayerViewController
+    // window is handled separately in supportedInterfaceOrientationsFor below.
     static var orientationLock: UIInterfaceOrientationMask = .portrait
 
     var window: UIWindow?
@@ -23,6 +22,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         window.rootViewController = OrientedHostingController(rootView: ContentView())
         window.makeKeyAndVisible()
         self.window = window
+
+        // When AVPlayerViewController dismisses its own UIWindow, force our
+        // window back to portrait. Without this nudge, iOS leaves us in
+        // whatever orientation the player ended in.
+        NotificationCenter.default.addObserver(
+            forName: UIWindow.didBecomeHiddenNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let win = note.object as? UIWindow, AppDelegate.isVideoFullscreenWindow(win) else { return }
+            self?.window?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
+        }
+
         return true
     }
 
@@ -30,7 +45,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        AppDelegate.orientationLock
+        // AVPlayerViewController presents in a separate UIWindow. iOS asks the
+        // AppDelegate for that window's mask — return a single landscape so the
+        // player can't rotate between left/right via the device sensor.
+        if AppDelegate.isVideoFullscreenWindow(window) {
+            return .landscapeRight
+        }
+        return AppDelegate.orientationLock
+    }
+
+    // The fullscreen video window's class name on iOS varies by version
+    // (AVFullScreenWindow, _UIRemoteKeyboardWindow-style internals, etc.) but
+    // reliably contains "Fullscreen" or "AVPlayer" — match loosely.
+    static func isVideoFullscreenWindow(_ window: UIWindow?) -> Bool {
+        guard let window else { return false }
+        let name = String(describing: type(of: window))
+        return name.contains("Fullscreen") || name.contains("AVPlayer")
     }
 }
 

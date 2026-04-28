@@ -150,7 +150,6 @@ struct YouTubeWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         let model: WebViewModel
         private var urlObservation: NSKeyValueObservation?
-        private var fullscreenObservation: NSKeyValueObservation?
 
         init(model: WebViewModel) {
             self.model = model
@@ -163,43 +162,12 @@ struct YouTubeWebView: UIViewRepresentable {
                     Task { @MainActor in self.model.goPlaylists() }
                 }
             }
-            // Orientation is driven by WebKit fullscreen state, not URL. Entering
-            // video fullscreen (incl. AVPlayerViewController hand-off) → landscape;
-            // exiting → portrait. This is the only signal that reliably tracks
-            // "is the user actually watching a video right now".
-            fullscreenObservation = model.webView.observe(\.fullscreenState, options: [.new]) { _, change in
-                guard let state = change.newValue else { return }
-                Task { @MainActor in
-                    switch state {
-                    case .enteringFullscreen, .inFullscreen:
-                        Self.setOrientation(.landscapeRight)
-                    case .exitingFullscreen, .notInFullscreen:
-                        Self.setOrientation(.portrait)
-                    @unknown default:
-                        break
-                    }
-                }
-            }
         }
 
-        deinit {
-            urlObservation?.invalidate()
-            fullscreenObservation?.invalidate()
-        }
+        deinit { urlObservation?.invalidate() }
 
         nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
-        }
-
-        @MainActor
-        static func setOrientation(_ mask: UIInterfaceOrientationMask) {
-            AppDelegate.orientationLock = mask
-            for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-                scene.windows.first?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
-                    NSLog("requestGeometryUpdate failed for mask \(mask.rawValue): \(error)")
-                }
-            }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
