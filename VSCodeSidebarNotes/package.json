@@ -1,0 +1,124 @@
+{
+  "name": "vscode-sidebar-notes",
+  "displayName": "Sidebar Notes",
+  "description": "Markdown sidebar that persists across restarts and is writable by Claude. Successor to the original Sidebar Notes.",
+  "version": "0.0.1",
+  "publisher": "deviationlabs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abutala/homely_vibes.git",
+    "directory": "VSCodeSidebarNotes"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Notebooks",
+    "Other"
+  ],
+  "keywords": [
+    "notes",
+    "markdown",
+    "sidebar",
+    "claude",
+    "scratchpad"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sidebarNotes",
+          "title": "Sidebar Notes",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sidebarNotes": [
+        {
+          "type": "webview",
+          "id": "sidebarNotes.view",
+          "name": "Notes",
+          "contextualTitle": "Sidebar Notes"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sidebarNotes.openFile",
+        "title": "Sidebar Notes: Open Notes File"
+      },
+      {
+        "command": "sidebarNotes.refresh",
+        "title": "Sidebar Notes: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sidebarNotes.toggleEdit",
+        "title": "Sidebar Notes: Toggle Edit/Preview",
+        "icon": "$(edit)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sidebarNotes.toggleEdit",
+          "when": "view == sidebarNotes.view",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sidebarNotes.refresh",
+          "when": "view == sidebarNotes.view",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sidebarNotes.openFile",
+          "when": "view == sidebarNotes.view",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Sidebar Notes",
+      "properties": {
+        "sidebarNotes.fileName": {
+          "type": "string",
+          "default": "sidebar-notes.md",
+          "description": "Workspace-relative path of the markdown file to display."
+        },
+        "sidebarNotes.globalFile": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to a global notes file. Used when no workspace folder is open. Leave blank to disable."
+        },
+        "sidebarNotes.debounceMs": {
+          "type": "number",
+          "default": 400,
+          "description": "Milliseconds to wait after typing before saving to disk."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "package-vsix": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.19.10",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "markdown-it": "^14.0.0"
+  }
+}
