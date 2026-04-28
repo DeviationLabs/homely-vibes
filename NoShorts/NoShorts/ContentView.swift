@@ -87,14 +87,10 @@ final class WebViewModel {
     var isLoading = false
     var canGoBack = false
     var canGoForward = false
-    var isWatching = false
 
     init() {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = .video
-        // Without this, tapping play hands the video to AVPlayerViewController,
-        // whose own orientation handling overrides our AppDelegate gate.
-        config.allowsInlineMediaPlayback = true
         config.userContentController.addUserScript(
             WKUserScript(source: earlyScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
@@ -154,6 +150,7 @@ struct YouTubeWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         let model: WebViewModel
         private var urlObservation: NSKeyValueObservation?
+        private var fullscreenObservation: NSKeyValueObservation?
 
         init(model: WebViewModel) {
             self.model = model
@@ -162,25 +159,36 @@ struct YouTubeWebView: UIViewRepresentable {
             // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
             urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
                 guard let self, let url = change.newValue ?? nil else { return }
-                let isHome = Self.isYouTubeHome(url)
-                let isWatch = Self.isWatchPage(url)
+                if Self.isYouTubeHome(url) {
+                    Task { @MainActor in self.model.goPlaylists() }
+                }
+            }
+            // Orientation is driven by WebKit fullscreen state, not URL. Entering
+            // video fullscreen (incl. AVPlayerViewController hand-off) → landscape;
+            // exiting → portrait. This is the only signal that reliably tracks
+            // "is the user actually watching a video right now".
+            fullscreenObservation = model.webView.observe(\.fullscreenState, options: [.new]) { _, change in
+                guard let state = change.newValue else { return }
                 Task { @MainActor in
-                    if isHome { self.model.goPlaylists() }
-                    self.model.isWatching = isWatch
-                    if isWatch { Self.setOrientation(.landscapeRight) }
-                    else if !isHome { Self.setOrientation(.portrait) }
+                    switch state {
+                    case .enteringFullscreen, .inFullscreen:
+                        Self.setOrientation(.landscapeRight)
+                    case .exitingFullscreen, .notInFullscreen:
+                        Self.setOrientation(.portrait)
+                    @unknown default:
+                        break
+                    }
                 }
             }
         }
 
-        deinit { urlObservation?.invalidate() }
+        deinit {
+            urlObservation?.invalidate()
+            fullscreenObservation?.invalidate()
+        }
 
         nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
-        }
-
-        nonisolated static func isWatchPage(_ url: URL) -> Bool {
-            (url.host?.hasSuffix("youtube.com") == true) && url.path.hasPrefix("/watch")
         }
 
         @MainActor
@@ -208,13 +216,6 @@ struct YouTubeWebView: UIViewRepresentable {
             model.isLoading = false
             model.canGoBack = webView.canGoBack
             model.canGoForward = webView.canGoForward
-            // URL KVO can miss SPA back-out from a video; re-assert here too.
-            if let url = webView.url {
-                let isWatch = Self.isWatchPage(url)
-                model.isWatching = isWatch
-                if isWatch { Self.setOrientation(.landscapeRight) }
-                else if !Self.isYouTubeHome(url) { Self.setOrientation(.portrait) }
-            }
         }
 
         func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) { model.isLoading = false }
@@ -232,9 +233,9 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                if !model.isWatching { topToolbar }
+                topToolbar
                 YouTubeWebView(model: model)
-                if !model.isWatching { bottomToolbar }
+                bottomToolbar
             }
 
             if model.isLoading {
@@ -242,18 +243,14 @@ struct ContentView: View {
                     .progressViewStyle(.linear)
                     .tint(.red)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, model.isWatching ? 0 : 52)
+                    .padding(.top, 52)
             }
 
-            if !model.isWatching {
-                countdownBadge
-                    .padding(.top, 60)  // 52pt top toolbar + 8pt gap
-                    .padding(.trailing, 12)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+            countdownBadge
+                .padding(.top, 60)
+                .padding(.trailing, 12)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .statusBarHidden(model.isWatching)
-        .ignoresSafeArea(edges: model.isWatching ? .all : [])
         .onAppear { startTimer() }
         .onDisappear { timer?.invalidate() }
     }
