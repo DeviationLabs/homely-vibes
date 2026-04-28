@@ -87,6 +87,7 @@ final class WebViewModel {
     var isLoading = false
     var canGoBack = false
     var canGoForward = false
+    var isWatching = false
 
     init() {
         let config = WKWebViewConfiguration()
@@ -165,6 +166,7 @@ struct YouTubeWebView: UIViewRepresentable {
                 let isWatch = Self.isWatchPage(url)
                 Task { @MainActor in
                     if isHome { self.model.goPlaylists() }
+                    self.model.isWatching = isWatch
                     if isWatch { Self.setOrientation(.landscapeRight) }
                     else if !isHome { Self.setOrientation(.portrait) }
                 }
@@ -208,7 +210,9 @@ struct YouTubeWebView: UIViewRepresentable {
             model.canGoForward = webView.canGoForward
             // URL KVO can miss SPA back-out from a video; re-assert here too.
             if let url = webView.url {
-                if Self.isWatchPage(url) { Self.setOrientation(.landscapeRight) }
+                let isWatch = Self.isWatchPage(url)
+                model.isWatching = isWatch
+                if isWatch { Self.setOrientation(.landscapeRight) }
                 else if !Self.isYouTubeHome(url) { Self.setOrientation(.portrait) }
             }
         }
@@ -228,9 +232,9 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                topToolbar
+                if !model.isWatching { topToolbar }
                 YouTubeWebView(model: model)
-                bottomToolbar
+                if !model.isWatching { bottomToolbar }
             }
 
             if model.isLoading {
@@ -238,14 +242,18 @@ struct ContentView: View {
                     .progressViewStyle(.linear)
                     .tint(.red)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 52)
+                    .padding(.top, model.isWatching ? 0 : 52)
             }
 
-            countdownBadge
-                .padding(.top, 60)  // 52pt top toolbar + 8pt gap
-                .padding(.trailing, 12)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            if !model.isWatching {
+                countdownBadge
+                    .padding(.top, 60)  // 52pt top toolbar + 8pt gap
+                    .padding(.trailing, 12)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
+        .statusBarHidden(model.isWatching)
+        .ignoresSafeArea(edges: model.isWatching ? .all : [])
         .onAppear { startTimer() }
         .onDisappear { timer?.invalidate() }
     }
