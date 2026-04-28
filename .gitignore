@@ -33,8 +33,9 @@ lib/tokens
 # Samsung upload history
 config/samsung_upload_history.json
 
-# Claude Code worktrees
-.claude/worktrees/
+# Claude Code
+.claude/
+.cloud/
 
 # clasp (Google Apps Script CLI) — script ID is local, not shared
 PersonalCalSync/.clasp.json
