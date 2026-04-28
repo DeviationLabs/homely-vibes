@@ -49,6 +49,26 @@ private let earlyScript = """
 })();
 """
 
+// Listens for HTML5 video play/pause/ended events anywhere in the page and
+// posts a message to native. Works for inline playback AND fullscreen — both
+// fire `play`/`pause` events on the same <video> element.
+private let videoEventScript = """
+(function() {
+    const post = (kind) => {
+        try { window.webkit.messageHandlers.video.postMessage(kind); } catch(e) {}
+    };
+    const onPlay = (e) => { if (e.target instanceof HTMLVideoElement) post('play'); };
+    const onPause = (e) => { if (e.target instanceof HTMLVideoElement) post('pause'); };
+    const onEnded = (e) => { if (e.target instanceof HTMLVideoElement) post('ended'); };
+    document.addEventListener('play', onPlay, true);
+    document.addEventListener('pause', onPause, true);
+    document.addEventListener('ended', onEnded, true);
+    // Navigating away from a watch page tears down the <video> element
+    // without firing pause. pagehide covers the SPA-back case too.
+    window.addEventListener('pagehide', () => post('pause'));
+})();
+"""
+
 // Runs at document end: DOM removal + debounced MutationObserver
 private let shortsBlockScript = """
 (function() {
@@ -96,6 +116,9 @@ final class WebViewModel {
         )
         config.userContentController.addUserScript(
             WKUserScript(source: shortsBlockScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        )
+        config.userContentController.addUserScript(
+            WKUserScript(source: videoEventScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         )
 
         // Route WKWebView traffic through a local DoH-backed proxy so requests
@@ -147,13 +170,14 @@ struct YouTubeWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let model: WebViewModel
         private var urlObservation: NSKeyValueObservation?
 
         init(model: WebViewModel) {
             self.model = model
             super.init()
+            model.webView.configuration.userContentController.add(self, name: "video")
             // Catch SPA URL changes (history.pushState / replaceState). decidePolicyFor
             // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
             urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
@@ -164,10 +188,40 @@ struct YouTubeWebView: UIViewRepresentable {
             }
         }
 
-        deinit { urlObservation?.invalidate() }
+        deinit {
+            urlObservation?.invalidate()
+            model.webView.configuration.userContentController.removeScriptMessageHandler(forName: "video")
+        }
 
         nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
+        }
+
+        nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let kind = message.body as? String else { return }
+            Task { @MainActor in
+                switch kind {
+                case "play":
+                    Self.setOrientation(.landscapeRight)
+                case "pause", "ended":
+                    Self.setOrientation(.portrait)
+                default:
+                    break
+                }
+            }
+        }
+
+        @MainActor
+        static func setOrientation(_ mask: UIInterfaceOrientationMask) {
+            AppDelegate.orientationLock = mask
+            for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+                for window in scene.windows {
+                    window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                }
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+                    NSLog("requestGeometryUpdate(\(mask.rawValue)) failed: \(error)")
+                }
+            }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
