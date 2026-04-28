@@ -14,6 +14,8 @@ lib/tuya_switch_config_cli.json
 token_file
 cache.json
 *config.json
+!tsconfig.json
+!**/tsconfig.json
 
 # Hydra local config (secrets)
 config/local.yaml
