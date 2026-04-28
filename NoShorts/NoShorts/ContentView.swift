@@ -49,6 +49,26 @@ private let earlyScript = """
 })();
 """
 
+// Listens for HTML5 video play/pause/ended events anywhere in the page and
+// posts a message to native. Works for inline playback AND fullscreen — both
+// fire `play`/`pause` events on the same <video> element.
+private let videoEventScript = """
+(function() {
+    const post = (kind) => {
+        try { window.webkit.messageHandlers.video.postMessage(kind); } catch(e) {}
+    };
+    const onPlay = (e) => { if (e.target instanceof HTMLVideoElement) post('play'); };
+    const onPause = (e) => { if (e.target instanceof HTMLVideoElement) post('pause'); };
+    const onEnded = (e) => { if (e.target instanceof HTMLVideoElement) post('ended'); };
+    document.addEventListener('play', onPlay, true);
+    document.addEventListener('pause', onPause, true);
+    document.addEventListener('ended', onEnded, true);
+    // Navigating away from a watch page tears down the <video> element
+    // without firing pause. pagehide covers the SPA-back case too.
+    window.addEventListener('pagehide', () => post('pause'));
+})();
+"""
+
 // Runs at document end: DOM removal + debounced MutationObserver
 private let shortsBlockScript = """
 (function() {
@@ -97,6 +117,9 @@ final class WebViewModel {
         config.userContentController.addUserScript(
             WKUserScript(source: shortsBlockScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         )
+        config.userContentController.addUserScript(
+            WKUserScript(source: videoEventScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        )
 
         // Route WKWebView traffic through a local DoH-backed proxy so requests
         // bypass system DNS (and any NextDNS-style filtering on youtube.com).
@@ -140,55 +163,71 @@ struct YouTubeWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let wv = model.webView
         wv.navigationDelegate = context.coordinator
-        model.goHome()
+        model.goPlaylists()
         return wv
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let model: WebViewModel
         private var urlObservation: NSKeyValueObservation?
 
         init(model: WebViewModel) {
             self.model = model
             super.init()
+            model.webView.configuration.userContentController.add(self, name: "video")
             // Catch SPA URL changes (history.pushState / replaceState). decidePolicyFor
             // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
             urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
                 guard let self, let url = change.newValue ?? nil else { return }
-                let isHome = Self.isYouTubeHome(url)
-                let isWatch = Self.isWatchPage(url)
-                Task { @MainActor in
-                    if isHome { self.model.goHome() }
-                    if isWatch { Self.setOrientation(.landscape) }
-                    else if !isHome { Self.setOrientation(.allButUpsideDown) }
+                if Self.isYouTubeHome(url) {
+                    Task { @MainActor in self.model.goPlaylists() }
                 }
             }
         }
 
-        deinit { urlObservation?.invalidate() }
+        deinit {
+            urlObservation?.invalidate()
+            model.webView.configuration.userContentController.removeScriptMessageHandler(forName: "video")
+        }
 
         nonisolated static func isYouTubeHome(_ url: URL) -> Bool {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
         }
 
-        nonisolated static func isWatchPage(_ url: URL) -> Bool {
-            (url.host?.hasSuffix("youtube.com") == true) && url.path.hasPrefix("/watch")
+        nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let kind = message.body as? String else { return }
+            Task { @MainActor in
+                switch kind {
+                case "play":
+                    Self.setOrientation(.landscapeRight)
+                case "pause", "ended":
+                    Self.setOrientation(.portrait)
+                default:
+                    break
+                }
+            }
         }
 
         @MainActor
         static func setOrientation(_ mask: UIInterfaceOrientationMask) {
+            AppDelegate.orientationLock = mask
             for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+                for window in scene.windows {
+                    window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                }
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+                    NSLog("NoShorts.setOrientation(\(mask.rawValue)) failed: \(error)")
+                }
             }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = action.request.url else { return .allow }
-            if url.path.hasPrefix("/shorts") { model.goHome(); return .cancel }
-            if Self.isYouTubeHome(url) { model.goHome(); return .cancel }
+            if url.path.hasPrefix("/shorts") { model.goPlaylists(); return .cancel }
+            if Self.isYouTubeHome(url) { model.goPlaylists(); return .cancel }
             return .allow
         }
 
@@ -230,7 +269,7 @@ struct ContentView: View {
             }
 
             countdownBadge
-                .padding(.top, 60)  // 52pt top toolbar + 8pt gap
+                .padding(.top, 60)
                 .padding(.trailing, 12)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
