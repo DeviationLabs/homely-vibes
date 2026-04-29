@@ -9,7 +9,6 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("sidebarNotes.refresh", () => provider.reloadFromDisk()),
-    vscode.commands.registerCommand("sidebarNotes.toggleEdit", () => provider.toggleEdit()),
     vscode.commands.registerCommand("sidebarNotes.openFile", () => provider.openInEditor()),
   );
 }
