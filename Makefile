@@ -94,7 +94,7 @@ lint: ## Run all the linters
 
 codespell: ## Run codespell against the project and fix any errors found
 	@echo "📝 Running codespell"
-	@uv run codespell -w --skip="dist,docs"
+	@uv run codespell -w --skip="dist,docs,package-lock.json,node_modules"
 	@echo "${GREEN}Codespell completed successfully.${RESET}"
 
 deptry: ## Run deptry on the project

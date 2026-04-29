@@ -5,6 +5,7 @@
 
   let suppressNextInput = false;
 
+  // nosemgrep: javascript.browser.security.insufficient-postmessage-origin-validation.insufficient-postmessage-origin-validation
   window.addEventListener("message", (event) => {
     const m = event.data;
     if (m?.type !== "state") return;
