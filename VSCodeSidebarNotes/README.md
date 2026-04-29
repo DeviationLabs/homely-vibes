@@ -1,8 +1,24 @@
-# Sidebar Notes
+# Sticky Sidebar Notes
 
 A markdown sidebar for VS Code and Cursor. Reads from a markdown file in your workspace, persists across restarts, and is writable by Claude (or any other tool) — open the same file in your terminal session and Claude can drop a session summary that shows up live in the sidebar.
 
-Successor to the original Sidebar Notes extension. Fixes typos, adds persistence to disk, and adds two-way sync with an external markdown file.
+## Installation
+
+**From the marketplace** (VS Code or Cursor):
+
+Search **Sticky Sidebar Notes** by `deviationlabs` in the Extensions panel, or:
+
+```bash
+cursor --install-extension deviationlabs.vscode-sidebar-notes
+# or VS Code:
+code --install-extension deviationlabs.vscode-sidebar-notes
+```
+
+**From a `.vsix`** (sideload):
+
+```bash
+cursor --install-extension vscode-sidebar-notes-0.0.1.vsix
+```
 
 ## Features
 
@@ -72,20 +88,6 @@ npm run publish                 # bumps nothing — publishes 0.0.1
 ```
 
 For subsequent releases, bump `"version"` in `package.json` first, then re-run `npm run publish`.
-
-**Installing on another machine from the marketplace** (once published):
-
-```bash
-# Cursor extension panel → search "Sidebar Notes" by deviationlabs
-# or via CLI:
-cursor --install-extension deviationlabs.vscode-sidebar-notes
-```
-
-**Installing without publishing** (`.vsix` sideload):
-
-```bash
-cursor --install-extension vscode-sidebar-notes-0.0.1.vsix
-```
 
 The same `.vsix` works in Cursor and VS Code. Cursor reads the VS Code Marketplace directly — no separate OpenVSX listing needed.
 
