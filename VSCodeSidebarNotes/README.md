@@ -66,17 +66,21 @@ npm run package-vsix     # produces vscode-sidebar-notes-<version>.vsix
 
 ### Publishing
 
-**VS Code Marketplace** — requires a PAT with Marketplace → Manage scope from [dev.azure.com](https://dev.azure.com):
+PATs are stored in `config/local.yaml` (gitignored) under `vscode_marketplace.pat` and `open_vsx.pat`.
+
+**VS Code Marketplace:**
 
 ```bash
-VSCE_PAT=<your-pat> npm run publish
+VSCE_PAT=$(python3 -c "from omegaconf import OmegaConf; c=OmegaConf.load('../config/local.yaml'); print(c.vscode_marketplace.pat)") npm run publish
 ```
 
-**Cursor / Open VSX** — requires a PAT from [open-vsx.org](https://open-vsx.org):
+**Cursor / Open VSX:**
 
 ```bash
-OVSX_PAT=<your-pat> npm run publish-cursor
+OVSX_PAT=$(python3 -c "from omegaconf import OmegaConf; c=OmegaConf.load('../config/local.yaml'); print(c.open_vsx.pat)") npm run publish-cursor
 ```
+
+To get new tokens: VS Code PAT from [dev.azure.com](https://dev.azure.com) (scope: Marketplace → Manage); Open VSX PAT from [open-vsx.org](https://open-vsx.org) (scope: publish).
 
 ## License
 
