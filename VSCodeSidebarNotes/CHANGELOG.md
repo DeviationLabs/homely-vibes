@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Re-publish to Open VSX with verified namespace ownership.
+
 ## 0.1.0
 
 - **Always-edit mode**: removed preview/edit toggle; sidebar is a plain textarea, always editable.

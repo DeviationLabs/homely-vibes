@@ -2,7 +2,7 @@
   "name": "vscode-sidebar-notes",
   "displayName": "Sticky Sidebar Notes",
   "description": "Markdown sidebar that persists across restarts and is writable by Claude. Successor to the original Sidebar Notes.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "deviationlabs",
   "icon": "media/icon.png",
   "license": "MIT",
