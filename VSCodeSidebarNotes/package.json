@@ -4,6 +4,7 @@
   "description": "Markdown sidebar that persists across restarts and is writable by Claude. Successor to the original Sidebar Notes.",
   "version": "0.0.1",
   "publisher": "deviationlabs",
+  "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",

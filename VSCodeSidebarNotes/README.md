@@ -59,13 +59,35 @@ cursor --install-extension vscode-sidebar-notes-0.0.1.vsix
 
 ### Publishing to the Marketplace
 
-1. Create a publisher at <https://marketplace.visualstudio.com/manage>.
-2. Generate a Personal Access Token with **Marketplace > Manage** scope from <https://dev.azure.com>.
-3. Update the `publisher` field in `package.json` if the Deviation Labs publisher name differs.
-4. Login once: `npx vsce login deviationlabs`
-5. Publish: `npm run publish`
+Prerequisites (one-time, done in a browser):
 
-The same `.vsix` works in Cursor (Cursor reads the VS Code marketplace via OpenVSX mirror — list there separately if needed).
+1. Sign in at <https://marketplace.visualstudio.com/manage> with a Microsoft account and create publisher `deviationlabs` if it does not already exist.
+2. In Azure DevOps (<https://dev.azure.com>), go to **User Settings → Personal access tokens** and create a token with scope **Marketplace → Manage**.
+
+Then from this directory:
+
+```bash
+npx vsce login deviationlabs   # paste the PAT when prompted
+npm run publish                 # bumps nothing — publishes 0.0.1
+```
+
+For subsequent releases, bump `"version"` in `package.json` first, then re-run `npm run publish`.
+
+**Installing on another machine from the marketplace** (once published):
+
+```bash
+# Cursor extension panel → search "Sidebar Notes" by deviationlabs
+# or via CLI:
+cursor --install-extension deviationlabs.vscode-sidebar-notes
+```
+
+**Installing without publishing** (`.vsix` sideload):
+
+```bash
+cursor --install-extension vscode-sidebar-notes-0.0.1.vsix
+```
+
+The same `.vsix` works in Cursor and VS Code. Cursor reads the VS Code Marketplace directly — no separate OpenVSX listing needed.
 
 ## License
 
