@@ -2,7 +2,7 @@
   "name": "vscode-sidebar-notes",
   "displayName": "Sticky Sidebar Notes",
   "description": "Markdown sidebar that persists across restarts and is writable by Claude. Successor to the original Sidebar Notes.",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "publisher": "deviationlabs",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -56,29 +56,19 @@
         "command": "sidebarNotes.refresh",
         "title": "Sidebar Notes: Refresh",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "sidebarNotes.toggleEdit",
-        "title": "Sidebar Notes: Toggle Edit/Preview",
-        "icon": "$(edit)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "sidebarNotes.toggleEdit",
+          "command": "sidebarNotes.refresh",
           "when": "view == sidebarNotes.view",
           "group": "navigation@1"
         },
         {
-          "command": "sidebarNotes.refresh",
-          "when": "view == sidebarNotes.view",
-          "group": "navigation@2"
-        },
-        {
           "command": "sidebarNotes.openFile",
           "when": "view == sidebarNotes.view",
-          "group": "navigation@3"
+          "group": "navigation@2"
         }
       ]
     },
@@ -97,8 +87,8 @@
         },
         "sidebarNotes.debounceMs": {
           "type": "number",
-          "default": 400,
-          "description": "Milliseconds to wait after typing before saving to disk."
+          "default": 0,
+          "description": "Milliseconds to wait after typing before saving to disk. Default 0 = immediate."
         }
       }
     }
@@ -109,17 +99,16 @@
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
     "package-vsix": "vsce package --no-dependencies",
-    "publish": "vsce publish --no-dependencies"
+    "publish": "vsce publish --no-dependencies",
+    "publish-cursor": "ovsx publish --no-dependencies"
   },
   "devDependencies": {
-    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^2.22.0",
     "esbuild": "^0.19.10",
+    "ovsx": "^0.9.0",
     "typescript": "^5.3.3"
   },
-  "dependencies": {
-    "markdown-it": "^14.0.0"
-  }
+  "dependencies": {}
 }
