@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 html, body {
@@ -8,8 +8,8 @@ html, body {
   height: 100%;
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
-  color: var(--vscode-foreground);
-  background: var(--vscode-sideBar-background);
+  color: #1a1a1a;
+  background: #ffffff;
 }
 
 body {
@@ -22,60 +22,29 @@ body {
 
 #status {
   font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  color: #888888;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-#preview, #editor {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 3px;
-  padding: 8px;
-  box-sizing: border-box;
+  cursor: pointer;
 }
 
 #editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  padding: 8px;
+  box-sizing: border-box;
   font-family: var(--vscode-editor-font-family);
   font-size: var(--vscode-editor-font-size);
-  background: var(--vscode-editor-background);
-  color: var(--vscode-editor-foreground);
+  background: #ffffff;
+  color: #1a1a1a;
   resize: none;
   outline: none;
-  border: 1px solid var(--vscode-panel-border);
 }
 
 #editor:focus {
-  border-color: var(--vscode-focusBorder);
+  border-color: #aaaaaa;
 }
-
-#preview h1, #preview h2, #preview h3, #preview h4 {
-  margin: 0.6em 0 0.3em;
-}
-
-#preview p { margin: 0.4em 0; }
-#preview ul, #preview ol { padding-left: 1.4em; }
-#preview code {
-  font-family: var(--vscode-editor-font-family);
-  background: var(--vscode-textCodeBlock-background);
-  padding: 0 3px;
-  border-radius: 2px;
-}
-#preview pre {
-  background: var(--vscode-textCodeBlock-background);
-  padding: 8px;
-  border-radius: 3px;
-  overflow: auto;
-}
-#preview a { color: var(--vscode-textLink-foreground); }
-#preview blockquote {
-  border-left: 3px solid var(--vscode-panel-border);
-  margin: 0.4em 0;
-  padding: 0.1em 0.8em;
-  color: var(--vscode-descriptionForeground);
-}
-
-.hidden { display: none !important; }

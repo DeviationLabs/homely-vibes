@@ -1,22 +1,16 @@
 import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import * as path from "path";
-import MarkdownIt from "markdown-it";
-
-type Mode = "preview" | "edit";
 
 interface InboundMessage {
-  type: "save" | "ready" | "openFile" | "toggleEdit";
+  type: "save" | "ready" | "openFile";
   text?: string;
 }
-
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
 export class NotesViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "sidebarNotes.view";
 
   private view?: vscode.WebviewView;
-  private mode: Mode = "preview";
   private watcher?: vscode.FileSystemWatcher;
   private writingOurselves = false;
   private debounceTimer?: NodeJS.Timeout;
@@ -58,22 +52,11 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
     if (!this.view) return;
     const filePath = this.resolveFilePath();
     if (!filePath) {
-      this.postState({ mode: this.mode, text: "", filePath: "", missing: true });
+      this.postState({ text: "", filePath: "", missing: true });
       return;
     }
     const text = await this.readOrEmpty(filePath);
-    this.postState({
-      mode: this.mode,
-      text,
-      filePath,
-      missing: false,
-      rendered: md.render(text),
-    });
-  }
-
-  public toggleEdit(): void {
-    this.mode = this.mode === "edit" ? "preview" : "edit";
-    void this.reloadFromDisk();
+    this.postState({ text, filePath, missing: false });
   }
 
   public async openInEditor(): Promise<void> {
@@ -96,10 +79,6 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
       void this.openInEditor();
       return;
     }
-    if (m.type === "toggleEdit") {
-      this.toggleEdit();
-      return;
-    }
     if (m.type === "save" && typeof m.text === "string") {
       this.scheduleSave(m.text);
     }
@@ -107,7 +86,7 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
 
   private scheduleSave(text: string): void {
     const cfg = vscode.workspace.getConfiguration("sidebarNotes");
-    const delay = cfg.get<number>("debounceMs", 400);
+    const delay = cfg.get<number>("debounceMs", 0);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => void this.writeToDisk(text), delay);
   }
@@ -122,7 +101,6 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
     } catch (err) {
       vscode.window.showErrorMessage(`Sidebar Notes: failed to save: ${err}`);
     } finally {
-      // brief grace period so the watcher event for our own write is ignored
       setTimeout(() => {
         this.writingOurselves = false;
       }, 200);
@@ -141,7 +119,6 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
         new vscode.RelativePattern(folder, rel),
       );
     } else {
-      // Global file — fs.watch via a directory pattern
       this.watcher = vscode.workspace.createFileSystemWatcher(filePath);
     }
     const onChange = () => {
@@ -181,13 +158,7 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private postState(state: {
-    mode: Mode;
-    text: string;
-    filePath: string;
-    missing: boolean;
-    rendered?: string;
-  }): void {
+  private postState(state: { text: string; filePath: string; missing: boolean }): void {
     this.view?.webview.postMessage({ type: "state", ...state });
   }
 
@@ -213,8 +184,7 @@ export class NotesViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <div id="status"></div>
-  <div id="preview" class="hidden"></div>
-  <textarea id="editor" class="hidden" spellcheck="false"></textarea>
+  <textarea id="editor" spellcheck="false"></textarea>
   <script nonce="${nonce}" src="${mediaUri("main.js")}"></script>
 </body>
 </html>`;
