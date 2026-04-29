@@ -196,6 +196,13 @@ uv run pytest NodeCheck
 - **Features**: RAG system with document indexing, conversational AI
 - **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
 
+### VSCodeSidebarNotes Module (`VSCodeSidebarNotes/`)
+- **Stack**: TypeScript VS Code / Cursor extension (NOT Python — does not use uv, pytest, or the rest of the repo's Python tooling).
+- **Purpose**: Markdown sidebar that reads/writes `sidebar-notes.md` in the workspace root. Two-way sync with file watcher so Claude (or any external tool) can update the file and the sidebar refreshes live.
+- **Build**: `cd VSCodeSidebarNotes && npm install && npm run compile` (esbuild → `dist/extension.js`). `npm run package-vsix` produces an installable `.vsix`.
+- **Marketplace**: published under the `deviationlabs` publisher; see the module README for the publish flow.
+- **Layout**: `package.json` (extension manifest), `src/` (TS source), `media/` (webview assets).
+
 ### Shared Library (`lib/`)
 - **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
 - **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
