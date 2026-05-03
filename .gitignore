@@ -41,3 +41,4 @@ config/samsung_upload_history.json
 
 # clasp (Google Apps Script CLI) — script ID is local, not shared
 PersonalCalSync/.clasp.json
+sidebar-notes.md
