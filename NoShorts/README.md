@@ -29,6 +29,56 @@ An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navig
 3. Connect your iPhone and select it as the run destination
 4. Hit **Cmd+R** to build and install
 
+## Building an IPA (for Sideloadly)
+
+Use this when you want to install on a device without Xcode attached, via [Sideloadly](https://sideloadly.io).
+
+### 1. Archive in Xcode
+
+**Product → Archive** — wait for the Organizer window to appear. You don't need to click Distribute; the `.xcarchive` already contains the signed `.app`.
+
+### 2. Export the IPA
+
+Run this script from Terminal (re-run after each new archive):
+
+```bash
+ARCHIVE=$(ls -dt ~/Library/Developer/Xcode/Archives/*/*.xcarchive | head -1)
+APP="$ARCHIVE/Products/Applications/NoShorts.app"
+rm -rf /tmp/NoShorts_ipa
+mkdir -p /tmp/NoShorts_ipa/Payload
+cp -R "$APP" /tmp/NoShorts_ipa/Payload/
+cd /tmp/NoShorts_ipa && zip -r ~/Desktop/NoShorts.ipa Payload/
+echo "IPA written to ~/Desktop/NoShorts.ipa"
+```
+
+This picks the most recent archive automatically and packages it as a valid IPA structure (`Payload/NoShorts.app` inside a zip).
+
+### 3. Install via Sideloadly
+
+#### Windows: iTunes requirement
+Sideloadly needs iTunes for Apple device drivers — **do not use the Microsoft Store version**. Download the direct installer from Apple's website (`apple.com/itunes`). You do not need to be logged into iTunes; your Apple ID is entered in Sideloadly directly. iTunes does not need to run in the background after setup.
+
+#### Initial install (USB)
+1. Download and open [Sideloadly](https://sideloadly.io) (free, Mac/Windows)
+2. Connect your iPhone via USB
+3. Drag `NoShorts.ipa` onto the Sideloadly window
+4. Enter your Apple ID — Sideloadly re-signs the app with your free developer certificate
+5. Click **Start** and wait for **"Done"** in the status bar
+6. On the iPhone: **Settings → General → VPN & Device Management → [your Apple ID] → Trust**
+
+#### Enable wireless re-signing (optional)
+After the first USB install, you can cut the cable for future re-signs:
+
+1. With iPhone still connected via USB, open iTunes
+2. Click the iPhone icon (top-left) → **Summary** tab → **Options**
+3. Check **"Sync with this iPhone over Wi-Fi"** → click **Sync**
+4. Unplug — Sideloadly will now detect the device over Wi-Fi when both are on the same network
+
+> If Sideloadly doesn't detect the device wirelessly, open iTunes and wake the iPhone screen.
+
+#### Auto re-sign
+Free Apple IDs must re-sign every 7 days. Leave the **Sideloadly daemon running in the system tray** — it re-signs automatically before expiry, wirelessly if Wi-Fi sync is enabled. To force a manual re-sign, drag the IPA in again and hit **Start**.
+
 ## How It Works
 
 Two `WKUserScript` injections run on every page:
