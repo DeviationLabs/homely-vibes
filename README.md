@@ -63,6 +63,7 @@ uv run python RachioFlume/main.py
 | 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/SamsungFrame/README.md) |
 | 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/NoShorts/README.md) |
 | ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/Tesla/README.md) |
+| 🎙️ **VoiceNotes** | Wispr Flow-style local push-to-talk voice transcription on macOS. Hold ⌥-right, speak, release — text streams to Markdown via whisper.cpp + Metal. No cloud. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/VoiceNotes/README.md) |
 | 🗒️ **VSCodeSidebarNotes** | VS Code / Cursor extension: markdown sidebar that persists across restarts and is writable by Claude for live session summaries. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/VSCodeSidebarNotes/README.md) |
 | 📊 **WaterLogging** | Comprehensive data collection scripts for Rachio, Flume, and Tuya smart water devices. | - |
 | 📈 **WaterParser** | Advanced water usage data processing, statistical analysis, and interactive HTML report generation. | - |
