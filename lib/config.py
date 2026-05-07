@@ -243,15 +243,15 @@ class PersonalCalSyncConfig:
 
 @dataclass
 class VoiceNotesConfig:
-    """VoiceNotes local STT configuration"""
+    """VoiceNotes local STT via whisper.cpp configuration"""
 
-    model_backend: str
     model_id: str
     hotkey: str
     notes_dir: str
-    chunk_duration_s: int
     sample_rate: int
     channels: int
+    vad_aggressiveness: int
+    n_threads: int
 
 
 @dataclass

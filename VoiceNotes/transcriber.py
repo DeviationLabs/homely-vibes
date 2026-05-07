@@ -1,25 +1,16 @@
-"""Speech-to-text engine wrapper with parakeet-mlx primary and mlx-whisper fallback.
+"""Speech-to-text engine using whisper.cpp via pywhispercpp.
 
-Model selection:
-  cfg.voice_notes.model_backend = "parakeet-mlx"  (default)
-    Model: parakeet-tdt-0.6b (~1.2GB fp16, ~0.5s latency on M2)
-    Why: fastest on Apple Silicon, built for streaming, excellent accuracy.
+whisper.cpp is a C/C++ inference engine for OpenAI Whisper models that uses
+Metal GPU acceleration on Apple Silicon (M-series). pywhispercpp wraps the
+C library with Python bindings.
 
-  cfg.voice_notes.model_backend = "mlx-whisper"   (fallback)
-    Model: mlx-community/whisper-large-v3-turbo-4bit (~400MB 4-bit quant)
-    Why: proven accuracy, smaller memory footprint if parakeet unavailable.
+Model is lazy-loaded on first call to transcribe() — startup is instant,
+first keystroke takes ~3-5s while the model loads into Metal GPU memory.
+Subsequent calls reuse the loaded model with ~400ms latency per phrase.
 
-Model loading:
-  - Lazy: model is loaded on first call to transcribe(), not at import time.
-  - Loading takes ~3-5s; callers should show a "Loading model..." UI hint first.
-  - After first load, the model stays in memory for the process lifetime.
-  - On M2 8GB: parakeet-tdt-0.6b uses ~2-3GB unified memory at runtime.
-    Acceptable alongside macOS overhead (~2-3GB), leaves ~2-3GB for other apps.
-
-Usage:
-    t = Transcriber()
-    text = t.transcribe(audio_chunk)   # numpy float32 array, 16kHz mono
-    print(text)
+Model storage: ~/.cache/pywhispercpp/models/ (auto-downloaded on first use)
+Recommended model for M2 8GB: large-v3-turbo (~1.6GB, best accuracy)
+Fallback for lower memory: medium (~1.5GB) or small (~488MB)
 """
 
 from __future__ import annotations
@@ -31,82 +22,52 @@ import numpy as np
 from lib.config import get_config
 from lib.logger import get_logger
 
-# TODO: add parakeet-mlx and mlx-whisper to optional voice deps before uncommenting
-# import parakeet_mlx  (parakeet-mlx backend)
-# import mlx_whisper   (mlx-whisper backend)
-
 cfg = get_config()
 logger = get_logger(__name__)
 
-SUPPORTED_BACKENDS = ("parakeet-mlx", "mlx-whisper")
-
 
 class Transcriber:
-    """Lazy-loading STT engine.
+    """Lazy-loading whisper.cpp transcriber.
 
-    Implementation plan:
-      __init__:
-        - Validate cfg.voice_notes.model_backend is in SUPPORTED_BACKENDS.
-        - Set self._model = None (lazy load on first transcribe()).
-        - Store model_id from cfg.voice_notes.model_id.
-
-      _load_model():
-        - Called once from transcribe() when self._model is None.
-        - If backend == "parakeet-mlx":
-            from parakeet_mlx import from_pretrained
-            self._model = from_pretrained(model_id or "parakeet-tdt-0.6b")
-        - If backend == "mlx-whisper":
-            import mlx_whisper
-            self._model = mlx_whisper.load_models.load_model(
-                model_id or "mlx-community/whisper-large-v3-turbo-4bit"
-            )
-        - Log model name and approx size hint.
-
-      transcribe(audio: np.ndarray) -> str:
-        - If _model is None, call _load_model().
-        - Validate: audio must be float32, 1D or 2D mono, non-empty.
-        - Flatten to 1D if 2D.
-        - Dispatch to _transcribe_parakeet or _transcribe_whisper.
-        - Strip leading/trailing whitespace from result.
-        - Return empty string (not None) on silence/no-speech detection.
-
-      _transcribe_parakeet(audio: np.ndarray) -> str:
-        - Call self._model.transcribe(audio, sample_rate=16000).
-        - Return result.text or "".
-
-      _transcribe_whisper(audio: np.ndarray) -> str:
-        - Call mlx_whisper.transcribe(audio, path_or_hf_repo=model_id).
-        - Return result["text"] or "".
+    Thread safety: transcribe() is NOT thread-safe — pywhispercpp model is not
+    reentrant. The VoiceNotesApp orchestrator calls it synchronously from the
+    VAD thread (one phrase at a time), so no locking is needed.
     """
 
     def __init__(self) -> None:
-        backend = cfg.voice_notes.model_backend
-        if backend not in SUPPORTED_BACKENDS:
-            raise ValueError(f"model_backend must be one of {SUPPORTED_BACKENDS}, got {backend!r}")
-        self._backend: str = backend
-        self._model_id: str = cfg.voice_notes.model_id
-        self._model: Optional[object] = None
+        self._model_name: str = cfg.voice_notes.model_id
+        self._n_threads: int = cfg.voice_notes.n_threads
+        self._model: Optional[object] = None  # pywhispercpp.model.Model
 
     @property
     def is_loaded(self) -> bool:
         return self._model is not None
 
-    def transcribe(self, _audio: np.ndarray) -> str:
-        """Transcribe a numpy float32 audio chunk (16kHz mono) to text.
+    def transcribe(self, audio: np.ndarray) -> str:
+        """Transcribe float32 16kHz mono audio array. Returns stripped text.
 
-        Returns empty string on silence. Never raises on empty/short audio.
-
-        TODO: implement per class docstring plan (rename _audio → audio).
+        Returns empty string on silence or if audio is too short.
         """
+        if audio.size == 0:
+            return ""
+
+        # whisper.cpp needs at least ~0.1s of audio to produce output
+        min_samples = int(cfg.voice_notes.sample_rate * 0.1)
+        if audio.size < min_samples:
+            return ""
+
         if self._model is None:
             self._load_model()
-        # TODO: validate, dispatch, return
-        return ""
+
+        segments = self._model.transcribe(audio, n_processors=1)  # type: ignore[union-attr]
+        text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+        return text
 
     def _load_model(self) -> None:
-        """Load STT model into memory. Called once lazily.
+        """Load whisper.cpp model into Metal GPU memory (~3-5s first time)."""
+        from pywhispercpp.model import Model  # type: ignore[import]
 
-        TODO: implement per class docstring plan.
-        """
-        logger.info("Loading STT model: backend=%s model_id=%s", self._backend, self._model_id)
-        # TODO: implement
+        logger.info("Loading whisper.cpp model: %s (%d threads)", self._model_name, self._n_threads)
+        # n_threads controls CPU inference fallback; Metal GPU is used automatically on Apple Silicon
+        self._model = Model(self._model_name, n_threads=self._n_threads)
+        logger.info("Model loaded: %s", self._model_name)

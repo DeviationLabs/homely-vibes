@@ -1,36 +1,30 @@
-"""Push-to-talk audio recorder with streaming chunk output.
+"""Push-to-talk audio recorder with VAD-based phrase streaming.
 
 State machine:
-  IDLE ──[key_down]──► RECORDING ──[key_up]──► TRANSCRIBING ──[done]──► IDLE
-                           │
-                      every chunk_duration_s seconds
-                           │
-                      emit chunk (numpy array) via on_chunk callback
+  IDLE ──[start_recording]──► RECORDING ──[stop_recording]──► FLUSHING ──[done]──► IDLE
+                                   │
+                              VAD detects phrase end
+                                   │
+                              on_chunk(np.ndarray)   ← caller transcribes immediately
 
-The recorder owns the sounddevice InputStream. Audio is captured at 16kHz mono
-(the sample rate expected by parakeet-mlx and Whisper). While in RECORDING
-state, audio frames are buffered. Every chunk_duration_s seconds a chunk is
-carved off and emitted via on_chunk so the Transcriber can process it
-incrementally (real-time streaming to file while recording continues).
+Architecture:
+  sounddevice callback thread → Queue[np.ndarray] → VAD processor thread
+                                                          │
+                                              accumulate speech frames
+                                                          │
+                                      silence > min_silence_ms → on_chunk(phrase)
 
-On key_release, any remaining buffered audio is flushed as a final chunk.
-The recorder then transitions to TRANSCRIBING and waits for the caller to
-call recording_done() to return to IDLE.
-
-Usage:
-    def handle_chunk(audio: np.ndarray) -> None:
-        text = transcriber.transcribe(audio)
-        writer.append(text)
-
-    rec = AudioRecorder(on_chunk=handle_chunk)
-    rec.start_recording()   # called by hotkey on_press
-    rec.stop_recording()    # called by hotkey on_release
-    rec.recording_done()    # called after last chunk transcribed
+webrtcvad operates on 30ms int16 PCM frames at 16kHz. The VAD processor thread
+reads frames from the queue, runs VAD, and emits accumulated speech when it
+detects a pause ≥ min_silence_ms. This gives phrase-by-phrase output that
+feels word-by-word to the user — each phrase lands in the file within ~400ms
+of the pause that ends it.
 """
 
 from __future__ import annotations
 
 import enum
+import queue
 import threading
 from collections.abc import Callable
 from typing import Optional
@@ -40,117 +34,167 @@ import numpy as np
 from lib.config import get_config
 from lib.logger import get_logger
 
-# TODO: add sounddevice to optional voice deps before uncommenting
-# import sounddevice as sd
-
 cfg = get_config()
 logger = get_logger(__name__)
+
+# VAD frame parameters (webrtcvad requires exactly 10/20/30ms frames at 16kHz)
+_VAD_FRAME_MS = 30
+_VAD_FRAME_SAMPLES = int(cfg.voice_notes.sample_rate * _VAD_FRAME_MS / 1000)  # 480
+
+# After this many ms of consecutive silence following speech, emit a chunk
+_MIN_SILENCE_MS = 400
+_SILENCE_FRAMES_THRESHOLD = _MIN_SILENCE_MS // _VAD_FRAME_MS  # 13 frames
+
+# Guard against emitting near-silence noise (min 200ms of actual speech)
+_MIN_SPEECH_FRAMES = 200 // _VAD_FRAME_MS  # 6 frames
 
 
 class RecorderState(enum.Enum):
     IDLE = "idle"
     RECORDING = "recording"
-    TRANSCRIBING = "transcribing"
+    FLUSHING = "flushing"
 
 
 class AudioRecorder:
-    """Push-to-talk audio recorder with streaming chunk callbacks.
+    """Push-to-talk recorder with VAD-driven phrase streaming.
 
-    Implementation plan:
-      __init__:
-        - Store on_chunk callback and config values.
-        - Pre-compute chunk_frames = sample_rate * chunk_duration_s.
-        - Initialize _buffer: list[np.ndarray] = [].
-        - Initialize _state = RecorderState.IDLE.
-        - Initialize _stream = None (sounddevice InputStream, lazy).
-        - Start a background timer thread that fires _emit_chunk() every
-          chunk_duration_s while in RECORDING state.
+    Accepts on_chunk(audio: np.ndarray) callback — called once per detected
+    phrase while the key is held, and once more on key release to flush any
+    trailing audio.
 
-      start_recording():
-        - Guard: if not IDLE, log warning and return (no re-entrant recording).
-        - Open sounddevice InputStream(samplerate, channels, dtype='float32',
-          callback=_audio_callback).
-        - Set state = RECORDING.
-        - Start chunk timer.
-
-      _audio_callback(indata, frames, time, status):
-        - Called by sounddevice on each audio block (~10ms).
-        - If state == RECORDING: append indata.copy() to _buffer.
-        - This runs in sounddevice's audio thread — keep it fast, no locks.
-
-      _emit_chunk():
-        - Called every chunk_duration_s by timer, and once on stop_recording().
-        - Concatenate and clear _buffer (swap with []).
-        - If audio has content, call on_chunk(audio_array).
-
-      stop_recording():
-        - Guard: if not RECORDING, return.
-        - Stop chunk timer.
-        - Flush remaining buffer via _emit_chunk().
-        - Stop sounddevice stream.
-        - Set state = TRANSCRIBING.
-
-      recording_done():
-        - Called by orchestrator after last chunk processed.
-        - Set state = IDLE.
+    Injection points for testing (avoids monkey-patching per CLAUDE.md):
+      stream_factory — replaces sounddevice.InputStream constructor
+      vad_factory    — replaces webrtcvad.Vad constructor; receives aggressiveness int
     """
 
-    def __init__(self, on_chunk: Callable[[np.ndarray], None]) -> None:
+    def __init__(
+        self,
+        on_chunk: Callable[[np.ndarray], None],
+        stream_factory: Optional[Callable[..., object]] = None,
+        vad_factory: Optional[Callable[[int], object]] = None,
+    ) -> None:
         self._on_chunk = on_chunk
+        self._stream_factory = stream_factory
+        self._vad_factory = vad_factory
         self._sample_rate: int = cfg.voice_notes.sample_rate
         self._channels: int = cfg.voice_notes.channels
-        self._chunk_duration: float = cfg.voice_notes.chunk_duration_s
-        self._chunk_frames = int(self._sample_rate * self._chunk_duration)
+        self._vad_aggressiveness: int = cfg.voice_notes.vad_aggressiveness
 
-        self._buffer: list[np.ndarray] = []
         self._state = RecorderState.IDLE
-        self._stream: Optional[object] = None  # sd.InputStream
-        self._timer: Optional[threading.Timer] = None
-        self._lock = threading.Lock()
+        self._frame_queue: queue.Queue[Optional[np.ndarray]] = queue.Queue()
+        self._stream: Optional[object] = None
+        self._vad_thread: Optional[threading.Thread] = None
 
     @property
     def state(self) -> RecorderState:
         return self._state
 
     def start_recording(self) -> None:
-        """Transition IDLE → RECORDING; open audio stream and start chunk timer.
-
-        TODO: implement per class docstring plan.
-        """
+        """Transition IDLE → RECORDING. Opens audio stream and VAD thread."""
         if self._state != RecorderState.IDLE:
-            logger.warning("start_recording called in state %s, ignoring", self._state)
+            logger.warning("start_recording in state %s — ignored", self._state)
             return
-        logger.info("AudioRecorder: start recording")
-        # TODO: implement
+
+        self._state = RecorderState.RECORDING
+        self._vad_thread = threading.Thread(target=self._vad_loop, daemon=True)
+        self._vad_thread.start()
+
+        if self._stream_factory is not None:
+            factory = self._stream_factory
+        else:
+            import sounddevice as sd  # lazy import — only when no test double provided
+
+            factory = sd.InputStream
+        self._stream = factory(
+            samplerate=self._sample_rate,
+            channels=self._channels,
+            dtype="float32",
+            blocksize=_VAD_FRAME_SAMPLES,  # deliver exactly one VAD frame at a time
+            callback=self._audio_callback,
+        )
+        self._stream.start()  # type: ignore[union-attr]
+        logger.info(
+            "AudioRecorder: recording started (VAD aggressiveness=%d)", self._vad_aggressiveness
+        )
 
     def stop_recording(self) -> None:
-        """Transition RECORDING → TRANSCRIBING; flush final chunk.
-
-        TODO: implement per class docstring plan.
-        """
+        """Transition RECORDING → FLUSHING. Stops stream, signals VAD thread to flush."""
         if self._state != RecorderState.RECORDING:
-            logger.warning("stop_recording called in state %s, ignoring", self._state)
+            logger.warning("stop_recording in state %s — ignored", self._state)
             return
-        logger.info("AudioRecorder: stop recording, flushing buffer")
-        # TODO: implement
 
-    def recording_done(self) -> None:
-        """Transition TRANSCRIBING → IDLE.
+        self._state = RecorderState.FLUSHING
 
-        TODO: set self._state = RecorderState.IDLE.
-        """
+        if self._stream is not None:
+            self._stream.stop()  # type: ignore[union-attr]
+            self._stream.close()  # type: ignore[union-attr]
+            self._stream = None
+
+        # sentinel None tells VAD thread to flush remaining buffer and exit
+        self._frame_queue.put(None)
+
+        if self._vad_thread is not None:
+            self._vad_thread.join(timeout=5.0)
+            self._vad_thread = None
+
         self._state = RecorderState.IDLE
+        logger.info("AudioRecorder: flushed and idle")
 
-    def _emit_chunk(self) -> None:
-        """Swap buffer, concatenate audio, fire on_chunk callback.
+    # ── internals ─────────────────────────────────────────────────────────────
 
-        TODO: implement per class docstring plan.
-        """
-        # TODO: implement
+    def _audio_callback(
+        self,
+        indata: np.ndarray,
+        _frames: int,
+        _time: object,
+        _status: object,
+    ) -> None:
+        """sounddevice callback — runs in audio thread. Must be fast."""
+        self._frame_queue.put(indata.copy())
 
-    def _start_timer(self) -> None:
-        """Schedule next _emit_chunk call after chunk_duration_s seconds.
+    def _vad_loop(self) -> None:
+        """Runs in daemon thread. Drains frame_queue, applies VAD, emits phrases."""
+        if self._vad_factory is not None:
+            vad = self._vad_factory(self._vad_aggressiveness)
+        else:
+            import webrtcvad  # lazy import
 
-        TODO: use threading.Timer; re-schedule only if still RECORDING.
-        """
-        # TODO: implement
+            vad = webrtcvad.Vad(self._vad_aggressiveness)
+
+        speech_frames: list[np.ndarray] = []
+        silence_count = 0
+        in_speech = False
+
+        while True:
+            frame = self._frame_queue.get()
+
+            if frame is None:
+                # sentinel — flush whatever we have and exit
+                if speech_frames:
+                    self._emit(speech_frames)
+                break
+
+            # webrtcvad needs int16 PCM bytes
+            pcm = (frame.flatten() * 32767).astype(np.int16).tobytes()
+            is_speech = vad.is_speech(pcm, self._sample_rate)
+
+            if is_speech:
+                speech_frames.append(frame.copy())
+                silence_count = 0
+                in_speech = True
+            else:
+                if in_speech:
+                    speech_frames.append(frame.copy())  # include trailing silence for context
+                    silence_count += 1
+                    if silence_count >= _SILENCE_FRAMES_THRESHOLD:
+                        if len(speech_frames) >= _MIN_SPEECH_FRAMES:
+                            self._emit(speech_frames)
+                        speech_frames = []
+                        silence_count = 0
+                        in_speech = False
+
+    def _emit(self, frames: list[np.ndarray]) -> None:
+        """Concatenate frames and fire on_chunk callback."""
+        audio = np.concatenate([f.flatten() for f in frames])
+        logger.debug("AudioRecorder: emitting phrase chunk (%.2fs)", len(audio) / self._sample_rate)
+        self._on_chunk(audio)

@@ -1,32 +1,33 @@
 """VoiceNotes — push-to-talk voice transcription menu-bar app.
 
-This is the main entry point. It runs as a rumps macOS menu-bar application
-and orchestrates the four components:
+Entry point. Runs as a rumps macOS menu-bar application.
 
-  HotkeyListener  ──press──►  AudioRecorder  ──chunk──►  Transcriber  ──text──►  SessionWriter
-                  ◄─release──                                          ◄─done────
+Data flow:
+  Hold ⌥right → HotkeyListener._on_press → AudioRecorder.start_recording()
+                                                    │
+                                    sounddevice (Metal audio) → VAD thread
+                                                    │
+                                      phrase detected → Transcriber.transcribe()
+                                                    │
+                                            SessionWriter.append(text)
+                                                    │
+                                         word appears in notes file
+  Release ⌥right → HotkeyListener._on_release → AudioRecorder.stop_recording()
+                                                    │ (flushes final phrase)
+                                           SessionWriter.close()
 
-Menu bar states:
-  🎙 VoiceNotes      — IDLE, waiting for hotkey
-  🔴 Recording...    — key held, audio being captured + streaming to file
-  ⏳ Loading model   — first press: parakeet-mlx loading (~3-5s)
-  ⏳ Transcribing... — key released, final chunk being processed
-  ✅ Saved           — session file written (shown for 2s, then back to idle)
-
-Menu items:
-  • Open today's notes folder   → opens ~/bin/knowledge/notes in Finder
-  • Show last session           → opens last written file in default app
-  • ─────────────────
-  • Quit
-
-macOS permission notes:
-  - Accessibility: required for pynput global hotkeys
-    System Settings → Privacy & Security → Accessibility → add Terminal
-  - Microphone: required for sounddevice audio capture
-    System Settings → Privacy & Security → Microphone → add Terminal
+Thread safety:
+  - Hotkey callbacks: pynput thread
+  - on_chunk callbacks: VAD thread (inside AudioRecorder)
+  - rumps callbacks (menu clicks): main thread
+  - Title updates from background threads: dispatched via rumps.Timer(interval=0)
 
 Run:
     uv run python VoiceNotes/voice_notes.py
+
+First-run permissions:
+    Accessibility: System Settings → Privacy & Security → Accessibility → add Terminal
+    Microphone:    System Settings → Privacy & Security → Microphone → add Terminal
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+import rumps  # type: ignore[import]
 
 from lib.config import get_config
 from lib.logger import get_logger
@@ -43,68 +45,21 @@ from VoiceNotes.recorder import AudioRecorder
 from VoiceNotes.transcriber import Transcriber
 from VoiceNotes.writer import SessionWriter
 
-# TODO: add rumps to optional voice deps before uncommenting
-# import rumps
-
 cfg = get_config()
 logger = get_logger(__name__)
 
-IDLE_TITLE = "🎙 VoiceNotes"
-RECORDING_TITLE = "🔴 Recording..."
-LOADING_TITLE = "⏳ Loading model..."
-TRANSCRIBING_TITLE = "⏳ Transcribing..."
-SAVED_TITLE = "✅ Saved"
-SAVED_DISPLAY_SECONDS = 2
+_IDLE = "🎙 VoiceNotes"
+_LOADING = "⏳ Loading model..."
+_RECORDING = "🔴 Recording..."
+_SAVED = "✅ Saved"
+_SAVED_SECS = 2
 
 
-class VoiceNotesApp:  # TODO: inherit from rumps.App when dep available
-    """Menu-bar orchestrator for push-to-talk voice transcription.
-
-    Implementation plan:
-      __init__:
-        - Call super().__init__("VoiceNotes", title=IDLE_TITLE).
-        - Instantiate Transcriber, SessionWriter, AudioRecorder(on_chunk=_on_chunk).
-        - Instantiate HotkeyListener(on_press=_on_key_press, on_release=_on_key_release).
-        - Build menu items: "Open notes folder", "Show last session", None (separator), quit.
-
-      _on_key_press():
-        - If recorder.state != IDLE, return (already recording).
-        - If not transcriber.is_loaded: set title=LOADING_TITLE in main thread.
-        - Open SessionWriter.
-        - Call recorder.start_recording().
-        - Set title=RECORDING_TITLE.
-
-      _on_chunk(audio: np.ndarray):
-        - Called from AudioRecorder's timer thread for each 3s chunk.
-        - text = transcriber.transcribe(audio).
-        - If text: writer.append(text + " ").
-        - (No title change here — we're mid-recording.)
-
-      _on_key_release():
-        - Set title=TRANSCRIBING_TITLE.
-        - recorder.stop_recording() → triggers final _on_chunk.
-        - writer.close().
-        - recorder.recording_done().
-        - Show SAVED_TITLE for SAVED_DISPLAY_SECONDS, then restore IDLE_TITLE.
-
-      _open_notes_folder(sender):  rumps menu click handler
-        - subprocess.Popen(["open", str(notes_dir)]).
-
-      _show_last_session(sender):  rumps menu click handler
-        - Find most recent .md file in notes_dir.
-        - subprocess.Popen(["open", str(path)]).
-
-    Thread safety:
-      - _on_chunk runs in AudioRecorder's background timer thread.
-      - _on_key_press / _on_key_release run in pynput's keyboard thread.
-      - rumps menu callbacks run on the main thread.
-      - Use threading.Lock in AudioRecorder buffer (handled there).
-      - Title updates must be dispatched to main thread via rumps.App.title setter
-        (rumps is not thread-safe for title updates — wrap in a Timer(0, ...) trick).
-    """
+class VoiceNotesApp(rumps.App):
+    """Menu-bar orchestrator for push-to-talk voice transcription."""
 
     def __init__(self) -> None:
-        # TODO: super().__init__("VoiceNotes", title=IDLE_TITLE)
+        super().__init__("VoiceNotes", title=_IDLE)
         self._transcriber = Transcriber()
         self._writer = SessionWriter()
         self._recorder = AudioRecorder(on_chunk=self._on_chunk)
@@ -113,61 +68,78 @@ class VoiceNotesApp:  # TODO: inherit from rumps.App when dep available
             on_release=self._on_key_release,
         )
         self._notes_dir = Path(cfg.voice_notes.notes_dir).expanduser()
+        self._last_path: Path | None = None
 
-    def run(self) -> None:
-        """Start hotkey listener and run rumps event loop.
+        self.menu = [
+            rumps.MenuItem("Open notes folder", callback=self._open_notes_folder),
+            rumps.MenuItem("Show last session", callback=self._show_last_session),
+            None,  # separator
+        ]
 
-        TODO:
-          - self._hotkey.start()
-          - self.menu = [...] (build rumps menu)
-          - self.run() (rumps.App.run — blocks until quit)
-        """
-        logger.info("VoiceNotesApp starting")
+    def run(self) -> None:  # type: ignore[override]
         self._hotkey.start()
-        # TODO: rumps event loop
+        logger.info("VoiceNotesApp running — hold %s to record", cfg.voice_notes.hotkey)
+        super().run()
+
+    # ── hotkey callbacks (pynput thread) ──────────────────────────────────────
 
     def _on_key_press(self) -> None:
-        """Called by HotkeyListener when recording key is pressed.
-
-        TODO: implement per class docstring plan.
-        """
-        logger.debug("key press → start recording")
-        # TODO: implement
+        if not self._transcriber.is_loaded:
+            self._set_title(_LOADING)
+        self._writer.open()
+        self._recorder.start_recording()
+        self._set_title(_RECORDING)
+        logger.debug("key pressed — recording started")
 
     def _on_key_release(self) -> None:
-        """Called by HotkeyListener when recording key is released.
+        # stop_recording() flushes final phrase → triggers one last _on_chunk
+        self._recorder.stop_recording()
+        self._writer.close()
+        self._last_path = self._writer.path  # path is None after close; grab before
+        self._set_title(_SAVED)
+        # restore idle title after 2s
+        rumps.Timer(self._restore_idle, _SAVED_SECS).start()
+        logger.debug("key released — session saved")
 
-        TODO: implement per class docstring plan.
-        """
-        logger.debug("key release → finalize recording")
-        # TODO: implement
+    def _restore_idle(self, _timer: rumps.Timer) -> None:
+        self.title = _IDLE
 
-    def _on_chunk(self, _audio: np.ndarray) -> None:
-        """Called by AudioRecorder every chunk_duration_s with audio data.
+    # ── VAD thread callback ───────────────────────────────────────────────────
 
-        TODO: implement per class docstring plan (rename _audio → audio).
-        """
-        # TODO: transcribe and append to writer
+    def _on_chunk(self, audio: np.ndarray) -> None:
+        """Called from VAD thread for each detected phrase. Transcribes and appends."""
+        text = self._transcriber.transcribe(audio)
+        if text:
+            self._writer.append(text + " ")
+            logger.debug("appended: %r", text[:60])
 
-    def _open_notes_folder(self, _sender: object) -> None:
-        """Open notes directory in Finder.
+    # ── menu callbacks (main thread) ──────────────────────────────────────────
 
-        TODO: subprocess.Popen(["open", str(self._notes_dir)])
-        """
+    @rumps.clicked("Open notes folder")
+    def _open_notes_folder(self, _: rumps.MenuItem) -> None:
+        self._notes_dir.mkdir(parents=True, exist_ok=True)
         subprocess.Popen(["open", str(self._notes_dir)])  # noqa: S603,S607
 
-    def _show_last_session(self, _sender: object) -> None:
-        """Open the most recently written session file.
+    @rumps.clicked("Show last session")
+    def _show_last_session(self, _: rumps.MenuItem) -> None:
+        files = sorted(self._notes_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not files:
+            rumps.alert("No voice notes yet. Hold ⌥right to start recording.")
+            return
+        subprocess.Popen(["open", str(files[0])])  # noqa: S603,S607
 
-        TODO:
-          - Glob self._notes_dir for *.md, sort by mtime, open latest.
-          - If no files exist, show rumps.alert("No notes yet.").
-        """
-        # TODO: implement
+    # ── thread-safe title update ──────────────────────────────────────────────
+
+    def _set_title(self, title: str) -> None:
+        """Update menu bar title from any thread via a 0-delay Timer (runs on main runloop)."""
+
+        def _update(_timer: rumps.Timer) -> None:
+            self.title = title
+
+        rumps.Timer(_update, 0).start()
 
 
 def main() -> None:
-    """Entry point."""
     VoiceNotesApp().run()
 
 

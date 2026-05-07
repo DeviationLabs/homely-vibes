@@ -1,63 +1,58 @@
 """Global hotkey listener for push-to-talk recording.
 
-Uses pynput to detect when the configured key (default: Right Option / alt_r) is
-held down or released. Fires callbacks without consuming the key event so the
-key still works normally in other apps.
+Uses pynput to monitor keyboard events globally (across all apps). When the
+configured key is held, fires on_press once (edge-triggered). When released,
+fires on_release. The key continues to function normally in other apps.
 
-macOS requirement: the process needs Accessibility permission.
-  System Settings → Privacy & Security → Accessibility → add Terminal / your app.
-  If permission is missing, pynput silently fails — we detect this at startup and
-  print an actionable error message.
+macOS requirement: Accessibility permission for the terminal/app.
+  System Settings → Privacy & Security → Accessibility → add Terminal (or your app)
 
-Usage:
-    listener = HotkeyListener(on_press=start_cb, on_release=stop_cb)
-    listener.start()   # non-blocking, runs in daemon thread
-    ...
-    listener.stop()
-
-The hotkey key name comes from cfg.voice_notes.hotkey and maps to a pynput Key
-enum value (e.g. "right_option" → Key.alt_r, "f5" → Key.f5).
+If permission is absent, pynput's listener starts but never fires events.
+We detect this by checking listener.running after a brief warmup and printing
+an actionable error rather than silently doing nothing.
 """
 
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from typing import Optional
 
 from lib.config import get_config
 from lib.logger import get_logger
 
-# TODO: add pynput to optional voice deps before uncommenting
-# from pynput import keyboard
-# from pynput.keyboard import Key, KeyCode
-
 cfg = get_config()
 logger = get_logger(__name__)
 
-# Maps config string → pynput Key attribute name.
-# Extend this dict to support additional keys.
+# Maps cfg.voice_notes.hotkey string → pynput Key attribute name
 _KEY_MAP: dict[str, str] = {
     "right_option": "alt_r",
     "left_option": "alt_l",
     "right_command": "cmd_r",
+    "left_command": "cmd_l",
+    "right_ctrl": "ctrl_r",
     "f5": "f5",
     "f13": "f13",
+    "f14": "f14",
 }
+
+_ACCESSIBILITY_MSG = """
+⚠️  VoiceNotes: Accessibility permission required for global hotkeys.
+
+   System Settings → Privacy & Security → Accessibility
+   → Click the + button → add Terminal (or your terminal app)
+   → Restart VoiceNotes
+
+Without this permission, the hotkey will not respond.
+"""
 
 
 class HotkeyListener:
     """Non-blocking push-to-talk key listener.
 
-    Implementation plan:
-      1. Resolve cfg.voice_notes.hotkey → pynput Key via _KEY_MAP.
-      2. Create a pynput.keyboard.Listener with on_press / on_release callbacks.
-      3. In on_press: if event key matches target key AND not already held,
-         set _held=True and call the on_press callback once (edge-triggered).
-      4. In on_release: if _held, set _held=False and call on_release callback.
-      5. Run listener in daemon thread so it doesn't block process exit.
-      6. Detect Accessibility permission failure: pynput raises or returns no
-         events → check by inspecting listener.running after a short sleep.
+    Runs pynput Listener in a daemon thread. Fires on_press / on_release
+    callbacks once per hold cycle (edge-triggered, not repeated while held).
     """
 
     def __init__(
@@ -68,26 +63,48 @@ class HotkeyListener:
         self._on_press = on_press
         self._on_release = on_release
         self._held = False
-        self._listener: Optional[object] = None  # pynput Listener, typed as Any
+        self._listener: Optional[object] = None
         self._thread: Optional[threading.Thread] = None
+        self._target_key: Optional[object] = None  # pynput Key enum value
 
     def start(self) -> None:
-        """Start listening in a background daemon thread.
+        """Start listening in a daemon thread. Non-blocking."""
+        from pynput import keyboard  # type: ignore[import]
+        from pynput.keyboard import Key  # type: ignore[import]
 
-        TODO:
-          - Resolve hotkey key from cfg.voice_notes.hotkey via _KEY_MAP.
-          - Instantiate pynput.keyboard.Listener(on_press=..., on_release=...).
-          - Start listener in daemon thread.
-          - After 0.5s, check listener.running; if False, log actionable error
-            about Accessibility permission and raise RuntimeError.
-        """
-        logger.info("HotkeyListener.start: hotkey=%s", cfg.voice_notes.hotkey)
-        # TODO: implement
+        hotkey_name = cfg.voice_notes.hotkey
+        key_attr = _KEY_MAP.get(hotkey_name, hotkey_name)
+        try:
+            self._target_key = getattr(Key, key_attr)
+        except AttributeError:
+            raise ValueError(f"Unknown hotkey: {hotkey_name!r} (mapped to Key.{key_attr})")
+
+        def on_press(key: object) -> None:
+            if key == self._target_key and not self._held:
+                self._held = True
+                self._on_press()
+
+        def on_release(key: object) -> None:
+            if key == self._target_key and self._held:
+                self._held = False
+                self._on_release()
+
+        self._listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        self._thread = threading.Thread(target=self._listener.run, daemon=True)  # type: ignore[union-attr]
+        self._thread.start()
+
+        # Give pynput 0.5s to start; if it doesn't fire events, Accessibility is missing
+        time.sleep(0.5)
+        if not self._listener.running:  # type: ignore[union-attr]
+            logger.error("HotkeyListener: pynput listener not running — check Accessibility")
+            print(_ACCESSIBILITY_MSG)
+
+        logger.info("HotkeyListener started: hotkey=%s (Key.%s)", hotkey_name, key_attr)
 
     def stop(self) -> None:
-        """Stop the listener and join the background thread.
-
-        TODO: call listener.stop(), join thread with timeout=2s.
-        """
-        logger.info("HotkeyListener.stop")
-        # TODO: implement
+        """Stop the listener and join the background thread."""
+        if self._listener is not None:
+            self._listener.stop()  # type: ignore[union-attr]
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        logger.info("HotkeyListener stopped")

@@ -48,9 +48,9 @@ streamlit = [
     "streamlit>=1.0.0",
 ]
 voice = [
-    "parakeet-mlx>=0.1.0",
-    "mlx-whisper>=0.4.0",
+    "pywhispercpp>=1.2.0",
     "sounddevice>=0.5.0",
+    "webrtcvad>=2.0.10",
     "rumps>=0.4.0",
     "pynput>=1.7.0",
 ]
@@ -105,9 +105,9 @@ streamlit = "streamlit"
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
-    "parakeet_mlx",
-    "mlx_whisper",
+    "pywhispercpp",
     "sounddevice",
+    "webrtcvad",
     "rumps",
     "pynput",
     "aiy",
@@ -126,10 +126,10 @@ DEP001 = [
     "__main__"  # Built-in module used in logger.py
 ]
 DEP002 = [
-    # VoiceNotes optional deps — imports are TODO-commented in stubs pending implementation
-    "parakeet-mlx",
-    "mlx-whisper",
+    # VoiceNotes optional deps — lazy-imported at runtime (not visible to deptry static scan)
+    "pywhispercpp",
     "sounddevice",
+    "webrtcvad",
     "rumps",
     "pynput",
     # Dev tools that aren't imported directly
@@ -194,9 +194,9 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = [
-    "parakeet_mlx.*",
-    "mlx_whisper.*",
+    "pywhispercpp.*",
     "sounddevice.*",
+    "webrtcvad.*",
     "rumps.*",
     "pynput.*",
     "yalexs.*",
@@ -227,9 +227,10 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Less strict checking for remaining legacy modules  
+# Less strict checking for remaining legacy modules
 [[tool.mypy.overrides]]
 module = [
+    "VoiceNotes.*",
     "lib.*",
     "WaterParser.*", 
     "JWTs.*",

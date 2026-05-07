@@ -222,15 +222,15 @@ flume:
 personal_cal_sync:
   script_id: ""   # Apps Script project ID — override in config/local.yaml
 
-# === VoiceNotes — local push-to-talk STT ===
+# === VoiceNotes — local push-to-talk STT via whisper.cpp ===
 voice_notes:
-  model_backend: "parakeet-mlx"           # "parakeet-mlx" or "mlx-whisper"
-  model_id: "parakeet-tdt-0.6b"           # for mlx-whisper: "mlx-community/whisper-large-v3-turbo-4bit"
+  model_id: "large-v3-turbo"              # whisper.cpp model name; auto-downloads to ~/.cache/pywhispercpp/
   hotkey: "right_option"                  # pynput Key name (right_option = ⌥ right)
   notes_dir: "~/bin/knowledge/notes"      # output directory; created on first run
-  chunk_duration_s: 3                     # seconds between streaming STT chunks during hold
-  sample_rate: 16000                      # Hz — required by parakeet-mlx and Whisper
+  sample_rate: 16000                      # Hz — required by whisper.cpp
   channels: 1                             # mono
+  vad_aggressiveness: 2                   # webrtcvad 0 (least) – 3 (most aggressive silence detection)
+  n_threads: 4                            # CPU threads for whisper.cpp (Metal GPU used automatically)
 
 # === Constants ===
 my_external_ip: "hoiboi.tplinkdns.com"
