@@ -112,6 +112,7 @@ DEP001 = [
     "webrtcvad",
     "rumps",
     "pynput",
+    "PyObjCTools",  # transitive via rumps, only present with --extra voice
     "aiy",
     "google",
     "google_auth_oauthlib",
