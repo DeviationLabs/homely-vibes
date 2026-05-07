@@ -235,6 +235,26 @@ class BrowserAlertConfig:
 
 
 @dataclass
+class PersonalCalSyncConfig:
+    """PersonalCalSync Google Apps Script configuration"""
+
+    script_id: str
+
+
+@dataclass
+class VoiceNotesConfig:
+    """VoiceNotes local STT via whisper.cpp configuration"""
+
+    model_id: str
+    hotkey: str
+    notes_dir: str
+    sample_rate: int
+    channels: int
+    vad_aggressiveness: int
+    n_threads: int
+
+
+@dataclass
 class Config:
     """Root configuration for homely-vibes"""
 
@@ -251,6 +271,8 @@ class Config:
     flume: FlumeConfig
     network_check: NetworkCheckConfig
     browser_alert: BrowserAlertConfig
+    personal_cal_sync: PersonalCalSyncConfig
+    voice_notes: VoiceNotesConfig
     my_external_ip: str
     seconds_in_day: int
 
