@@ -47,6 +47,13 @@ iot = [
 streamlit = [
     "streamlit>=1.0.0",
 ]
+voice = [
+    "pywhispercpp>=1.2.0",
+    "sounddevice>=0.5.0",
+    "webrtcvad>=2.0.10",
+    "rumps>=0.4.0",
+    "pynput>=1.7.0",
+]
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
@@ -98,6 +105,11 @@ streamlit = "streamlit"
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
+    "pywhispercpp",
+    "sounddevice",
+    "webrtcvad",
+    "rumps",
+    "pynput",
     "aiy",
     "google",
     "google_auth_oauthlib",
@@ -114,6 +126,12 @@ DEP001 = [
     "__main__"  # Built-in module used in logger.py
 ]
 DEP002 = [
+    # VoiceNotes optional deps — lazy-imported at runtime (not visible to deptry static scan)
+    "pywhispercpp",
+    "sounddevice",
+    "webrtcvad",
+    "rumps",
+    "pynput",
     # Dev tools that aren't imported directly
     "pytest-cov",
     "pytest-asyncio", 
@@ -138,7 +156,7 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI"]
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame"]
+testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 
@@ -176,6 +194,11 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = [
+    "pywhispercpp.*",
+    "sounddevice.*",
+    "webrtcvad.*",
+    "rumps.*",
+    "pynput.*",
     "yalexs.*",
     "twilio.*",
     "webview.*",
@@ -204,9 +227,10 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Less strict checking for remaining legacy modules  
+# Less strict checking for remaining legacy modules
 [[tool.mypy.overrides]]
 module = [
+    "VoiceNotes.*",
     "lib.*",
     "WaterParser.*", 
     "JWTs.*",
