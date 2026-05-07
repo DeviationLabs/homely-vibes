@@ -155,7 +155,7 @@ DEP002 = [
     "websocket",
     "websocket-client",
 ]
-DEP003 = ["google", "streamlit", "BimpopAI"]
+DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes"]
