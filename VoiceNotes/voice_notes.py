@@ -37,6 +37,7 @@ from pathlib import Path
 
 import numpy as np
 import rumps  # type: ignore[import]
+from PyObjCTools import AppHelper  # type: ignore[import]
 
 from lib.config import get_config
 from lib.logger import get_logger
@@ -97,11 +98,11 @@ class VoiceNotesApp(rumps.App):
         self._writer.close()
         self._last_path = self._writer.path  # path is None after close; grab before
         self._set_title(_SAVED)
-        # restore idle title after 2s
-        rumps.Timer(self._restore_idle, _SAVED_SECS).start()
+        # restore idle title after 2s — schedule on main thread
+        AppHelper.callLater(_SAVED_SECS, self._restore_idle)
         logger.debug("key released — session saved")
 
-    def _restore_idle(self, _timer: rumps.Timer) -> None:
+    def _restore_idle(self) -> None:
         self.title = _IDLE
 
     # ── VAD thread callback ───────────────────────────────────────────────────
@@ -131,12 +132,14 @@ class VoiceNotesApp(rumps.App):
     # ── thread-safe title update ──────────────────────────────────────────────
 
     def _set_title(self, title: str) -> None:
-        """Update menu bar title from any thread via a 0-delay Timer (runs on main runloop)."""
+        """Update menu bar title from any thread by dispatching to the main runloop.
 
-        def _update(_timer: rumps.Timer) -> None:
-            self.title = title
-
-        rumps.Timer(_update, 0).start()
+        AppHelper.callAfter() schedules `func` on the main thread via PyObjC's
+        runloop machinery — required because AppKit (NSStatusItem) is main-thread-only.
+        Calling self.title = ... directly from a background thread crashes with
+        SIGABRT: "!view->_hasCachedVisibleRect".
+        """
+        AppHelper.callAfter(lambda: setattr(self, "title", title))
 
 
 def main() -> None:

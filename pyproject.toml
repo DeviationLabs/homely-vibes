@@ -50,7 +50,7 @@ streamlit = [
 voice = [
     "pywhispercpp>=1.2.0",
     "sounddevice>=0.5.0",
-    "webrtcvad>=2.0.10",
+    "webrtcvad-wheels>=2.0.14",
     "rumps>=0.4.0",
     "pynput>=1.7.0",
 ]
@@ -102,6 +102,8 @@ exclude = ["tests", ".venv", "backups"]
 
 [tool.deptry.package_module_name_map]
 streamlit = "streamlit"
+# webrtcvad-wheels is a maintained fork that ships as `import webrtcvad`
+webrtcvad-wheels = "webrtcvad"
 # Ignore missing dependencies that are optional or environment-specific
 [tool.deptry.per_rule_ignores]
 DEP001 = [
@@ -110,6 +112,7 @@ DEP001 = [
     "webrtcvad",
     "rumps",
     "pynput",
+    "PyObjCTools",  # transitive via rumps, only present with --extra voice
     "aiy",
     "google",
     "google_auth_oauthlib",
@@ -129,7 +132,7 @@ DEP002 = [
     # VoiceNotes optional deps — lazy-imported at runtime (not visible to deptry static scan)
     "pywhispercpp",
     "sounddevice",
-    "webrtcvad",
+    "webrtcvad-wheels",
     "rumps",
     "pynput",
     # Dev tools that aren't imported directly
@@ -153,7 +156,7 @@ DEP002 = [
     "websocket",
     "websocket-client",
 ]
-DEP003 = ["google", "streamlit", "BimpopAI"]
+DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes"]
