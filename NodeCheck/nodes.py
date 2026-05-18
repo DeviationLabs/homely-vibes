@@ -128,21 +128,34 @@ class SomfyMyLinkNode(GenericNode):
             + "\n"
         ).encode()
 
+        # myLink replies with one JSON object then keeps the connection open (no
+        # newline / FIN). Parse incrementally and stop on first complete object —
+        # waiting for a delimiter or EOF would block until socket timeout.
         try:
             with socket.create_connection(
                 (self.config.ip, port), timeout=self.RPC_TIMEOUT_S
             ) as sock:
                 sock.settimeout(self.RPC_TIMEOUT_S)
                 sock.sendall(request)
-                # myLink may write the payload across multiple packets; read until newline.
                 buf = b""
-                while b"\n" not in buf:
+                response: dict | None = None
+                while True:
                     chunk = sock.recv(4096)
                     if not chunk:
-                        break
+                        break  # server closed
                     buf += chunk
-            response = json.loads(buf.decode().strip())
-        except (OSError, json.JSONDecodeError) as e:
+                    try:
+                        response = json.loads(buf.decode())
+                        break  # got a complete object
+                    except json.JSONDecodeError:
+                        continue  # partial — keep reading
+            if response is None:
+                logger.warning(
+                    f"{self.name}: myLink API check failed: incomplete response ({len(buf)} bytes)"
+                )
+                self.is_online = False
+                return False
+        except OSError as e:
             logger.warning(f"{self.name}: myLink API check failed: {e!r}")
             self.is_online = False
             return False

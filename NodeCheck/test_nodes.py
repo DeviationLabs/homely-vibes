@@ -279,6 +279,61 @@ class TestSomfyMyLinkNode:
 
     @patch("NodeCheck.nodes.socket.create_connection")
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_success_when_server_keeps_connection_open(
+        self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """Real myLink behavior: replies with JSON, no newline, doesn't close. Parse-on-receive
+        must break on the first complete object — a delimiter-wait would block until timeout."""
+        mock_ping.return_value = True
+        payload = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"targetID": "CC113EA8"}})
+        sock = MagicMock()
+        # First recv returns the full payload; any further recv would block forever — simulate
+        # by raising timeout. If the implementation correctly breaks on parse, recv is never
+        # called a second time and the timeout never fires.
+        sock.recv.side_effect = [payload.encode(), socket.timeout("would block")]
+        sock.__enter__ = MagicMock(return_value=sock)
+        sock.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value = sock
+
+        assert mylink_node.heartbeat() is True
+        assert sock.recv.call_count == 1  # second call would have blocked
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_success_payload_split_across_recv_calls(
+        self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """Payload arrives in two chunks -> first parse fails, second succeeds"""
+        mock_ping.return_value = True
+        payload = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"targetID": "X"}})
+        # Split mid-object so the first chunk is unparseable JSON
+        split = len(payload) // 2
+        sock = MagicMock()
+        sock.recv.side_effect = [payload[:split].encode(), payload[split:].encode()]
+        sock.__enter__ = MagicMock(return_value=sock)
+        sock.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value = sock
+
+        assert mylink_node.heartbeat() is True
+        assert sock.recv.call_count == 2
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_incomplete_then_eof(
+        self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """Server sends partial JSON then closes -> heartbeat returns False (no crash)"""
+        mock_ping.return_value = True
+        sock = MagicMock()
+        sock.recv.side_effect = [b'{"jsonrpc":"2.0"', b""]  # truncated, then EOF
+        sock.__enter__ = MagicMock(return_value=sock)
+        sock.__exit__ = MagicMock(return_value=False)
+        mock_conn.return_value = sock
+
+        assert mylink_node.heartbeat() is False
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
     def test_heartbeat_api_error_response(
         self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
     ) -> None:
