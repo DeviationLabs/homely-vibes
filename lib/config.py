@@ -28,6 +28,7 @@ class NodeType(StrEnum):
     FOSCAM = "foscam"
     WINDOWS = "windows"
     GENERIC = "generic"
+    MYLINK = "mylink"
 
 
 class OpMode(StrEnum):
@@ -87,6 +88,9 @@ class NodeConfig:
     node_type: NodeType
     username: str | None = None
     password: str | None = None
+    # API-authenticated nodes (e.g. Somfy myLink) use auth_token; port overrides default API port
+    auth_token: str | None = None
+    port: int | None = None
 
 
 @dataclass

@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
+import json
 import re
+import socket
 import time
 from lib import NetHelpers
 from lib.config import NodeConfig
 from lib.logger import SystemLogger
 
 logger = SystemLogger.get_logger(__name__)
+
+# 3 consecutive packet losses before a node is considered down. Matches the
+# Nagios-style max_check_attempts=3 convention and tolerates a single radio sleep.
+HEARTBEAT_PING_COUNT = 3
 
 
 class GenericNode:
@@ -30,7 +36,9 @@ class GenericNode:
 
     def heartbeat(self) -> bool:
         """Base health check - ping test. Subclasses should call super() then add specific checks"""
-        self.is_online = NetHelpers.ping_output(node=self.config.ip, desired_up=True)
+        self.is_online = NetHelpers.ping_output(
+            node=self.config.ip, count=HEARTBEAT_PING_COUNT, desired_up=True
+        )
         logger.debug(f"Ping check for {self.name}: {self.is_online}")
         return self.is_online
 
@@ -87,6 +95,68 @@ class FoscamNode(GenericNode):
         #     # not supported on this platform
         #     pass
 
+        return True
+
+
+class SomfyMyLinkNode(GenericNode):
+    """Somfy myLink controller. Layered check: ping then JSON-RPC over TCP:44100."""
+
+    DEFAULT_PORT = 44100
+    RPC_TIMEOUT_S = 4
+
+    def heartbeat(self) -> bool:
+        """Check myLink health: ping + JSON-RPC mylink.status.info round-trip"""
+        if not super().heartbeat():
+            return False
+
+        if not self.config.auth_token:
+            # Ping-only fallback. A page on missing config would mean "operator forgot
+            # a token", not "device is sick" — wrong signal for an emergency alert.
+            logger.warning(f"{self.name}: no auth_token configured; myLink API check skipped")
+            return True
+
+        port = self.config.port or self.DEFAULT_PORT
+        request = (
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "mylink.status.info",
+                    "params": {"auth": self.config.auth_token},
+                }
+            )
+            + "\n"
+        ).encode()
+
+        try:
+            with socket.create_connection(
+                (self.config.ip, port), timeout=self.RPC_TIMEOUT_S
+            ) as sock:
+                sock.settimeout(self.RPC_TIMEOUT_S)
+                sock.sendall(request)
+                # myLink may write the payload across multiple packets; read until newline.
+                buf = b""
+                while b"\n" not in buf:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+            response = json.loads(buf.decode().strip())
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(f"{self.name}: myLink API check failed: {e!r}")
+            self.is_online = False
+            return False
+
+        if "error" in response:
+            logger.warning(f"{self.name}: myLink RPC error: {response['error']}")
+            self.is_online = False
+            return False
+        if "result" not in response:
+            logger.warning(f"{self.name}: unexpected myLink response: {response!r}")
+            self.is_online = False
+            return False
+
+        logger.debug(f"{self.name}: myLink API live, target={response['result'].get('targetID')}")
         return True
 
 

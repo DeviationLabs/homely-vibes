@@ -3,10 +3,17 @@ import argparse
 import sys
 import time
 from typing import List, Set
-from lib.config import get_config
+from lib.config import NodeType, get_config
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
-from NodeCheck.nodes import GenericNode
+from NodeCheck.nodes import FoscamNode, GenericNode, SomfyMyLinkNode, WindowsNode
+
+_NODE_CLASS_BY_TYPE: dict[NodeType, type[GenericNode]] = {
+    NodeType.FOSCAM: FoscamNode,
+    NodeType.WINDOWS: WindowsNode,
+    NodeType.MYLINK: SomfyMyLinkNode,
+    NodeType.GENERIC: GenericNode,
+}
 
 logger = SystemLogger.get_logger(__name__)
 
@@ -28,8 +35,8 @@ class HeartbeatMonitor:
         nodes: List[GenericNode] = []
 
         for name, config in cfg.node_check.node_configs.items():
-            # This is intentionally generic to run only the basic methods
-            nodes.append(GenericNode(name, config))
+            node_cls = _NODE_CLASS_BY_TYPE.get(config.node_type, GenericNode)
+            nodes.append(node_cls(name, config))
 
         if self.specific_nodes:
             available_node_names = {node.name.lower() for node in nodes}

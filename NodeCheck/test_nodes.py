@@ -4,7 +4,10 @@
 import pytest
 from unittest.mock import patch
 from typing import Any
-from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
+import json
+import socket
+from unittest.mock import MagicMock
+from NodeCheck.nodes import FoscamNode, GenericNode, SomfyMyLinkNode, WindowsNode
 from lib.config import NodeConfig, NodeType
 
 
@@ -99,7 +102,7 @@ class TestFoscamNode:
         result = foscam_node.heartbeat()
 
         assert result is False
-        mock_ping.assert_called_once_with(node="192.168.1.51", desired_up=True)
+        mock_ping.assert_called_once_with(node="192.168.1.51", count=3, desired_up=True)
 
     # Note: Removed FoscamImager tests due to import complexity during full test suite
     # These would be better suited for integration tests
@@ -146,7 +149,7 @@ class TestWindowsNode:
         result = windows_node.heartbeat()
 
         assert result is True
-        mock_ping.assert_called_once_with(node="192.168.1.100", desired_up=True)
+        mock_ping.assert_called_once_with(node="192.168.1.100", count=3, desired_up=True)
         mock_ssh_cmd.assert_called_once_with(
             "192.168.1.100", "testuser", "testpass", "net statistics workstation"
         )
@@ -206,7 +209,7 @@ class TestGenericNode:
         result = generic_node.heartbeat()
 
         assert result is True
-        mock_ping.assert_called_once_with(node="192.168.1.200", desired_up=True)
+        mock_ping.assert_called_once_with(node="192.168.1.200", count=3, desired_up=True)
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
     def test_heartbeat_failure(self, mock_ping: Any, generic_node: GenericNode) -> None:
@@ -216,7 +219,108 @@ class TestGenericNode:
         result = generic_node.heartbeat()
 
         assert result is False
-        mock_ping.assert_called_once_with(node="192.168.1.200", desired_up=True)
+        mock_ping.assert_called_once_with(node="192.168.1.200", count=3, desired_up=True)
+
+
+class TestSomfyMyLinkNode:
+    """Test SomfyMyLinkNode functionality"""
+
+    @pytest.fixture
+    def mylink_config(self) -> NodeConfig:
+        return NodeConfig(
+            ip="192.168.1.43",
+            node_type=NodeType.MYLINK,
+            auth_token="test-token-abc",  # nosecret
+        )
+
+    @pytest.fixture
+    def mylink_node(self, mylink_config: NodeConfig) -> SomfyMyLinkNode:
+        return SomfyMyLinkNode("Somfy", mylink_config)
+
+    def _make_sock_mock(self, response_payload: bytes) -> MagicMock:
+        """Build a mock socket that returns response_payload on recv, then EOF."""
+        sock = MagicMock()
+        sock.recv.side_effect = [response_payload, b""]
+        sock.__enter__ = MagicMock(return_value=sock)
+        sock.__exit__ = MagicMock(return_value=False)
+        return sock
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_success(
+        self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """Ping passes + valid JSON-RPC result -> healthy"""
+        mock_ping.return_value = True
+        response = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"targetID": "X.Y"}}) + "\n"
+        mock_conn.return_value = self._make_sock_mock(response.encode())
+
+        assert mylink_node.heartbeat() is True
+        mock_ping.assert_called_once_with(node="192.168.1.43", count=3, desired_up=True)
+        mock_conn.assert_called_once_with(("192.168.1.43", 44100), timeout=4)
+
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_ping_failure_short_circuits(
+        self, mock_ping: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """Ping fails -> heartbeat returns False without attempting the API call"""
+        mock_ping.return_value = False
+        assert mylink_node.heartbeat() is False
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_api_timeout(
+        self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """Ping passes but API times out -> heartbeat returns False"""
+        mock_ping.return_value = True
+        mock_conn.side_effect = socket.timeout("API hung")
+        assert mylink_node.heartbeat() is False
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_api_error_response(
+        self, mock_ping: Any, mock_conn: Any, mylink_node: SomfyMyLinkNode
+    ) -> None:
+        """RPC error field -> heartbeat returns False"""
+        mock_ping.return_value = True
+        response = (
+            json.dumps({"jsonrpc": "2.0", "id": 1, "error": {"code": -32600, "message": "bad"}})
+            + "\n"
+        )
+        mock_conn.return_value = self._make_sock_mock(response.encode())
+        assert mylink_node.heartbeat() is False
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_no_auth_token_falls_back_to_ping_only(
+        self, mock_ping: Any, mock_conn: Any
+    ) -> None:
+        """auth_token unset -> skip API call, return ping result with a warning"""
+        config = NodeConfig(ip="192.168.1.43", node_type=NodeType.MYLINK, auth_token=None)
+        node = SomfyMyLinkNode("Somfy", config)
+        mock_ping.return_value = True
+
+        assert node.heartbeat() is True
+        mock_conn.assert_not_called()
+
+    @patch("NodeCheck.nodes.socket.create_connection")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_heartbeat_uses_port_override(self, mock_ping: Any, mock_conn: Any) -> None:
+        """NodeConfig.port overrides the default 44100"""
+        config = NodeConfig(
+            ip="192.168.1.43",
+            node_type=NodeType.MYLINK,
+            auth_token="tok",  # nosecret
+            port=55555,
+        )
+        node = SomfyMyLinkNode("Somfy", config)
+        mock_ping.return_value = True
+        response = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"targetID": "X.Y"}}) + "\n"
+        mock_conn.return_value = self._make_sock_mock(response.encode())
+
+        assert node.heartbeat() is True
+        mock_conn.assert_called_once_with(("192.168.1.43", 55555), timeout=4)
 
 
 if __name__ == "__main__":
