@@ -7,6 +7,8 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 - **Rachio Integration**: Monitor active zones and watering events
 - **Flume Integration**: Track real-time water consumption across all devices
 - **Data Correlation**: Match watering events with water usage patterns
+- **Usage Alerts** (`alert_engine.py`): First-party Pushover alerts for Pipe Break / High Flow / Mid Flow / Low Flow / Leak, suppressed during Rachio irrigation, with mute support and "all clear" notifications
+- **Synthetic Simulator** (`simulate_alerts.py`): Replay a YAML-defined scenario through the alert engine without hitting real APIs or Pushover — see [TESTABILITY.md](TESTABILITY.md)
 - **Period Reports**: Generate detailed reports with:
   - Average watering rate by zone
   - Total duration each zone was watered
@@ -113,6 +115,46 @@ uv run python rfmanager.py summary
 uv run python rfmanager.py raw --hours 48
 ```
 
+### 🚨 Usage Alerts
+
+The collector evaluates configurable flow-rate alerts each polling cycle. Defaults
+mirror the Flume app screenshots (Pipe Break, High Flow, Mid Flow, Low Flow, Leak)
+and live in `config/default.yaml` under `rachio_flume.alerts` — override per-house
+in `config/local.yaml`.
+
+Key behaviors:
+- **All alerts at Pushover priority 2** (emergency — retries until you ack)
+- **Re-trigger every 30 min** while the condition holds, unless muted
+- **Priority-0 "all clear" notification** on the cycle the condition transitions active → clear
+- **Suppression while Rachio irrigates** (plus a 10-min slack after the zone completes, to cover the trailing flow window in the predicate's lookback)
+
+```bash
+# Dry-run all rules against live Flume / Rachio (no Pushover sent)
+uv run python -m RachioFlume.rfmanager alerts test
+
+# Show per-rule state
+uv run python -m RachioFlume.rfmanager alerts status
+
+# Mute a rule (e.g. while doing plumbing work)
+uv run python -m RachioFlume.rfmanager alerts mute "Pipe Break" --hours 4
+uv run python -m RachioFlume.rfmanager alerts unmute "Pipe Break"
+```
+
+### 🧪 Synthetic Simulator
+
+Replay a hand-crafted scenario through the engine — no real APIs, no Pushover,
+events printed to stdout. Useful for tuning rules or validating changes.
+
+```bash
+# Default scenario at config/synthetic_alerts.yaml
+uv run python -m RachioFlume.rfmanager simulate
+
+# Custom scenario file + poll cadence
+uv run python -m RachioFlume.rfmanager simulate --config my_scenario.yaml --poll-interval 5
+```
+
+See [TESTABILITY.md](TESTABILITY.md) for the scenario schema and worked examples.
+
 ### 🛑 Stop Data Collection
 
 ```bash
@@ -154,6 +196,19 @@ kill <process_id>
    - Generates period-based reports with customizable date ranges
    - Calculates zone efficiency metrics
    - Supports email delivery and console output
+
+6. **AlertEngine** (`alert_engine.py`) + **AlertRule** (`alert_rules.py`)
+   - Runs at the end of each collector cycle
+   - Evaluates each rule's predicate against trailing per-minute Flume readings
+   - State machine: first-fire / retrigger / clear / muted
+   - Suppresses during (and just after) Rachio irrigation
+   - Per-rule state persisted as JSON in the existing `collection_metadata` table
+
+7. **SyntheticDataset** (`synthetic_data.py`) + **Simulator** (`simulate_alerts.py`)
+   - YAML-defined scenarios with household, irrigation, leak, and pipe-break events
+   - Plays back through `AlertEngine` with fake clients and a capturing Pushover
+   - Used by `test_alert_simulation.py` for regression assertions and by the
+     `simulate` CLI for ad-hoc tuning
 
 ### Database Schema
 
@@ -209,12 +264,20 @@ Last Flume Collection: 2023-07-15T10:35:00
 
 ## Testing
 
-```bash
-# Run all tests
-uv run python -m pytest test_integration.py -v
+See [TESTABILITY.md](TESTABILITY.md) for the full testing strategy. Quick start:
 
-# Run specific test class
-uv run python -m pytest test_integration.py::TestRachioClient -v
+```bash
+# All RachioFlume tests
+uv run python -m pytest RachioFlume/ -v
+
+# Just alert engine unit tests (fastest)
+uv run python -m pytest RachioFlume/test_alert_engine.py -v
+
+# Synthetic scenario assertions
+uv run python -m pytest RachioFlume/test_alert_simulation.py -v
+
+# Visual playback of a scenario (events to screen, no Pushover)
+uv run python -m RachioFlume.rfmanager simulate
 ```
 
 ## Development

@@ -219,6 +219,31 @@ class FlumeConfig:
 
 
 @dataclass
+class AlertRuleConfig:
+    """One usage alert rule"""
+
+    name: str
+    min_gpm: float
+    duration_minutes: int
+
+
+@dataclass
+class RachioFlumeAlertsConfig:
+    """Usage alert configuration for RachioFlume"""
+
+    enabled: bool
+    default_retrigger_minutes: int
+    rules: list[AlertRuleConfig]
+
+
+@dataclass
+class RachioFlumeConfig:
+    """RachioFlume integration-level configuration"""
+
+    alerts: RachioFlumeAlertsConfig
+
+
+@dataclass
 class NetworkCheckConfig:
     """Network bandwidth monitoring configuration"""
 
@@ -273,6 +298,7 @@ class Config:
     samsung_frame: SamsungFrameConfig
     rachio: RachioConfig
     flume: FlumeConfig
+    rachio_flume: RachioFlumeConfig
     network_check: NetworkCheckConfig
     browser_alert: BrowserAlertConfig
     personal_cal_sync: PersonalCalSyncConfig
