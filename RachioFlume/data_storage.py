@@ -408,6 +408,34 @@ class WaterTrackingDB:
             )
             conn.commit()
 
+    def get_metadata(self, key: str) -> Optional[str]:
+        """Get a raw value from collection_metadata, or None if missing."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM collection_metadata WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            return row["value"] if row else None
+
+    def set_metadata(self, key: str, value: str) -> None:
+        """Upsert a value into collection_metadata."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO collection_metadata (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            """,
+                (key, value),
+            )
+            conn.commit()
+
+    def delete_metadata(self, key: str) -> None:
+        """Remove a metadata key (no-op if missing)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM collection_metadata WHERE key = ?", (key,))
+            conn.commit()
+
     def get_last_data_timestamp(self, source: str) -> Optional[datetime]:
         """Get the actual last timestamp from data tables."""
         with self.get_connection() as conn:

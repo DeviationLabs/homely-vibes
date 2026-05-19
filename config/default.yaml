@@ -213,10 +213,26 @@ rachio:
 
 # === Flume Water Monitoring ===
 flume:
-  client_id: ""  
-  client_secret: ""  
-  user_email: ""  
-  password: ""  
+  client_id: ""
+  client_secret: ""
+  user_email: ""
+  password: ""
+
+# === RachioFlume Usage Alerts ===
+# All alerts fire at Pushover priority 2 (emergency, retries until acked).
+# Re-trigger every default_retrigger_minutes while condition holds, unless muted.
+# A priority 0 "all clear" fires on transition active -> clear.
+# Alerts are suppressed entirely while a Rachio zone is irrigating.
+rachio_flume:
+  alerts:
+    enabled: true
+    default_retrigger_minutes: 30
+    rules:
+      - {name: "Pipe Break", min_gpm: 8.0, duration_minutes: 10}
+      - {name: "High Flow",  min_gpm: 5.4, duration_minutes: 4}
+      - {name: "Mid Flow",   min_gpm: 2.6, duration_minutes: 14}
+      - {name: "Low Flow",   min_gpm: 0.1, duration_minutes: 30}
+      - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
 
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:
