@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-import yaml  # type: ignore[import-untyped]
+from omegaconf import OmegaConf
 
 from RachioFlume.flume_client import WaterReading
 from RachioFlume.rachio_client import Zone
@@ -179,12 +179,17 @@ def load_dataset_from_yaml(path: str | Path) -> SyntheticDataset:
           - {day: 3, hour: 0, kind: slow_leak, duration_hours: 72, gpm: 0.15}
           - {day: 7, hour: 14, kind: pipe_break, duration_minutes: 20, gpm: 9.0}
     """
-    blob = yaml.safe_load(Path(path).read_text())
+    cfg = OmegaConf.load(str(path))
+    blob = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(blob, dict):
+        raise ValueError(f"Expected top-level mapping in {path}, got {type(blob).__name__}")
     start_raw = blob["start_date"]
     if isinstance(start_raw, str):
         start = datetime.fromisoformat(start_raw)
+    elif isinstance(start_raw, datetime):
+        start = start_raw
     else:
-        # PyYAML parses bare YYYY-MM-DD into a date object
+        # OmegaConf may surface a date object; combine with midnight.
         start = datetime.combine(start_raw, datetime.min.time())
     days = int(blob["days"])
     ds = SyntheticDataset(start=start, days=days)
