@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
+from RachioFlume.alert_engine import AlertEngine
 from RachioFlume.rachio_client import RachioClient
 from RachioFlume.flume_client import FlumeClient
 from RachioFlume.data_storage import WaterTrackingDB
@@ -13,13 +14,19 @@ from lib.logger import get_logger
 class WaterTrackingCollector:
     """Service that collects data from Rachio and Flume APIs."""
 
-    def __init__(self, db_path: str, poll_interval_seconds: int = 300):  # 5 minutes default
+    def __init__(
+        self,
+        db_path: str,
+        poll_interval_seconds: int = 300,  # 5 minutes default
+        alert_engine: Optional[AlertEngine] = None,
+    ):
         self.logger = get_logger(__name__)
 
         self.db = WaterTrackingDB(db_path)
         self.rachio_client = RachioClient()
         self.flume_client = FlumeClient()
         self.poll_interval = poll_interval_seconds
+        self.alert_engine = alert_engine
 
         # Initialize last collection times from database to avoid duplicates
         self.last_rachio_collection: Optional[datetime] = self.db.get_last_collection_timestamp(
@@ -134,6 +141,13 @@ class WaterTrackingCollector:
 
         # Process the collected data
         await self.process_collected_data()
+
+        # Evaluate usage alerts (no-op if engine not configured)
+        if self.alert_engine is not None:
+            try:
+                await self.alert_engine.evaluate()
+            except Exception as e:
+                self.logger.error(f"Error evaluating alerts: {e}")
 
         self.logger.info("Data collection cycle completed")
 

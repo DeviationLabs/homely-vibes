@@ -5,7 +5,12 @@ import asyncio
 import argparse
 import sys
 from time import sleep
+from RachioFlume.alert_engine import AlertEngine
+from RachioFlume.alert_rules import load_rules_from_config
 from RachioFlume.collector import WaterTrackingCollector
+from RachioFlume.data_storage import WaterTrackingDB
+from RachioFlume.flume_client import FlumeClient
+from RachioFlume.rachio_client import RachioClient
 from lib.MyPushover import Pushover
 from RachioFlume.reporter import WeeklyReporter
 from lib.logger import get_logger
@@ -74,6 +79,35 @@ def main() -> int:
         help="Number of hours for raw data report (default: 24)",
     )
 
+    # Simulate command (synthetic playback — no Pushover sent)
+    sim_parser = subparsers.add_parser(
+        "simulate",
+        help="Replay a synthetic scenario through the alert engine (screen only, no Pushover)",
+    )
+    sim_parser.add_argument(
+        "--config",
+        type=str,
+        default="config/synthetic_alerts.yaml",
+        help="Path to synthetic scenario YAML (default: config/synthetic_alerts.yaml)",
+    )
+    sim_parser.add_argument(
+        "--poll-interval",
+        type=int,
+        default=5,
+        help="Simulated poll cadence in minutes (default: 5)",
+    )
+
+    # Alerts subcommands
+    alerts_parser = subparsers.add_parser("alerts", help="Manage usage alerts")
+    alerts_sub = alerts_parser.add_subparsers(dest="alerts_command", help="Alert subcommands")
+    alerts_sub.add_parser("test", help="Dry-run evaluate all rules (no Pushover sent)")
+    alerts_sub.add_parser("status", help="Show per-rule state")
+    mute_parser = alerts_sub.add_parser("mute", help="Mute a rule for N hours")
+    mute_parser.add_argument("rule", help="Rule name (e.g. 'Pipe Break')")
+    mute_parser.add_argument("--hours", type=float, default=4.0, help="Mute duration (default 4h)")
+    unmute_parser = alerts_sub.add_parser("unmute", help="Clear mute on a rule")
+    unmute_parser.add_argument("rule", help="Rule name (e.g. 'Pipe Break')")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -90,8 +124,24 @@ def main() -> int:
         return generate_summary_report(args)
     elif args.command == "raw":
         return generate_raw_report(args)
+    elif args.command == "alerts":
+        return run_alerts_command(args)
+    elif args.command == "simulate":
+        return run_simulate_command(args)
 
     return 0
+
+
+def _build_alert_engine() -> AlertEngine:
+    """Construct an AlertEngine sharing the rfmanager-level Pushover instance."""
+    rules = load_rules_from_config()
+    return AlertEngine(
+        flume_client=FlumeClient(),
+        rachio_client=RachioClient(),
+        pushover=pushover,
+        db=WaterTrackingDB(DB_PATH),
+        rules=rules,
+    )
 
 
 def run_collection(args: argparse.Namespace) -> int:
@@ -99,7 +149,11 @@ def run_collection(args: argparse.Namespace) -> int:
     logger = get_logger(__name__)
 
     try:
-        collector = WaterTrackingCollector(DB_PATH, args.interval)
+        cfg = get_config()
+        alert_engine = _build_alert_engine() if cfg.rachio_flume.alerts.enabled else None
+        collector = WaterTrackingCollector(DB_PATH, args.interval, alert_engine=alert_engine)
+        if alert_engine is not None:
+            logger.info(f"Alerts enabled with {len(alert_engine.rules)} rules")
 
         logger.info(f"Starting continuous collection every {args.interval} seconds")
         logger.info("Press Ctrl+C to stop")
@@ -222,6 +276,65 @@ def generate_raw_report(args: argparse.Namespace) -> int:
     except Exception as e:
         logger.error(f"Error generating raw report: {e}")
         return 1
+
+
+def run_simulate_command(args: argparse.Namespace) -> int:
+    """Replay a synthetic scenario through the alert engine and print events."""
+    from RachioFlume.simulate_alerts import run_simulation_from_yaml
+
+    logger = get_logger(__name__)
+    try:
+        run_simulation_from_yaml(args.config, poll_interval_minutes=args.poll_interval)
+        return 0
+    except FileNotFoundError as e:
+        logger.error(f"Scenario file not found: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Simulation failed: {e}")
+        return 1
+
+
+def run_alerts_command(args: argparse.Namespace) -> int:
+    """Dispatch the `alerts` subcommands (test/status/mute/unmute)."""
+    logger = get_logger(__name__)
+
+    if not args.alerts_command:
+        logger.error("alerts: subcommand required (test|status|mute|unmute)")
+        return 1
+
+    engine = _build_alert_engine()
+
+    if args.alerts_command == "test":
+        results = asyncio.run(engine.evaluate(dry_run=True))
+        for r in results:
+            logger.info(r)
+        return 0
+
+    if args.alerts_command == "status":
+        for row in engine.status():
+            logger.info(row)
+        return 0
+
+    if args.alerts_command == "mute":
+        try:
+            state = engine.mute(args.rule, args.hours)
+        except ValueError as e:
+            logger.error(str(e))
+            return 1
+        logger.info(f"Muted '{args.rule}' until {state.mute_until}")
+        return 0
+
+    if args.alerts_command == "unmute":
+        try:
+            engine.unmute(args.rule)
+        except ValueError as e:
+            logger.error(str(e))
+            return 1
+        logger.info(f"Unmuted '{args.rule}'")
+        return 0
+
+    logger.error(f"Unknown alerts subcommand: {args.alerts_command}")
+    return 1
 
 
 if __name__ == "__main__":
