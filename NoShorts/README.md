@@ -24,36 +24,30 @@ An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navig
 
 ## Setup
 
-1. Open `NoShorts.xcodeproj` in Xcode
-2. Select your team under **Signing & Capabilities** → your Apple ID
-3. Connect your iPhone and select it as the run destination
-4. Hit **Cmd+R** to build and install
+1. **Install Xcode 16+** from the App Store and sign Xcode into your Apple ID (Xcode → Settings → Accounts). The Apple ID login is what lets Xcode auto-download the on-device Developer Disk Image (DDI) — without it, device deploys fail with "Developer disk image could not be mounted".
+2. **Enable Developer Mode on the iPhone**: Settings → Privacy & Security → Developer Mode → On → reboot → confirm. Required on iOS 16+ before any unsigned/dev build will mount.
+3. Open `NoShorts.xcodeproj` in Xcode.
+4. Select your team under **Signing & Capabilities** → your Apple ID. Xcode rewrites `DEVELOPMENT_TEAM` in `project.pbxproj` automatically — verify with `grep DEVELOPMENT_TEAM NoShorts.xcodeproj/project.pbxproj` and commit the change.
+5. Connect your iPhone, select it as the run destination.
+6. **Cmd+R** to build and install.
 
 ## Building an IPA (for Sideloadly)
 
-Use this when you want to install on a device without Xcode attached, via [Sideloadly](https://sideloadly.io).
+Use this when you want to install on a device without attaching Xcode, via [Sideloadly](https://sideloadly.io). Sideloadly re-signs at install time, so the IPA we ship is **unsigned** — no Apple ID, team, or provisioning profile setup is required on the building Mac.
 
-### 1. Archive in Xcode
+### 1. Build the IPA
 
-**Product → Archive** — wait for the Organizer window to appear. You don't need to click Distribute; the `.xcarchive` already contains the signed `.app`.
-
-### 2. Export the IPA
-
-Run this script from Terminal (re-run after each new archive):
+From the repo root:
 
 ```bash
-ARCHIVE=$(ls -dt ~/Library/Developer/Xcode/Archives/*/*.xcarchive | head -1)
-APP="$ARCHIVE/Products/Applications/NoShorts.app"
-rm -rf /tmp/NoShorts_ipa
-mkdir -p /tmp/NoShorts_ipa/Payload
-cp -R "$APP" /tmp/NoShorts_ipa/Payload/
-cd /tmp/NoShorts_ipa && zip -r ~/Desktop/NoShorts.ipa Payload/
-echo "IPA written to ~/Desktop/NoShorts.ipa"
+NoShorts/scripts/build_ipa.sh
 ```
 
-This picks the most recent archive automatically and packages it as a valid IPA structure (`Payload/NoShorts.app` inside a zip).
+Output: `build/NoShorts.ipa` (≈135 KB). The script runs `xcodebuild` with code-signing disabled, packages `NoShorts.app` into `Payload/`, zips it, and prints the final path.
 
-### 3. Install via Sideloadly
+If you previously built signed in Xcode, the script still works — it uses a separate `build/sideload/` derived-data path so it won't conflict with Xcode's own DerivedData.
+
+### 2. Install via Sideloadly
 
 #### Windows: iTunes requirement
 Sideloadly needs iTunes for Apple device drivers — **do not use the Microsoft Store version**. Download the direct installer from Apple's website (`apple.com/itunes`). You do not need to be logged into iTunes; your Apple ID is entered in Sideloadly directly. iTunes does not need to run in the background after setup.
@@ -120,7 +114,16 @@ YouTube's mobile DOM uses custom elements not documented anywhere (`ytm-shorts-l
 ### Xcode project settings
 - `SDKROOT` must be `iphoneos`, not `auto` — `auto` resolves to macOS SDK and breaks `UIViewRepresentable`
 - `SUPPORTED_PLATFORMS` must exclude `macosx` and `xros` for the same reason
-- For devices running iOS newer than Xcode's symbol cache: disable "Debug executable" in scheme to avoid `dyld_shared_cache_extract_dylibs` error
+- `DEVELOPMENT_TEAM` is rewritten by Xcode when you pick a team in Signing & Capabilities — don't hand-edit it. If you fork the project on a fresh account, expect a one-line diff in `project.pbxproj` to commit.
+
+### Troubleshooting device deploys
+
+- **"Developer disk image could not be mounted on this device"** — Xcode can't mount the on-device debug bridge. Causes, in likelihood order:
+  1. Developer Mode is off on the iPhone (Settings → Privacy & Security → Developer Mode → On → reboot)
+  2. Xcode is not signed into your Apple ID (Xcode → Settings → Accounts) — without it, the matching DDI can't auto-download
+  3. The device's iOS minor version is newer than any DDI Xcode has — open Xcode → Window → Devices and Simulators, select the iPhone, click **Get** to fetch the matching DDI. If unavailable, update Xcode.
+  4. Mac ↔ iPhone trust didn't carry over (e.g., fresh macOS user account) — Settings → General → Transfer or Reset iPhone → Reset → Reset Location & Privacy, then replug and tap **Trust**.
+- **App installs but crashes immediately with `dyld_shared_cache_extract_dylibs` error** — different problem from the above; happens when the device's iOS is newer than Xcode's symbol cache. Edit Scheme → Run → Info → uncheck **Debug executable**.
 
 ### Autoplay interception
 `mediaTypesRequiringUserActionForPlayback = .video` alone is insufficient — YouTube's player works around it. The JS-level `HTMLVideoElement.prototype.play()` override is the reliable fix. The 1.5s window after a touch/click allows legitimate user-initiated plays (including tap-to-play on feed thumbnails).
