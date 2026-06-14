@@ -322,7 +322,7 @@ def _update_people_memory(messages: list[dict]) -> str:
 # ── Todo update ────────────────────────────────────────────────────────────
 
 
-def _update_todo(messages: list[dict], summary_text: str) -> str:
+def _update_todo(messages: list[dict], _summary_text: str) -> str:
     """Read existing todo, reconcile with messages, return updated content."""
     if not TODO_FILE.exists():
         return "# WhatsApp To-Do\n\n(no todo file yet)\n"
