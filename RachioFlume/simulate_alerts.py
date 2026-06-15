@@ -1,7 +1,16 @@
-"""Simulator: replay a synthetic dataset through the AlertEngine.
+"""Simulator: replay a dataset through the AlertEngine.
 
-No Pushover, no real Flume / Rachio calls. Each step prints events to stdout.
-Used both by the `rfmanager simulate` CLI and by test_alert_simulation.py.
+Two data sources are supported:
+  - SyntheticDataset (from synthetic_data.py): hand-crafted YAML scenarios for testing.
+  - DBReplayDataset: production water_readings + watering_events from a real SQLite DB.
+
+Both data sources implement the same duck-typed interface:
+  .start, .end (datetime), .days (int), .events (list, empty = no injected events)
+  .readings_for_window(start, end) -> list[WaterReading]
+  .rachio_active_at(t) -> Zone | None
+
+No Pushover, no real Flume / Rachio calls during simulation. Events print to stdout.
+Used by the `rfmanager simulate` / `rfmanager alerts replay` CLI and by test_alert_simulation.py.
 """
 
 import asyncio
@@ -10,14 +19,14 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from RachioFlume.alert_engine import AlertEngine
 from RachioFlume.alert_rules import AlertRule, load_rules_from_config
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import WaterReading
 from RachioFlume.rachio_client import Zone
-from RachioFlume.synthetic_data import SyntheticDataset, load_dataset_from_yaml
+from RachioFlume.synthetic_data import load_dataset_from_yaml
 
 
 @dataclass
@@ -31,22 +40,22 @@ class CapturedPush:
 
 
 class _FakeFlume:
-    def __init__(self, dataset: SyntheticDataset) -> None:
+    def __init__(self, dataset: Any) -> None:  # SyntheticDataset or DBReplayDataset
         self.dataset = dataset
 
     def get_usage(self, start: datetime, end: datetime, bucket: str = "MIN") -> list[WaterReading]:
-        return self.dataset.readings_for_window(start, end)
+        return self.dataset.readings_for_window(start, end)  # type: ignore[no-any-return]
 
 
 class _FakeRachio:
-    def __init__(self, dataset: SyntheticDataset) -> None:
+    def __init__(self, dataset: Any) -> None:  # SyntheticDataset or DBReplayDataset
         self.dataset = dataset
         self.current_time: Optional[datetime] = None
 
     def get_active_zone(self) -> Optional[Zone]:
         if self.current_time is None:
             return None
-        return self.dataset.rachio_active_at(self.current_time)
+        return self.dataset.rachio_active_at(self.current_time)  # type: ignore[no-any-return]
 
 
 class _CapturingPushover:
@@ -69,7 +78,7 @@ class _CapturingPushover:
 
 @dataclass
 class SimulationResult:
-    dataset: SyntheticDataset
+    dataset: Any  # SyntheticDataset or DBReplayDataset
     rules: list[AlertRule]
     fires: list[CapturedPush] = field(default_factory=list)
     suppressed_count: int = 0
@@ -77,7 +86,7 @@ class SimulationResult:
 
 
 async def run_simulation(
-    dataset: SyntheticDataset,
+    dataset: Any,  # SyntheticDataset or DBReplayDataset (duck-typed interface)
     rules: list[AlertRule],
     *,
     poll_interval_minutes: int = 5,
@@ -147,7 +156,7 @@ async def run_simulation(
     return result
 
 
-def _print_header(dataset: SyntheticDataset, rules: list[AlertRule], poll_minutes: int) -> None:
+def _print_header(dataset: Any, rules: list[AlertRule], poll_minutes: int) -> None:
     print("=" * 72)
     print(
         f"Simulation: {dataset.days} days from {dataset.start:%Y-%m-%d}  "
@@ -161,12 +170,18 @@ def _print_header(dataset: SyntheticDataset, rules: list[AlertRule], poll_minute
             f"window={r.duration_minutes:>4}min  retrigger={r.retrigger_minutes}min"
         )
     print("-" * 72)
-    print("Events injected:")
-    for ev in dataset.events:
-        zone = f" [rachio:{ev.irrigation_zone.name}]" if ev.irrigation_zone else ""
+    if dataset.events:
+        print("Events injected:")
+        for ev in dataset.events:
+            zone = f" [rachio:{ev.irrigation_zone.name}]" if ev.irrigation_zone else ""
+            print(
+                f"  {ev.start:%Y-%m-%d %H:%M}  {ev.label:<22}  "
+                f"{ev.duration_minutes:>5}min @ {ev.gpm:>4} gpm{zone}"
+            )
+    else:
         print(
-            f"  {ev.start:%Y-%m-%d %H:%M}  {ev.label:<22}  "
-            f"{ev.duration_minutes:>5}min @ {ev.gpm:>4} gpm{zone}"
+            f"Data source: production DB  "
+            f"[{dataset.start:%Y-%m-%d %H:%M} \u2192 {dataset.end:%Y-%m-%d %H:%M}]"
         )
     print("-" * 72)
     print("Alerts fired (priority 2 = FIRE; priority 0 = CLEAR):")
@@ -215,9 +230,96 @@ def run_simulation_from_yaml(
     )
 
 
+class DBReplayDataset:
+    """Replay dataset backed by the production SQLite DB (water_readings + watering_events).
+
+    Implements the same duck-typed interface as SyntheticDataset so it can be passed
+    directly to run_simulation(). Rachio active state is approximated from the stored
+    watering events: a zone is considered active at time `t` if there is a ZONE_STARTED
+    event before `t` with no corresponding ZONE_COMPLETED/ZONE_STOPPED after it and before `t`.
+    """
+
+    def __init__(self, db: WaterTrackingDB, start: datetime, end: datetime) -> None:
+        self.db = db
+        self.start = start
+        self.end = end
+        self.events: list[Any] = []  # no injected events; header shows DB range instead
+
+    @property
+    def days(self) -> int:
+        return max(1, int((self.end - self.start).total_seconds() / 86400))
+
+    def readings_for_window(self, start: datetime, end: datetime) -> list[WaterReading]:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT timestamp, value FROM water_readings "
+                "WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp",
+                (start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")),
+            )
+            return [
+                WaterReading(
+                    timestamp=datetime.fromisoformat(str(row["timestamp"])),
+                    value=float(row["value"]),
+                )
+                for row in cursor.fetchall()
+            ]
+
+    def rachio_active_at(self, t: datetime) -> Optional[Zone]:
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT zone_name, zone_number FROM watering_events\n"
+                "WHERE event_type = 'ZONE_STARTED' AND event_date <= ?\n"
+                "AND NOT EXISTS (\n"
+                "    SELECT 1 FROM watering_events we2\n"
+                "    WHERE we2.zone_number = watering_events.zone_number\n"
+                "      AND we2.event_type IN ('ZONE_COMPLETED', 'ZONE_STOPPED')\n"
+                "      AND we2.event_date > watering_events.event_date\n"
+                "      AND we2.event_date <= ?\n"
+                ")\n"
+                "ORDER BY event_date DESC LIMIT 1",
+                (t.strftime("%Y-%m-%d %H:%M:%S"), t.strftime("%Y-%m-%d %H:%M:%S")),
+            )
+            row = cursor.fetchone()
+            if row:
+                return Zone(
+                    id=f"z-{row['zone_number']}",
+                    zone_number=row["zone_number"],
+                    name=row["zone_name"],
+                    enabled=True,
+                )
+            return None
+
+
+def run_replay(
+    db_path: str,
+    hours: int,
+    rules: list[AlertRule],
+    *,
+    poll_interval_minutes: int = 5,
+) -> SimulationResult:
+    """Replay the last `hours` hours of production DB data through the alert engine.
+
+    Runs entirely offline: no Flume/Rachio API calls, no Pushover.
+    Useful for validating predicate changes against real household water patterns.
+    """
+    db = WaterTrackingDB(db_path)
+    end = datetime.now()
+    start = end - timedelta(hours=hours)
+    dataset = DBReplayDataset(db=db, start=start, end=end)
+    return asyncio.run(
+        run_simulation(
+            dataset, rules, poll_interval_minutes=poll_interval_minutes, print_events=True
+        )
+    )
+
+
 __all__ = [
     "CapturedPush",
+    "DBReplayDataset",
     "SimulationResult",
+    "run_replay",
     "run_simulation",
     "run_simulation_from_yaml",
 ]
