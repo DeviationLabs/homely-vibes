@@ -62,7 +62,28 @@ def test_predicate_fires_when_all_minutes_above_threshold(
 def test_predicate_does_not_fire_on_single_zero_minute(
     engine: AlertEngine, rule: AlertRule
 ) -> None:
+    # mean([3.0, 0.0, 3.0, 3.0]) = 2.25 < 2.6 — zero drags mean below threshold
     assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 3.0]), rule) is False
+
+
+def test_predicate_mean_tolerates_brief_zero_when_average_still_meets_threshold(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    # mean([3.0, 0.0, 3.0, 4.5]) = 2.625 >= 2.6 — one zero-minute doesn't kill the alert
+    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 4.5]), rule) is True
+
+
+def test_predicate_single_spike_among_zeros_does_not_fire() -> None:
+    # mean([8.0, 0.0, 0.0, 0.0]) = 2.0 < 8.0 — a momentary surge is not a pipe break
+    pipe_rule = AlertRule(name="Pipe Break", min_gpm=8.0, duration_minutes=4, retrigger_minutes=30)
+    engine = AlertEngine(
+        flume_client=MagicMock(),
+        rachio_client=MagicMock(),
+        pushover=MagicMock(),
+        db=MagicMock(),
+        rules=[pipe_rule],
+    )
+    assert engine._rule_matches(_readings([8.0, 0.0, 0.0, 0.0]), pipe_rule) is False
 
 
 def test_predicate_does_not_fire_with_insufficient_samples(

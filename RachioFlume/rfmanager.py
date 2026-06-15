@@ -102,6 +102,25 @@ def main() -> int:
     alerts_sub = alerts_parser.add_subparsers(dest="alerts_command", help="Alert subcommands")
     alerts_sub.add_parser("test", help="Dry-run evaluate all rules (no Pushover sent)")
     alerts_sub.add_parser("status", help="Show per-rule state")
+    replay_parser = alerts_sub.add_parser(
+        "replay",
+        help="Replay last N hours of production DB through alert rules (no Pushover)",
+    )
+    replay_parser.add_argument(
+        "--hours", type=int, default=24, help="Hours of history to replay (default: 24)"
+    )
+    replay_parser.add_argument(
+        "--poll-interval",
+        type=int,
+        default=5,
+        help="Simulated poll cadence in minutes (default: 5)",
+    )
+    replay_parser.add_argument(
+        "--db",
+        type=str,
+        default=None,
+        help="Path to SQLite DB (default: production DB from config)",
+    )
     mute_parser = alerts_sub.add_parser("mute", help="Mute a rule for N hours")
     mute_parser.add_argument("rule", help="Rule name (e.g. 'Pipe Break')")
     mute_parser.add_argument("--hours", type=float, default=4.0, help="Mute duration (default 4h)")
@@ -295,12 +314,23 @@ def run_simulate_command(args: argparse.Namespace) -> int:
 
 
 def run_alerts_command(args: argparse.Namespace) -> int:
-    """Dispatch the `alerts` subcommands (test/status/mute/unmute)."""
+    """Dispatch the `alerts` subcommands (test/status/replay/mute/unmute)."""
     logger = get_logger(__name__)
 
     if not args.alerts_command:
-        logger.error("alerts: subcommand required (test|status|mute|unmute)")
+        logger.error("alerts: subcommand required (test|status|replay|mute|unmute)")
         return 1
+
+    if args.alerts_command == "replay":
+        from RachioFlume.simulate_alerts import run_replay
+
+        run_replay(
+            args.db or DB_PATH,
+            args.hours,
+            rules=load_rules_from_config(),
+            poll_interval_minutes=args.poll_interval,
+        )
+        return 0
 
     engine = _build_alert_engine()
 

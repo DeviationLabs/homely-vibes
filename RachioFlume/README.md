@@ -140,6 +140,36 @@ uv run python -m RachioFlume.rfmanager alerts mute "Pipe Break" --hours 4
 uv run python -m RachioFlume.rfmanager alerts unmute "Pipe Break"
 ```
 
+### 🔁 DB Replay — validate rules against real data
+
+Replay production `water_readings` through the alert engine without hitting the
+Flume/Rachio APIs or sending Pushover. Useful for tuning predicates.
+
+```bash
+# Replay last 24 hours of production data (default)
+uv run python -m RachioFlume.rfmanager alerts replay
+
+# Replay last 7 days
+uv run python -m RachioFlume.rfmanager alerts replay --hours 168
+```
+
+### 🌐 Remote test loop on omega
+
+Build locally, test remotely — without touching the running prod collector.
+
+```bash
+# From a feature branch on your local machine
+./RachioFlume/scripts/remote-test.sh                                  # push + deploy + live dry-run + 24h replay
+./RachioFlume/scripts/remote-test.sh --replay-hours 168                # replay 7 days instead of 24h
+./RachioFlume/scripts/remote-test.sh --hot                             # restart prod collector after tests
+```
+
+One-time setup on omega (uses `~/Code-test` so prod `~/Code` is safe):
+```bash
+ssh omega "git clone https://github.com/DeviationLabs/homely-vibes ~/Code-test && cd ~/Code-test && uv sync --quiet"
+ssh omega "ln -sf ~/Code/config/local.yaml ~/Code-test/config/local.yaml"
+```
+
 ### 🧪 Synthetic Simulator
 
 Replay a hand-crafted scenario through the engine — no real APIs, no Pushover,
