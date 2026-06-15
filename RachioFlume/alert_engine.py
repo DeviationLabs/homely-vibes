@@ -94,30 +94,19 @@ class AlertEngine:
         self.rules = rules
         self.logger = get_logger(__name__)
 
-    # ------------------------------------------------------------------ #
-    # USER CONTRIBUTION SLOT 1: predicate semantics                       #
-    # ------------------------------------------------------------------ #
-    # Given the last `duration_minutes` of per-minute Flume readings,
-    # decide if the rule's condition is currently active.
-    #
-    # Trade-offs to consider:
-    #   - STRICT (every minute >= min_gpm): avoids momentary-spike false
-    #     positives. Default below.
-    #   - AVERAGE (mean of window >= min_gpm): forgiving of one bad minute.
-    #   - MISSING MINUTES: Flume can drop a sample. Treat as 0 (conservative)
-    #     vs previous-value (avoids false negatives). Default treats missing
-    #     minutes as failing the predicate (we have < duration_minutes samples
-    #     => not enough data to fire).
-    #   - LOW-FLOW RULES (min_gpm ~0.1): "water running" = any reading above
-    #     a noise floor. Default handles this by parameterizing min_gpm.
-    #
-    # If you want different semantics, edit this method only.
     def _rule_matches(self, readings: list[WaterReading], rule: AlertRule) -> bool:
-        """Return True if `readings` indicate `rule`'s condition is active."""
+        """Return True if the mean flow over the trailing window meets the rule threshold.
+
+        Using mean (not strict all-minutes) so that one or two zero-reading minutes from
+        Flume's sampling cadence don't disqualify an otherwise sustained flow event. A real
+        leak or pipe break will still average well above its threshold; a momentary spike
+        among mostly-zero minutes will not.
+        """
         if len(readings) < rule.duration_minutes:
             return False
         recent = readings[-rule.duration_minutes :]
-        return all(r.value >= rule.min_gpm for r in recent)
+        mean_gpm = sum(r.value for r in recent) / len(recent)
+        return mean_gpm >= rule.min_gpm
 
     # ------------------------------------------------------------------ #
     # USER CONTRIBUTION SLOT 2: fire/clear state machine                  #
