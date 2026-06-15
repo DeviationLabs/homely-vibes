@@ -39,6 +39,7 @@ dependencies = [
     "pillow>=12.2.0",
     "pillow-heif>=0.22.0",
     "omegaconf>=2.3.0",
+    "tesla-fleet-api>=1.4.7",
 ]
 
 [project.optional-dependencies]

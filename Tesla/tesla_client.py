@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
-"""Direct Tesla Owner API client replacing TeslaPy."""
+"""Tesla Fleet API client with sync interface compatible with manage_power.py.
 
+Wraps the async `tesla_fleet_api` SDK in a synchronous facade. Each public
+call runs its own `asyncio.run()` — overhead is negligible for the polling
+cadence used here (default 3 minutes).
+
+Token file shape (lib/tokens/tesla_tokens.json):
+    {
+      "access_token": "...",
+      "refresh_token": "...",
+      "expires_at": <unix-int>,
+      "token_type": "Bearer"
+    }
+"""
+
+import asyncio
 import json
 import os
 import threading
-import time
-from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar
 
-import requests
+import aiohttp
+from tesla_fleet_api.tesla import EnergySite, TeslaFleetOAuth
 
 from lib.config import get_config
 from lib.logger import get_logger
@@ -17,229 +30,183 @@ from lib.logger import get_logger
 class TeslaAuthError(Exception):
     """Authentication failed."""
 
-    pass
-
 
 class TeslaTokenExpiredError(Exception):
     """Token expired and refresh failed."""
-
-    pass
 
 
 class TeslaAPIError(Exception):
     """Tesla API request error."""
 
-    pass
+
+T = TypeVar("T")
 
 
 class TeslaAPIClient:
-    """Direct Tesla Owner API client with auto-refresh token management."""
-
-    BASE_URL = "https://owner-api.teslamotors.com/"
-    TOKEN_URL = "https://auth.tesla.com/oauth2/v3/token"
-    TOKEN_REFRESH_BUFFER = 300  # Refresh 5 minutes before expiry
+    """Sync facade over tesla_fleet_api's async OAuth + EnergySites surface."""
 
     def __init__(self, token_file: Optional[str] = None):
         cfg = get_config()
         self.token_file = os.path.expanduser(token_file or cfg.tesla.tesla_token_file)
+        if not os.path.isabs(self.token_file):
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            self.token_file = os.path.join(project_root, self.token_file)
         os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
-        self.session = requests.Session()
-        self.session.headers.update(
-            {"Content-Type": "application/json", "User-Agent": "TeslaApp/4.10.0"}
-        )
-        self._tokens: Optional[Dict[str, Any]] = None
+
+        self.client_id = cfg.tesla.fleet_client_id
+        self.client_secret = cfg.tesla.fleet_client_secret
+        self.redirect_uri = cfg.tesla.fleet_redirect_uri
+        self.region = cfg.tesla.fleet_region or "na"
+
+        if not self.client_id or not self.client_secret:
+            raise TeslaAuthError(
+                "Fleet API client_id/client_secret not configured. "
+                "Set tesla.fleet_client_id and tesla.fleet_client_secret in config/local.yaml."
+            )
+
         self._lock = threading.Lock()
         self.logger = get_logger(__name__)
 
     def _load_tokens(self) -> Dict[str, Any]:
-        """Load tokens from file."""
         try:
             with open(self.token_file) as f:
                 tokens: Dict[str, Any] = json.load(f)
                 return tokens
         except FileNotFoundError:
             raise TeslaTokenExpiredError(
-                f"Token file not found: {self.token_file}. Run: python Tesla/tesla_auth.py"
+                f"Token file not found: {self.token_file}. Run: uv run Tesla/tesla_auth.py"
             )
         except json.JSONDecodeError as e:
             raise TeslaAuthError(f"Invalid token file format: {e}")
 
-    def _save_tokens(self, tokens: Dict[str, Any]) -> None:
-        """Save tokens to file with proper permissions."""
-        os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
+    def _save_tokens_from_oauth(self, oauth: TeslaFleetOAuth) -> None:
+        token_data = {
+            "access_token": oauth._access_token,
+            "refresh_token": oauth.refresh_token,
+            "expires_at": int(oauth.expires),
+            "token_type": "Bearer",
+        }
         with open(self.token_file, "w") as f:
-            json.dump(tokens, f, indent=2)
+            json.dump(token_data, f, indent=2)
         os.chmod(self.token_file, 0o600)
-        self.logger.debug(f"Tokens saved to {self.token_file}")
+        self.logger.debug(f"Tokens persisted to {self.token_file}")
 
-    def _is_token_expired(self) -> bool:
-        """Check if access token is expired or will expire soon."""
-        if not self._tokens:
-            return True
-        expires_at: float = self._tokens["expires_at"]
-        return expires_at < time.time() + self.TOKEN_REFRESH_BUFFER
-
-    def _refresh_access_token(self) -> None:
-        """Refresh access token using refresh token."""
+    async def _with_oauth(self, fn: Callable[[TeslaFleetOAuth], Awaitable[T]]) -> T:
         with self._lock:
             tokens = self._load_tokens()
+            original_access = tokens["access_token"]
 
-            self.logger.info("Refreshing access token")
-
-            try:
-                response = self.session.post(
-                    self.TOKEN_URL,
-                    json={
-                        "grant_type": "refresh_token",
-                        "client_id": "ownerapi",
-                        "refresh_token": tokens["refresh_token"],
-                    },
-                    timeout=10,
-                )
-                response.raise_for_status()
-            except requests.HTTPError as e:
-                if e.response.status_code == 400:
-                    raise TeslaTokenExpiredError(
-                        "Refresh token invalid - run: python Tesla/tesla_auth.py"
-                    )
-                raise TeslaAPIError(f"Token refresh failed: {e}")
-            except requests.RequestException as e:
-                raise TeslaAPIError(f"Token refresh network error: {e}")
-
-            new_tokens = response.json()
-            tokens.update(
-                {
-                    "access_token": new_tokens["access_token"],
-                    "refresh_token": new_tokens.get("refresh_token", tokens["refresh_token"]),
-                    "expires_at": int(time.time()) + new_tokens["expires_in"],
-                    "token_type": new_tokens["token_type"],
-                }
+        async with aiohttp.ClientSession() as session:
+            oauth = TeslaFleetOAuth(
+                session=session,
+                region=self.region,  # type: ignore[arg-type]
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                redirect_uri=self.redirect_uri,
+                access_token=tokens["access_token"],
+                refresh_token=tokens["refresh_token"],
+                expires=int(tokens["expires_at"]),
             )
 
-            self._save_tokens(tokens)
-            self._tokens = tokens
-            self.logger.info("Access token refreshed successfully")
+            try:
+                await oauth.check_access_token()
+            except Exception as e:
+                raise TeslaTokenExpiredError(
+                    f"Token refresh failed - run: uv run Tesla/tesla_auth.py. Cause: {e}"
+                )
 
-    def _ensure_valid_token(self) -> None:
-        """Ensure we have a valid access token."""
-        if not self._tokens:
-            self._tokens = self._load_tokens()
+            try:
+                result = await fn(oauth)
+            except aiohttp.ClientResponseError as e:
+                if e.status == 401:
+                    raise TeslaTokenExpiredError(
+                        "Authentication failed - run: uv run Tesla/tesla_auth.py"
+                    )
+                if e.status == 429:
+                    raise TeslaAPIError("Rate limited - retry later")
+                raise TeslaAPIError(f"API error: {e.status} - {e.message}")
 
-        if self._is_token_expired():
-            self._refresh_access_token()
+            with self._lock:
+                if oauth.access_token != original_access:
+                    self._save_tokens_from_oauth(oauth)
 
-    def _request(
-        self, method: str, endpoint: str, retry_on_401: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
-        """Make authenticated API request with auto-retry on 401."""
-        self._ensure_valid_token()
-        assert self._tokens is not None  # guaranteed by _ensure_valid_token
-
-        url = urljoin(self.BASE_URL, endpoint)
-        headers = {"Authorization": f"Bearer {self._tokens['access_token']}"}
-
-        self.logger.debug(f"{method} {endpoint}")
-
-        try:
-            response = self.session.request(method, url, headers=headers, timeout=30, **kwargs)
-
-            # Handle token expiry with one retry
-            if response.status_code == 401 and retry_on_401:
-                self.logger.warning("Got 401, refreshing token and retrying")
-                self._refresh_access_token()
-                assert self._tokens is not None
-                headers = {"Authorization": f"Bearer {self._tokens['access_token']}"}
-                response = self.session.request(method, url, headers=headers, timeout=30, **kwargs)
-
-            response.raise_for_status()
-            result: Dict[str, Any] = response.json()
             return result
 
-        except requests.HTTPError as e:
-            if e.response.status_code == 429:
-                raise TeslaAPIError("Rate limited - retry later")
-            elif e.response.status_code == 401:
-                raise TeslaTokenExpiredError(
-                    "Authentication failed - run: python Tesla/tesla_auth.py"
-                )
-            else:
-                raise TeslaAPIError(f"API error: {e.response.status_code} - {e.response.text}")
-        except requests.Timeout:
-            raise TeslaAPIError("Request timeout")
-        except requests.ConnectionError as e:
-            raise TeslaAPIError(f"Connection failed: {e}")
+    def _run(self, fn: Callable[[TeslaFleetOAuth], Awaitable[T]]) -> T:
+        return asyncio.run(self._with_oauth(fn))
 
     def get_energy_sites(self) -> List[Dict[str, Any]]:
-        """Get list of energy sites (batteries)."""
-        response = self._request("GET", "api/1/products")
-        products = response["response"]
-        return [p for p in products if p.get("resource_type") == "battery"]
+        async def call(oauth: TeslaFleetOAuth) -> List[Dict[str, Any]]:
+            resp = await oauth.products()
+            products = resp.get("response", [])
+            return [p for p in products if p.get("resource_type") == "battery"]
 
-    def get_site_info(self, site_id: int) -> Dict[str, Any]:
-        """Get site configuration."""
-        response = self._request("GET", f"api/1/energy_sites/{site_id}/site_info")
-        site_info: Dict[str, Any] = response["response"]
-        return site_info
-
-    def get_site_data(self, site_id: int) -> Dict[str, Any]:
-        """Get live site status."""
-        response = self._request("GET", f"api/1/energy_sites/{site_id}/live_status")
-        site_data: Dict[str, Any] = response["response"]
-        return site_data
-
-    def set_operation_mode(self, site_id: int, mode: str) -> str:
-        """Set operation mode (self_consumption, backup, autonomous)."""
-        response = self._request(
-            "POST", f"api/1/energy_sites/{site_id}/operation", json={"default_real_mode": mode}
-        )
-        result: Dict[str, Any] = response["response"]
-        message: str = result.get("message", "Updated")
-        return message
-
-    def set_backup_reserve(self, site_id: int, percent: int) -> str:
-        """Set backup reserve percentage."""
-        response = self._request(
-            "POST",
-            f"api/1/energy_sites/{site_id}/backup",
-            json={"backup_reserve_percent": int(percent)},
-        )
-        result: Dict[str, Any] = response["response"]
-        message: str = result.get("message", "Updated")
-        return message
+        return self._run(call)
 
 
 class BatteryProduct:
-    """Wrapper to maintain TeslaPy-like interface for compatibility."""
+    """Compatibility wrapper preserving the dict-like interface used by manage_power.py."""
 
     def __init__(self, site_data: Dict[str, Any], client: TeslaAPIClient):
-        self._data = site_data
+        self._data: Dict[str, Any] = dict(site_data)
         self._client = client
-        self.site_id = site_data["energy_site_id"]
+        self.site_id: int = int(site_data["energy_site_id"])
 
     def __getitem__(self, key: str) -> Any:
-        """Dict-like access to data."""
         return self._data[key]
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Dict-like get method."""
         return self._data.get(key, default)
 
     def get_site_info(self) -> "BatteryProduct":
-        """Update with site info."""
-        info = self._client.get_site_info(self.site_id)
-        self._data.update(info)
+        async def call(oauth: TeslaFleetOAuth) -> Dict[str, Any]:
+            site = EnergySite(oauth, self.site_id)
+            return await site.site_info()
+
+        resp = self._client._run(call)
+        self._data.update(resp.get("response", {}))
         return self
 
     def get_site_data(self) -> "BatteryProduct":
-        """Update with live status."""
-        data = self._client.get_site_data(self.site_id)
-        self._data.update(data)
+        async def call(oauth: TeslaFleetOAuth) -> Dict[str, Any]:
+            site = EnergySite(oauth, self.site_id)
+            return await site.live_status()
+
+        resp = self._client._run(call)
+        self._data.update(resp.get("response", {}))
         return self
 
     def set_operation(self, mode: str) -> str:
-        """Set operation mode."""
-        return self._client.set_operation_mode(self.site_id, mode)
+        async def call(oauth: TeslaFleetOAuth) -> Dict[str, Any]:
+            site = EnergySite(oauth, self.site_id)
+            return await site.operation(default_real_mode=mode)
+
+        resp = self._client._run(call)
+        return str(resp.get("response", {}).get("message", "Updated"))
 
     def set_backup_reserve_percent(self, percent: int) -> str:
-        """Set backup reserve."""
-        return self._client.set_backup_reserve(self.site_id, percent)
+        async def call(oauth: TeslaFleetOAuth) -> Dict[str, Any]:
+            site = EnergySite(oauth, self.site_id)
+            return await site.backup(backup_reserve_percent=int(percent))
+
+        resp = self._client._run(call)
+        return str(resp.get("response", {}).get("message", "Updated"))
+
+
+__all__ = [
+    "TeslaAPIClient",
+    "BatteryProduct",
+    "TeslaAuthError",
+    "TeslaTokenExpiredError",
+    "TeslaAPIError",
+]
+
+
+if __name__ == "__main__":
+    # Quick connectivity check
+    logger = get_logger(__name__)
+    client = TeslaAPIClient()
+    sites = client.get_energy_sites()
+    logger.info(f"Found {len(sites)} battery site(s)")
+    for s in sites:
+        logger.info(f"  - {s.get('site_name')} (id={s.get('energy_site_id')})")
