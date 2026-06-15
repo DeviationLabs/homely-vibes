@@ -109,9 +109,16 @@ tesla:
   powerwall_sms_rcpt: "+18001234567"
   powerwall_poll_time: 180
 
-  tesla_email: ""  
-  tesla_password: ""  
+  tesla_email: ""
+  tesla_password: ""
   tesla_token_file: lib/tokens/tesla_tokens.json
+
+  # Fleet API (Tesla developer-portal registered app). Set in local.yaml.
+  fleet_client_id: ""
+  fleet_client_secret: ""
+  fleet_redirect_uri: "http://localhost:8585/callback"
+  fleet_public_key_domain: "deviationlabs.com"
+  fleet_region: "na"
 
   # Powerwall decision points
   decision_points:

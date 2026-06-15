@@ -168,6 +168,11 @@ class TeslaConfig:
     tesla_email: str
     tesla_password: str
     tesla_token_file: str
+    fleet_client_id: str
+    fleet_client_secret: str
+    fleet_redirect_uri: str
+    fleet_public_key_domain: str
+    fleet_region: str
     decision_points: list[OpModeConfig]
 
 
