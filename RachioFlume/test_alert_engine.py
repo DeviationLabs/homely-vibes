@@ -191,7 +191,11 @@ async def test_evaluate_suppressed_by_active_rachio_zone(
 
     assert results[0]["action"] == AlertAction.NOTHING.value
     assert "suppressed_by" in results[0]
-    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    # P0 irrigation notification sent (no alert fire/clear)
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    call_args, call_kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert call_kwargs["priority"] == 0
+    assert "Front Yard" in call_args[0]
     # State unchanged (no spurious "clear" later)
     assert engine._load_state(rule).last_state is None
 
