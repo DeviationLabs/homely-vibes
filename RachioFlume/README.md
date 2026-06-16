@@ -123,10 +123,12 @@ and live in `config/default.yaml` under `rachio_flume.alerts` — override per-h
 in `config/local.yaml`.
 
 Key behaviors:
-- **All alerts at Pushover priority 2** (emergency — retries until you ack)
+- **Fire alerts at Pushover priority 2** (emergency — retries until you ack)
+- **Irrigation status at priority 0** — while Rachio is irrigating, a P0 notification is sent each cycle with the active zone name and current flow rate (informational, not an alert)
 - **Re-trigger every 30 min** while the condition holds, unless muted
 - **Priority-0 "all clear" notification** on the cycle the condition transitions active → clear
 - **Suppression while Rachio irrigates** (plus a 10-min slack after the zone completes, to cover the trailing flow window in the predicate's lookback)
+- **Report failures escalate to Pushover** — if the weekly email report fails (e.g. Gmail auth error), a priority-2 Pushover notification is sent so you know immediately
 
 ```bash
 # Dry-run all rules against live Flume / Rachio (no Pushover sent)
@@ -229,9 +231,9 @@ kill <process_id>
 
 6. **AlertEngine** (`alert_engine.py`) + **AlertRule** (`alert_rules.py`)
    - Runs at the end of each collector cycle
-   - Evaluates each rule's predicate against trailing per-minute Flume readings
+   - Evaluates each rule's predicate against trailing per-minute Flume readings (mean over window, not strict per-minute)
    - State machine: first-fire / retrigger / clear / muted
-   - Suppresses during (and just after) Rachio irrigation
+   - Suppresses during (and just after) Rachio irrigation — sends P0 status with zone + GPM instead
    - Per-rule state persisted as JSON in the existing `collection_metadata` table
 
 7. **SyntheticDataset** (`synthetic_data.py`) + **Simulator** (`simulate_alerts.py`)

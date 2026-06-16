@@ -223,6 +223,17 @@ class AlertEngine:
             self.logger.info(
                 f"Rachio zone '{rachio_active.name}' is irrigating; suppressing all rule evaluation."
             )
+            if not dry_run:
+                try:
+                    gpm = self.flume.get_current_usage_rate()
+                    gpm_str = f"{gpm:.1f} GPM" if gpm is not None else "N/A"
+                except Exception:
+                    gpm_str = "N/A"
+                self.pushover.send_message(
+                    f"Zone: {rachio_active.name}\nFlow: {gpm_str}",
+                    title="RachioFlume: Irrigating",
+                    priority=0,
+                )
 
         for rule in self.rules:
             entry: dict = {"rule": rule.name, "action": AlertAction.NOTHING.value}
