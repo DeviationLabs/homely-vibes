@@ -25,7 +25,8 @@ def _rules() -> list[AlertRule]:
     ]
 
 
-def _fires(result: SimulationResult, rule_name: str, priority: int) -> list[CapturedPush]:
+def _fires(result: SimulationResult, rule_name: str, priority: int = 2) -> list[CapturedPush]:
+    """Return fire notifications for *rule_name* at the given priority (default 2)."""
     return [p for p in result.fires if p.title.endswith(rule_name) and p.priority == priority]
 
 
@@ -44,7 +45,7 @@ async def test_pipe_break_fires_within_window(start: datetime) -> None:
 
     result = await run_simulation(ds, _rules(), poll_interval_minutes=5, print_events=False)
 
-    pipe_fires = _fires(result, "Pipe Break", priority=2)
+    pipe_fires = _fires(result, "Pipe Break")
     assert len(pipe_fires) >= 1, "Pipe Break should fire at least once"
     # First fire must be within (10 min rule window + 5 min poll lag) = 15 min of break start
     first = pipe_fires[0]
@@ -62,23 +63,26 @@ async def test_slow_leak_fires_leak_rule_not_mid_or_high(start: datetime) -> Non
 
     result = await run_simulation(ds, _rules(), poll_interval_minutes=5, print_events=False)
 
-    assert len(_fires(result, "Leak", priority=2)) >= 1, "Leak rule should fire"
-    assert len(_fires(result, "Mid Flow", priority=2)) == 0, (
+    assert len(_fires(result, "Leak")) >= 1, "Leak rule should fire"
+    assert len(_fires(result, "Mid Flow")) == 0, (
         "0.18 gpm should never trigger Mid Flow (2.6 gpm threshold)"
     )
-    assert len(_fires(result, "High Flow", priority=2)) == 0
-    assert len(_fires(result, "Pipe Break", priority=2)) == 0
+    assert len(_fires(result, "High Flow")) == 0
+    assert len(_fires(result, "Pipe Break")) == 0
 
 
-async def test_slow_leak_retriggers_multiple_times(start: datetime) -> None:
+async def test_slow_leak_fires_once_per_day(start: datetime) -> None:
     ds = SyntheticDataset(start=start, days=4)
     ds.add_slow_leak(start_day=0, duration_hours=72, gpm=0.18)
 
     result = await run_simulation(ds, _rules(), poll_interval_minutes=5, print_events=False)
 
-    leak_fires = _fires(result, "Leak", priority=2)
-    # 72hr active, retrigger every 30min -> expect at least ~140 retriggers
-    assert len(leak_fires) >= 10, f"expected many retriggers over 72hr leak, got {len(leak_fires)}"
+    leak_fires = _fires(result, "Leak")
+    # Once-per-day rule: one fire per calendar day the leak is active.
+    # 72 hr leak (May 1 00:00 → May 4 00:00) touches 4 calendar days → 3-4 fires.
+    assert 3 <= len(leak_fires) <= 4, (
+        f"expected 3-4 daily leak fires over 72 hr, got {len(leak_fires)}"
+    )
 
 
 async def test_irrigation_suppresses_concurrent_high_flow(start: datetime) -> None:
@@ -103,9 +107,9 @@ async def test_short_shower_does_not_fire_mid_flow(start: datetime) -> None:
 
     result = await run_simulation(ds, _rules(), poll_interval_minutes=5, print_events=False)
 
-    assert len(_fires(result, "Mid Flow", priority=2)) == 0
-    assert len(_fires(result, "High Flow", priority=2)) == 0
-    assert len(_fires(result, "Pipe Break", priority=2)) == 0
+    assert len(_fires(result, "Mid Flow")) == 0
+    assert len(_fires(result, "High Flow")) == 0
+    assert len(_fires(result, "Pipe Break")) == 0
 
 
 async def test_pipe_break_clear_arrives_only_after_active_to_clear(start: datetime) -> None:

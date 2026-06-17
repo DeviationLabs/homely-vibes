@@ -306,7 +306,7 @@ class TestSomfyMyLinkNode:
         """Payload arrives in two chunks -> first parse fails, second succeeds"""
         mock_ping.return_value = True
         payload = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"targetID": "X"}})
-        # Split mid-object so the first chunk is unparseable JSON
+        # Split mid-object so the first chunk is unparsable JSON
         split = len(payload) // 2
         sock = MagicMock()
         sock.recv.side_effect = [payload[:split].encode(), payload[split:].encode()]
