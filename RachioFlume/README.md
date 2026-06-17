@@ -7,7 +7,10 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 - **Rachio Integration**: Monitor active zones and watering events
 - **Flume Integration**: Track real-time water consumption across all devices
 - **Data Correlation**: Match watering events with water usage patterns
-- **Usage Alerts** (`alert_engine.py`): First-party Pushover alerts for Pipe Break / High Flow / Mid Flow / Low Flow / Leak, suppressed during Rachio irrigation, with mute support and "all clear" notifications
+- **Usage Alerts** (`alert_engine.py`):
+  - **Zone-end reports**: One P-1 Pushover notification per zone per day, sent after the zone finishes irrigating (10-min slack for data to settle). Reports runtime, precise avg GPM, and total gallons.
+  - **Anomaly rules**: Pipe Break / High Flow / Mid Flow / Low Flow / Leak — P2 (emergency), at most once per day per rule. Uses coefficient-of-variation filter to reject spiky noise on low-flow rules.
+  - Suppressed during Rachio irrigation; mute support; P0 "all clear" on active→clear transition
 - **Synthetic Simulator** (`simulate_alerts.py`): Replay a YAML-defined scenario through the alert engine without hitting real APIs or Pushover — see [TESTABILITY.md](TESTABILITY.md)
 - **Period Reports**: Generate detailed reports with:
   - Average watering rate by zone
@@ -123,11 +126,11 @@ and live in `config/default.yaml` under `rachio_flume.alerts` — override per-h
 in `config/local.yaml`.
 
 Key behaviors:
-- **Fire alerts at Pushover priority 2** (emergency — retries until you ack)
-- **Irrigation status at priority 0** — while Rachio is irrigating, a P0 notification is sent each cycle with the active zone name and current flow rate (informational, not an alert)
-- **Re-trigger every 30 min** while the condition holds, unless muted
+- **Zone-end report (P-1)** — one notification per zone per day, sent after the zone finishes irrigating (10-min slack). Reports runtime, avg GPM, and total gallons.
+- **Anomaly rules fire at P2** (emergency — retries until you ack), at most once per day per rule
+- **CV-based variance filter** — rules require both mean ≥ threshold AND low coefficient of variation. Rejects spiky noise (e.g. a few high readings among zeros) that would pass a mean-only check. Formula: `max_cv = 0.5 - 0.04 × min_gpm`, capped [0.15, 0.5].
 - **Priority-0 "all clear" notification** on the cycle the condition transitions active → clear
-- **Suppression while Rachio irrigates** (plus a 10-min slack after the zone completes, to cover the trailing flow window in the predicate's lookback)
+- **Suppression while Rachio irrigates** (plus a 10-min slack after the zone completes)
 - **Report failures escalate to Pushover** — if the weekly email report fails (e.g. Gmail auth error), a priority-2 Pushover notification is sent so you know immediately
 
 ```bash
@@ -231,10 +234,11 @@ kill <process_id>
 
 6. **AlertEngine** (`alert_engine.py`) + **AlertRule** (`alert_rules.py`)
    - Runs at the end of each collector cycle
-   - Evaluates each rule's predicate against trailing per-minute Flume readings (mean over window, not strict per-minute)
-   - State machine: first-fire / retrigger / clear / muted
-   - Suppresses during (and just after) Rachio irrigation — sends P0 status with zone + GPM instead
-   - Per-rule state persisted as JSON in the existing `collection_metadata` table
+   - **Zone-end reporting**: detects when a Rachio zone finishes, waits for slack, sends one P-1 report per zone per day with runtime, avg GPM, total gallons
+   - **Anomaly rules**: evaluates each rule's predicate against trailing per-minute Flume readings — requires mean ≥ threshold AND CV ≤ max_cv (coefficient-of-variation filter rejects spiky noise)
+   - Anomaly fires at P2 (emergency), at most once per day per rule; P0 clear on active→clear
+   - Suppressed during (and just after) Rachio irrigation
+   - Per-rule and per-zone reported-today state persisted as JSON in `collection_metadata`
 
 7. **SyntheticDataset** (`synthetic_data.py`) + **Simulator** (`simulate_alerts.py`)
    - YAML-defined scenarios with household, irrigation, leak, and pipe-break events

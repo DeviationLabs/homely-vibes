@@ -141,7 +141,7 @@ class AlertEngine:
             f"Avg flow: {avg_gpm:.2f} GPM\n"
             f"Total: {total_gal:.1f} gal"
         )
-        self.pushover.send_message(msg, title="RachioFlume: Zone Report", priority=1)
+        self.pushover.send_message(msg, title="RachioFlume: Zone Report", priority=-1)
         self.logger.info(
             f"Zone-end report sent for '{zone_name}': {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
         )
