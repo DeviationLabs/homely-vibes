@@ -60,3 +60,18 @@ Schedule, log paths configured under `launch_jobs.whatsapp_summary` in
   than templated XML.
 - Each `JobSpec` is frozen and self-describing; CLI commands operate purely
   on the registry, no per-job switch statements.
+
+## When to use launchd vs Claude routines
+
+Launchd jobs are appropriate for:
+- Fixed-schedule tasks that run reliably without intervention (daily summaries, periodic backups)
+- Tasks that must survive reboots and user logouts
+- Simple scripts with deterministic behavior
+
+**Claude routines** (via `pi -p` or similar) may be a better fit for:
+- Tasks that benefit from AI judgment or adaptive behavior
+- Interactive workflows that need human-in-the-loop decisions
+- Complex multi-step processes where the steps depend on runtime conditions
+- Tasks that are easier to express as natural language instructions than as shell scripts
+
+Example: The `whatsapp-summary` job currently runs a fixed `pi -p` command daily. If the summary logic becomes more complex (e.g., filtering by conversation type, adapting to user preferences), it might be better implemented as a Claude routine that can reason about the data rather than a rigid launchd script.
