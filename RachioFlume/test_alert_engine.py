@@ -166,7 +166,7 @@ def test_state_machine_expired_mute_allows_fire(engine: AlertEngine, rule: Alert
 # ---------------------------------------------------------------------- #
 
 
-async def test_evaluate_fires_priority_1_on_first_active(
+async def test_evaluate_fires_priority_2_on_first_active(
     engine: AlertEngine, rule: AlertRule
 ) -> None:
     engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
@@ -174,10 +174,10 @@ async def test_evaluate_fires_priority_1_on_first_active(
 
     assert len(results) == 1
     assert results[0]["action"] == AlertAction.FIRE.value
-    # Pushover called with priority=1 (downgraded from 2)
+    # Pushover called with priority=2 (emergency)
     engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
     _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
-    assert kwargs["priority"] == 1
+    assert kwargs["priority"] == 2
     # State persisted as active
     state = engine._load_state(rule)
     assert state.last_state == "active"

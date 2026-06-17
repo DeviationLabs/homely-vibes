@@ -25,8 +25,8 @@ def _rules() -> list[AlertRule]:
     ]
 
 
-def _fires(result: SimulationResult, rule_name: str, priority: int = 1) -> list[CapturedPush]:
-    """Return fire notifications for *rule_name* at the given priority (default 1)."""
+def _fires(result: SimulationResult, rule_name: str, priority: int = 2) -> list[CapturedPush]:
+    """Return fire notifications for *rule_name* at the given priority (default 2)."""
     return [p for p in result.fires if p.title.endswith(rule_name) and p.priority == priority]
 
 

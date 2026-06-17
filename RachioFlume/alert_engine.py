@@ -8,8 +8,8 @@ per zone per day reporting:
   • Average flow rate (GPM, computed from per-minute Flume readings)
   • Total water used (gallons)
 
-Rule-based anomaly alerts (pipe break, leak, etc.) are still evaluated but
-fire at P1 instead of P0/P2 and only once per day per rule.
+Rule-based anomaly alerts (pipe break, leak, etc.) remain P2 (emergency)
+and fire at most once per day per rule.
 """
 
 import json
@@ -39,7 +39,7 @@ _REPORTED_RULES_KEY = "reported::rules::{date}"
 class AlertAction(str, Enum):
     NOTHING = "nothing"
     ZONE_REPORT = "zone_report"  # priority 1
-    FIRE = "fire"  # priority 1 (downgraded from 2)
+    FIRE = "fire"  # priority 2 (emergency)
     FIRE_CLEAR = "fire_clear"  # priority 0
 
 
@@ -147,7 +147,12 @@ class AlertEngine:
         )
 
     def _check_zone_end_report(
-        self, rachio_active, last_rachio_active_at, last_rachio_zone, now, dry_run
+        self,
+        rachio_active: Optional[object],
+        last_rachio_active_at: Optional[datetime],
+        last_rachio_zone: Optional[str],
+        now: datetime,
+        dry_run: bool,
     ) -> bool:
         """Check if a zone just ended and send the one-per-day report.
 
@@ -156,7 +161,7 @@ class AlertEngine:
         reported = _load_set(self.db, _today_key(_REPORTED_ZONES_KEY, now))
 
         # Zone was active last cycle but not now → it just ended
-        if rachio_active or last_rachio_active_at is None:
+        if rachio_active or last_rachio_active_at is None or last_rachio_zone is None:
             return False
 
         slack_cutoff = last_rachio_active_at + timedelta(minutes=RACHIO_POST_ACTIVE_SLACK_MINUTES)
@@ -174,7 +179,9 @@ class AlertEngine:
         if zone_sessions:
             # Most recent session for this zone
             session = sorted(
-                zone_sessions, key=lambda s: s.get("end_time") or s.get("start_time"), reverse=True
+                zone_sessions,
+                key=lambda s: s.get("end_time") or s.get("start_time") or datetime.min,
+                reverse=True,
             )[0]
             runtime_min = (session.get("duration_seconds") or 0) / 60.0
             avg_gpm = session.get("average_flow_rate") or 0.0
@@ -288,8 +295,8 @@ class AlertEngine:
             f"{rule.name}: sustained flow >= {rule.min_gpm} GPM "
             f"for {rule.duration_minutes} min (avg {avg:.2f} GPM)."
         )
-        self.pushover.send_message(msg, title=f"RachioFlume: {rule.name}", priority=1)
-        self.logger.warning(f"FIRED P1 alert: {rule.name}")
+        self.pushover.send_message(msg, title=f"RachioFlume: {rule.name}", priority=2)
+        self.logger.warning(f"FIRED P2 alert: {rule.name}")
 
     def _send_clear(self, rule: AlertRule) -> None:
         msg = f"{rule.name}: condition cleared."
