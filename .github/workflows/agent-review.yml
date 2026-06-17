@@ -1,0 +1,218 @@
+name: Fireworks PR Review
+
+on:
+  pull_request:
+    # `ready_for_review` lets us run when a draft PR is promoted; the
+    # `if:` on the job then gates out actual drafts.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Rapid pushes to a PR shouldn't fan out multiple reviewers — wastes
+# Fireworks tokens and races comments.
+concurrency:
+  group: agent-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Skip drafts — reviewer noise while you're still iterating is just noise.
+    if: github.event.pull_request.draft == false
+    # Explicit cap so a hung Fireworks call never burns the 6h GHA default.
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Generate review with Fireworks (DeepSeek V4 Pro)
+        env:
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Defensive: BASE_SHA may not exist locally if base branch was force-pushed.
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
+
+          # Streaming truncation: subshell disables pipefail so git diff's
+          # SIGPIPE (when head closes after 400KB) doesn't fail the step.
+          # Avoids the old `git diff | head -c N` exit-141 bug while also
+          # capping disk use — important for PRs touching vendored dirs.
+          ( set +o pipefail; git diff "$BASE_SHA"..."$HEAD_SHA" | head -c 400000 > /tmp/diff.raw )
+
+          # `head -c N` cuts on byte boundaries; mid-multibyte cuts produce
+          # invalid UTF-8, which `jq --arg` rejects with a fatal error.
+          # `iconv -c` drops invalid bytes; `tr -d '\000'` drops embedded NULs
+          # (jq also chokes on those). Both are defensive against binary blobs
+          # accidentally landing in a diff.
+          tr -d '\000' < /tmp/diff.raw | iconv -f utf-8 -t utf-8 -c > /tmp/diff.txt
+
+          SYSTEM_PROMPT='You are a senior code reviewer. Output ONLY a JSON object — no prose, no markdown, no reasoning text before or after. Begin your response with { and end with }.
+          - summary: at most one sentence (kept for the schema; not shown to humans).
+          - issues: list ONLY real bugs, security holes, or design problems. Skip nits, style, and naming.
+          - For each issue: path is the file path; line is the 1-indexed line in the NEW file version (a "+" line in the diff); severity is one of bug, security, design; body is one or two sentences with the problem and a fix suggestion.
+          - If no real issues, return an empty issues array.'
+
+          SCHEMA='{
+            "type": "object",
+            "required": ["summary", "issues"],
+            "additionalProperties": false,
+            "properties": {
+              "summary": {"type": "string", "maxLength": 240},
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["path", "line", "severity", "body"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {"type": "string"},
+                    "line": {"type": "integer", "minimum": 1},
+                    "severity": {"type": "string", "enum": ["bug", "security", "design"]},
+                    "body": {"type": "string", "maxLength": 600}
+                  }
+                }
+              }
+            }
+          }'
+
+          # DeepSeek V4 Pro is a reasoning model: it emits chain-of-thought
+          # before the actual output. The previous max_tokens=2048 budget
+          # was consumed entirely by CoT on non-trivial diffs, leaving no
+          # room for the JSON body → "Model output was not parseable JSON"
+          # → silent skip. Fix: cut CoT with reasoning_effort=low AND raise
+          # the budget so even verbose runs have room for the JSON tail.
+          PAYLOAD=$(jq -n \
+            --rawfile diff /tmp/diff.txt \
+            --arg sys "$SYSTEM_PROMPT" \
+            --argjson schema "$SCHEMA" \
+            '{
+              model: "accounts/fireworks/models/deepseek-v4-pro",
+              max_tokens: 8192,
+              temperature: 0.1,
+              reasoning_effort: "low",
+              response_format: {type: "json_object", schema: $schema},
+              messages: [
+                {role: "system", content: $sys},
+                {role: "user", content: $diff}
+              ]
+            }')
+
+          HTTP_RESPONSE=$(curl -sS --max-time 180 -w "\n%{http_code}" https://api.fireworks.ai/inference/v1/chat/completions \
+            -H "Authorization: Bearer $FIREWORKS_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          HTTP_STATUS=$(printf '%s' "$HTTP_RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$HTTP_RESPONSE" | sed '$d')
+
+          # All known-failure paths exit 0 with no /tmp/review.json — the post
+          # step then posts a "review skipped" status comment so reviewers can
+          # see the workflow ran. Unexpected failures still bubble up (red
+          # check) so they're actually noticed.
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::warning::Fireworks API returned HTTP $HTTP_STATUS; skipping review." >&2
+            printf '%s' "$BODY" | head -c 2000 >&2
+            exit 0
+          fi
+
+          CONTENT=$(printf '%s' "$BODY" | jq -r '.choices[0].message.content // empty')
+          if [ -z "$CONTENT" ]; then
+            echo "::warning::Empty content from Fireworks; skipping review." >&2
+            exit 0
+          fi
+
+          # Extract the JSON object from CONTENT. DeepSeek V4 Pro is a
+          # reasoning model and sometimes emits chain-of-thought around the
+          # JSON. A naive line-based sed extractor breaks on nested objects
+          # (matches the first inner `}` as the end). Use Python's JSON
+          # parser, which respects string boundaries and nesting.
+          printf '%s' "$CONTENT" > /tmp/raw_content.txt
+          if ! python3 - <<'PY' > /tmp/extracted.json 2>/tmp/extract_err.log
+          import json, sys
+          with open("/tmp/raw_content.txt") as f:
+              s = f.read()
+          start = s.find("{")
+          if start < 0:
+              sys.exit("no opening brace in model output")
+          obj, _ = json.JSONDecoder().raw_decode(s[start:])
+          json.dump(obj, sys.stdout)
+          PY
+          then
+            echo "::warning::Model output was not parseable JSON; posting no PR comment. Raw preview (first 2KB) follows." >&2
+            cat /tmp/extract_err.log >&2
+            head -c 2000 /tmp/raw_content.txt >&2
+            echo >&2
+            exit 0
+          fi
+
+          jq '{summary: (.summary // ""), issues: (.issues // [])}' /tmp/extracted.json \
+            > /tmp/review.json
+
+          echo "Parsed review:"
+          cat /tmp/review.json
+
+      - name: Post review (always a status comment; inline on real issues)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Always post *something* so the PR shows the reviewer's verdict for
+          # this revision. If the generator step bailed (API down, unparseable
+          # output), surface that instead of silent skip.
+          if [ ! -s /tmp/review.json ]; then
+            printf '**DeepSeek V4 Pro:** review skipped — see workflow logs for details. (commit `%s`)\n' \
+              "${HEAD_SHA:0:7}" \
+              | gh pr comment "$PR_NUMBER" --body-file -
+            exit 0
+          fi
+
+          ISSUE_COUNT=$(jq '.issues | length' /tmp/review.json)
+          SHORT_SHA="${HEAD_SHA:0:7}"
+
+          if [ "$ISSUE_COUNT" -eq 0 ]; then
+            printf '**DeepSeek V4 Pro:** no issues found in commit `%s`. ✅\n' "$SHORT_SHA" \
+              | gh pr comment "$PR_NUMBER" --body-file -
+            exit 0
+          fi
+
+          # Issues exist: post a single PR review with inline comments AND a
+          # short top-level body summarizing the count for the Conversation tab.
+          REVIEW_PAYLOAD=$(jq -n \
+            --arg sha "$HEAD_SHA" \
+            --arg short "$SHORT_SHA" \
+            --arg count "$ISSUE_COUNT" \
+            --slurpfile r /tmp/review.json \
+            '{
+              commit_id: $sha,
+              event: "COMMENT",
+              body: ("**DeepSeek V4 Pro:** \($count) issue(s) flagged inline on commit `\($short)`."),
+              comments: ($r[0].issues | map({
+                path: .path,
+                line: .line,
+                side: "RIGHT",
+                body: ("**[" + .severity + "]** " + .body)
+              }))
+            }')
+
+          if ! echo "$REVIEW_PAYLOAD" | gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+              --method POST --input - 2>/tmp/review_err.log; then
+            echo "::warning::Inline review POST failed (often line out of diff range). Falling back to a single comment with the issue list."
+            cat /tmp/review_err.log
+            {
+              printf '**DeepSeek V4 Pro:** %s issue(s) on commit `%s` — inline placement failed, listing here:\n\n' \
+                "$ISSUE_COUNT" "$SHORT_SHA"
+              jq -r '.issues[] | "- **[\(.severity)]** `\(.path):\(.line)` — \(.body)"' /tmp/review.json
+            } | gh pr comment "$PR_NUMBER" --body-file -
+          fi
