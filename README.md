@@ -41,7 +41,7 @@ make lint-fix        # Fix all linting issues
 
 # Run specific services (see individual folder READMEs for details)
 uv run python Tesla/manage_power_clean.py
-uv run python RachioFlume/main.py
+uv run python RachioFlume/rfmanager.py
 ```
 
 ## Project Components
