@@ -66,11 +66,16 @@ def test_predicate_does_not_fire_on_single_zero_minute(
     assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 3.0]), rule) is False
 
 
-def test_predicate_mean_tolerates_brief_zero_when_average_still_meets_threshold(
+def test_predicate_accepts_sustained_flow_with_low_cv(engine: AlertEngine, rule: AlertRule) -> None:
+    # mean([3.0, 2.8, 3.0, 2.5]) = 2.825 >= 2.6, low CV → sustained flow accepted
+    assert engine._rule_matches(_readings([3.0, 2.8, 3.0, 2.5]), rule) is True
+
+
+def test_predicate_rejects_spiky_flow_even_if_mean_passes(
     engine: AlertEngine, rule: AlertRule
 ) -> None:
-    # mean([3.0, 0.0, 3.0, 4.5]) = 2.625 >= 2.6 — one zero-minute doesn't kill the alert
-    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 4.5]), rule) is True
+    # mean([3.0, 0.0, 3.0, 4.5]) = 2.625 >= 2.6 but CV ≈ 0.62 >> max_cv ≈ 0.25
+    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 4.5]), rule) is False
 
 
 def test_predicate_single_spike_among_zeros_does_not_fire() -> None:
@@ -94,9 +99,9 @@ def test_predicate_does_not_fire_with_insufficient_samples(
 
 
 def test_predicate_low_flow_rule_fires_on_trickle() -> None:
-    """A 'Low Flow' rule (min_gpm=0.1) treats any sustained non-zero as active."""
+    """A 'Low Flow' rule (min_gpm=0.1) treats sustained low flow as active."""
     low_rule = AlertRule(name="Low Flow", min_gpm=0.1, duration_minutes=3, retrigger_minutes=30)
-    readings = _readings([0.5, 0.2, 0.3])
+    readings = _readings([0.15, 0.12, 0.13])
     engine = AlertEngine(
         flume_client=MagicMock(),
         rachio_client=MagicMock(),
@@ -161,7 +166,7 @@ def test_state_machine_expired_mute_allows_fire(engine: AlertEngine, rule: Alert
 # ---------------------------------------------------------------------- #
 
 
-async def test_evaluate_fires_priority_2_on_first_active(
+async def test_evaluate_fires_priority_1_on_first_active(
     engine: AlertEngine, rule: AlertRule
 ) -> None:
     engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
@@ -169,10 +174,10 @@ async def test_evaluate_fires_priority_2_on_first_active(
 
     assert len(results) == 1
     assert results[0]["action"] == AlertAction.FIRE.value
-    # Pushover called with priority=2 (emergency)
+    # Pushover called with priority=1 (downgraded from 2)
     engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
     _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
-    assert kwargs["priority"] == 2
+    assert kwargs["priority"] == 1
     # State persisted as active
     state = engine._load_state(rule)
     assert state.last_state == "active"
@@ -191,11 +196,8 @@ async def test_evaluate_suppressed_by_active_rachio_zone(
 
     assert results[0]["action"] == AlertAction.NOTHING.value
     assert "suppressed_by" in results[0]
-    # P0 irrigation notification sent (no alert fire/clear)
-    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
-    call_args, call_kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
-    assert call_kwargs["priority"] == 0
-    assert "Front Yard" in call_args[0]
+    # No alert sent while irrigating (zone-end report fires later)
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
     # State unchanged (no spurious "clear" later)
     assert engine._load_state(rule).last_state is None
 

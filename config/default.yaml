@@ -111,7 +111,7 @@ tesla:
 
   tesla_email: ""
   tesla_password: ""
-  tesla_token_file: lib/tokens/tesla_tokens.json
+  tesla_token_file: config/tokens/tesla_tokens.json
 
   # Fleet API (Tesla developer-portal registered app). Set in local.yaml.
   fleet_client_id: ""
@@ -193,7 +193,7 @@ august:
   email: ""  
   password: ""  
   phone: "+1234567890"
-  token_file: lib/tokens/august_auth_token.json
+  token_file: config/tokens/august_auth_token.json
 
 # === Samsung Frame TV ===
 samsung_frame:
@@ -203,7 +203,7 @@ samsung_frame:
   smartthings_token: ""  # SmartThings PAT for cloud power-on fallback, empty = skip
   smartthings_device_id: ""  # SmartThings device ID for the TV
   port: 8002
-  token_file: lib/tokens/samsung_frame_token.txt
+  token_file: config/tokens/samsung_frame_token.txt
   default_matte: shadowbox_black
   supported_formats:
     - jpg
