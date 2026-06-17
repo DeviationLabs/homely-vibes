@@ -239,7 +239,6 @@ rachio_flume:
       - {name: "Pipe Break", min_gpm: 8.0, duration_minutes: 10}
       - {name: "High Flow",  min_gpm: 5.4, duration_minutes: 4}
       - {name: "Mid Flow",   min_gpm: 2.6, duration_minutes: 14}
-      - {name: "Low Flow",   min_gpm: 0.1, duration_minutes: 30}
       - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
 
 # === PersonalCalSync (Google Apps Script) ===
