@@ -156,6 +156,23 @@ jobs:
           jq '{summary: (.summary // ""), issues: (.issues // [])}' /tmp/extracted.json \
             > /tmp/review.json
 
+          # Validate: filter out issues referencing files not in the diff.
+          # Models sometimes hallucinate file paths (e.g. src/App.tsx in a
+          # Python repo). Only keep issues for files actually changed.
+          git diff --name-only "$BASE_SHA"..."$HEAD_SHA" > /tmp/diff_files.txt
+          python3 - <<'PY' > /tmp/review_validated.json 2>/tmp/validate_err.log || true
+          import json
+          with open("/tmp/review.json") as f:
+              review = json.load(f)
+          with open("/tmp/diff_files.txt") as f:
+              diff_files = set(line.strip() for line in f if line.strip())
+          review["issues"] = [i for i in review.get("issues", []) if i.get("path") in diff_files]
+          json.dump(review, open("/tmp/review_validated.json", "w"))
+          PY
+          if [ -s /tmp/review_validated.json ]; then
+            mv /tmp/review_validated.json /tmp/review.json
+          fi
+
           echo "Parsed review:"
           cat /tmp/review.json
 

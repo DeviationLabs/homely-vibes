@@ -5,7 +5,7 @@ Wraps the async `tesla_fleet_api` SDK in a synchronous facade. Each public
 call runs its own `asyncio.run()` — overhead is negligible for the polling
 cadence used here (default 3 minutes).
 
-Token file shape (lib/tokens/tesla_tokens.json):
+Token file shape (config/tokens/tesla_tokens.json):
     {
       "access_token": "...",
       "refresh_token": "...",
