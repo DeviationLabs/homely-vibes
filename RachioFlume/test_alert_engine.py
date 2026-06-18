@@ -288,3 +288,125 @@ async def test_muted_rule_does_not_fire_in_evaluate(engine: AlertEngine, rule: A
 
     assert results[0]["action"] == AlertAction.NOTHING.value
     engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------- #
+# Zone-end reporting — zone transitions                                  #
+# ---------------------------------------------------------------------- #
+
+
+async def test_zone_transition_reports_previous_zone(engine: AlertEngine, rule: AlertRule) -> None:
+    """When zone A transitions to zone B, zone A should be reported."""
+    # Cycle 1: Zone A is active
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Lawn", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([5.0, 5.0, 5.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+    # Cycle 2: Zone A ended, Zone B started → report Zone A
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z2", zone_number=2, name="Back Lawn", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([5.0, 5.0, 5.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+
+    # Zone A should be reported
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    call_args = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert "Front Lawn" in call_args[0][0]
+    assert call_args[1]["priority"] == -1
+
+
+async def test_zone_transition_multiple_zones(engine: AlertEngine, rule: AlertRule) -> None:
+    """Multi-zone cycle: each zone gets reported when the next one starts."""
+    zones = [
+        Zone(id="z1", zone_number=1, name="Zone A", enabled=True),
+        Zone(id="z2", zone_number=2, name="Zone B", enabled=True),
+        Zone(id="z3", zone_number=3, name="Zone C", enabled=True),
+    ]
+
+    # Cycle 1: Zone A active
+    engine.rachio.get_active_zone.return_value = zones[0]  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0, 4.0, 4.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 0  # type: ignore[attr-defined]
+
+    # Cycle 2: Zone A → Zone B transition → report Zone A
+    engine.rachio.get_active_zone.return_value = zones[1]  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0, 4.0, 4.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
+    assert "Zone A" in engine.pushover.send_message.call_args_list[0][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 3: Zone B → Zone C transition → report Zone B
+    engine.rachio.get_active_zone.return_value = zones[2]  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0, 4.0, 4.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 2  # type: ignore[attr-defined]
+    assert "Zone B" in engine.pushover.send_message.call_args_list[1][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 4: Zone C → idle → report Zone C
+    engine.rachio.get_active_zone.return_value = None  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0, 4.0, 4.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 3  # type: ignore[attr-defined]
+    assert "Zone C" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+
+
+async def test_zone_report_each_cycle(engine: AlertEngine, rule: AlertRule) -> None:
+    """Each zone cycle should be reported with a cycle count."""
+    # Cycle 1: Zone A active
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Zone A", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+
+    # Cycle 2: Zone A → Zone B → report Zone A (Cycle 1)
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z2", zone_number=2, name="Zone B", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
+    # cycle 1 has no label
+    assert "Cycle" not in engine.pushover.send_message.call_args_list[0][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 3: Zone B → Zone A → report Zone B (Cycle 1)
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Zone A", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 2  # type: ignore[attr-defined]
+    assert "Zone B" in engine.pushover.send_message.call_args_list[1][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 4: Zone A → Zone B → report Zone A (Cycle 2)
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z2", zone_number=2, name="Zone B", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 3  # type: ignore[attr-defined]
+    assert "Zone A" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+    assert "Cycle 2" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+
+
+async def test_rachio_idle_reports_last_zone(engine: AlertEngine, rule: AlertRule) -> None:
+    """When Rachio goes idle, the last active zone should be reported."""
+    # Cycle 1: Zone active
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Yard", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([6.0, 6.0, 6.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 0  # type: ignore[attr-defined]
+
+    # Cycle 2: Rachio idle → report the zone
+    engine.rachio.get_active_zone.return_value = None  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([6.0, 6.0, 6.0])  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
+    assert "Front Yard" in engine.pushover.send_message.call_args[0][0]  # type: ignore[attr-defined]
