@@ -152,7 +152,9 @@ class AlertEngine:
             d.get("last_zone_number"),
         )
 
-    def _save_rachio_state(self, at: datetime, zone_name: str, zone_number: int) -> None:
+    def _save_rachio_state(
+        self, at: datetime, zone_name: Optional[str], zone_number: Optional[int]
+    ) -> None:
         self.db.set_metadata(
             _RACHIO_STATE_KEY,
             json.dumps(
