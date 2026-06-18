@@ -1,8 +1,9 @@
 """Zone-end reporting for RachioFlume.
 
 Runs at the end of every collector cycle. Detects when a Rachio zone finishes
-irrigating and — after a slack window — sends exactly **one** P1 notification
-per zone per day reporting:
+irrigating — either because a new zone started (zone transition) or because
+Rachio went fully idle — and sends exactly **one** P-1 notification per zone
+per day reporting:
   • Zone name
   • Runtime (minutes)
   • Average flow rate (GPM, computed from per-minute Flume readings)
@@ -26,14 +27,27 @@ from RachioFlume.flume_client import FlumeClient, WaterReading
 from RachioFlume.rachio_client import RachioClient
 
 # Minutes to wait after Rachio reports inactive before sending the zone-end
-# report. Covers the gap between the last poll where the zone was still active
-# and when it actually stopped, plus time for the collector cycle to persist
-# the session data.
+# report. Covers the gap for the collector cycle to persist session data.
+# Only applies when Rachio goes fully idle (not zone transitions, which are
+# detected immediately).
 RACHIO_POST_ACTIVE_SLACK_MINUTES = 10
 
 _RACHIO_STATE_KEY = "alert::__rachio__::last_active"
 _REPORTED_ZONES_KEY = "reported::zones::{date}"
 _REPORTED_RULES_KEY = "reported::rules::{date}"
+
+
+def _zone_name_matches(session_name: str, lookup_name: str) -> bool:
+    """Check if session zone name matches lookup name (handles partial names).
+
+    Session data uses short names from event summaries (e.g., "Z2 FS"),
+    while active zone API returns full names (e.g., "Z2 FS - Sergio Inner").
+    This function handles both exact matches and prefix matches.
+    """
+    if session_name == lookup_name:
+        return True
+    # Check if one is a prefix of the other
+    return lookup_name.startswith(session_name) or session_name.startswith(lookup_name)
 
 
 class AlertAction(str, Enum):
@@ -93,6 +107,17 @@ def _save_set(db: WaterTrackingDB, key: str, s: set[str]) -> None:
     db.set_metadata(key, json.dumps(sorted(s)))
 
 
+def _load_count_map(db: WaterTrackingDB, key: str) -> dict[str, int]:
+    blob = db.get_metadata(key)
+    if not blob:
+        return {}
+    return json.loads(blob)
+
+
+def _save_count_map(db: WaterTrackingDB, key: str, d: dict[str, int]) -> None:
+    db.set_metadata(key, json.dumps(d))
+
+
 class AlertEngine:
     """Zone-end reporting + rule-based anomaly detection."""
 
@@ -115,83 +140,103 @@ class AlertEngine:
     # Zone-end reporting                                                  #
     # ------------------------------------------------------------------ #
 
-    def _load_rachio_state(self) -> tuple[Optional[datetime], Optional[str]]:
+    def _load_rachio_state(self) -> tuple[Optional[datetime], Optional[str], Optional[int]]:
         blob = self.db.get_metadata(_RACHIO_STATE_KEY)
         if not blob:
-            return None, None
+            return None, None, None
         d = json.loads(blob)
         at_iso = d.get("last_active_at")
         return (
             datetime.fromisoformat(at_iso) if at_iso else None,
             d.get("last_zone"),
+            d.get("last_zone_number"),
         )
 
-    def _save_rachio_state(self, at: datetime, zone_name: str) -> None:
+    def _save_rachio_state(self, at: datetime, zone_name: str, zone_number: int) -> None:
         self.db.set_metadata(
             _RACHIO_STATE_KEY,
-            json.dumps({"last_active_at": at.isoformat(), "last_zone": zone_name}),
+            json.dumps(
+                {
+                    "last_active_at": at.isoformat(),
+                    "last_zone": zone_name,
+                    "last_zone_number": zone_number,
+                }
+            ),
         )
 
+    def _clear_rachio_state(self) -> None:
+        self.db.delete_metadata(_RACHIO_STATE_KEY)
+
+    def _find_zone_session(
+        self, zone_name: str, zone_number: Optional[int], now: datetime
+    ) -> Optional[dict]:
+        """Find the most recent session for a zone, using zone_number if available."""
+        sessions = self.db.get_zone_sessions(now - timedelta(days=1), now)
+
+        # Try matching by zone_number first (more reliable)
+        if zone_number is not None:
+            zone_sessions = [s for s in sessions if s.get("zone_number") == zone_number]
+        else:
+            # Fallback to name matching (handles partial names)
+            zone_sessions = [s for s in sessions if _zone_name_matches(s["zone_name"], zone_name)]
+
+        if not zone_sessions:
+            return None
+
+        # Return most recent session
+        return sorted(
+            zone_sessions,
+            key=lambda s: s.get("end_time") or s.get("start_time") or datetime.min,
+            reverse=True,
+        )[0]
+
     def _send_zone_report(
-        self, zone_name: str, runtime_min: float, avg_gpm: float, total_gal: float
+        self, zone_name: str, runtime_min: float, avg_gpm: float, total_gal: float, cycle: int
     ) -> None:
+        cycle_label = f" (Cycle {cycle})" if cycle > 1 else ""
         msg = (
-            f"Zone '{zone_name}' completed.\n"
+            f"Zone '{zone_name}' completed{cycle_label}.\n"
             f"Runtime: {runtime_min:.0f} min\n"
             f"Avg flow: {avg_gpm:.2f} GPM\n"
             f"Total: {total_gal:.1f} gal"
         )
         self.pushover.send_message(msg, title="RachioFlume: Zone Report", priority=-1)
         self.logger.info(
-            f"Zone-end report sent for '{zone_name}': {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
+            f"Zone-end report sent for '{zone_name}'{cycle_label}: {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
         )
 
     def _check_zone_end_report(
         self,
-        rachio_active: Optional[object],
-        last_rachio_active_at: Optional[datetime],
-        last_rachio_zone: Optional[str],
+        zone_name: str,
+        zone_number: Optional[int],
+        last_active_at: Optional[datetime],
         now: datetime,
         dry_run: bool,
     ) -> bool:
-        """Check if a zone just ended and send the one-per-day report.
+        """Send a P-1 report for a zone that just ended.
+
+        Reports every cycle (no per-day dedup). Includes cycle count in message
+        so repeated runs of the same zone are distinguishable.
 
         Returns True if a report was sent (or would be sent in dry-run).
         """
-        reported = _load_set(self.db, _today_key(_REPORTED_ZONES_KEY, now))
-
-        # Zone was active last cycle but not now → it just ended
-        if rachio_active or last_rachio_active_at is None or last_rachio_zone is None:
-            return False
-
-        slack_cutoff = last_rachio_active_at + timedelta(minutes=RACHIO_POST_ACTIVE_SLACK_MINUTES)
-        if now < slack_cutoff:
-            return False  # still waiting for data to settle
-
-        if last_rachio_zone in reported:
-            self.logger.debug(f"Zone '{last_rachio_zone}' already reported today, skipping")
-            return False
+        counts = _load_count_map(self.db, _today_key(_REPORTED_ZONES_KEY, now))
+        cycle = counts.get(zone_name, 0) + 1
 
         # Look up the session data for this zone
-        sessions = self.db.get_zone_sessions(now - timedelta(days=1), now)
-        zone_sessions = [s for s in sessions if s["zone_name"] == last_rachio_zone]
+        session = self._find_zone_session(zone_name, zone_number, now)
 
-        if zone_sessions:
-            # Most recent session for this zone
-            session = sorted(
-                zone_sessions,
-                key=lambda s: s.get("end_time") or s.get("start_time") or datetime.min,
-                reverse=True,
-            )[0]
+        if session:
             runtime_min = (session.get("duration_seconds") or 0) / 60.0
             avg_gpm = session.get("average_flow_rate") or 0.0
             total_gal = session.get("total_water_used") or 0.0
         else:
             # Fallback: estimate from Flume readings over the irrigation window
             self.logger.warning(
-                f"No session found for zone '{last_rachio_zone}', estimating from Flume readings"
+                f"No session found for zone '{zone_name}' (cycle {cycle}), estimating from Flume readings"
             )
-            readings = self.flume.get_usage(last_rachio_active_at, now, bucket="MIN")
+            window_start = last_active_at or (now - timedelta(hours=1))
+            readings = self.flume.get_usage(window_start, now, bucket="MIN")
             active_readings = [r for r in readings if r.value > 0.05]  # threshold to filter noise
             if active_readings:
                 runtime_min = len(active_readings)
@@ -206,12 +251,12 @@ class AlertEngine:
 
         if not dry_run:
             if runtime_min > 0:
-                self._send_zone_report(last_rachio_zone, runtime_min, avg_gpm, total_gal)
-            reported.add(last_rachio_zone)
-            _save_set(self.db, _today_key(_REPORTED_ZONES_KEY, now), reported)
+                self._send_zone_report(zone_name, runtime_min, avg_gpm, total_gal, cycle)
+            counts[zone_name] = cycle
+            _save_count_map(self.db, _today_key(_REPORTED_ZONES_KEY, now), counts)
         else:
             self.logger.info(
-                f"[DRY RUN] Would report zone '{last_rachio_zone}': {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
+                f"[DRY RUN] Would report zone '{zone_name}' (cycle {cycle}): {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
             )
 
         return True
@@ -314,21 +359,44 @@ class AlertEngine:
             now = datetime.now()
         results: list[dict] = []
 
-        # Single Rachio check per cycle.
+        # --- Rachio zone tracking ---
+        # Load previous state BEFORE saving so we can detect transitions.
+        last_rachio_active_at, last_rachio_zone, last_rachio_zone_number = self._load_rachio_state()
         rachio_active = self.rachio.get_active_zone()
-        if rachio_active and not dry_run:
-            self._save_rachio_state(now, rachio_active.name)
-        last_rachio_active_at, last_rachio_zone = self._load_rachio_state()
+        current_zone_name = rachio_active.name if rachio_active else None
+
+        # Detect zone end: zone changed (transition) or Rachio went idle.
+        zone_to_report: Optional[str] = None
+        zone_to_report_number: Optional[int] = None
+        zone_last_active_at: Optional[datetime] = None
+        if last_rachio_zone is not None and current_zone_name != last_rachio_zone:
+            zone_to_report = last_rachio_zone
+            zone_to_report_number = last_rachio_zone_number
+            zone_last_active_at = last_rachio_active_at
+
+        # Persist current state for next cycle.
+        if not dry_run:
+            if rachio_active:
+                self._save_rachio_state(now, rachio_active.name, rachio_active.zone_number)
+            else:
+                self._clear_rachio_state()
+
+        # Effective values for rule-suppression logic below
         if rachio_active:
             last_rachio_active_at = now
             last_rachio_zone = rachio_active.name
 
-        # --- Zone-end report (one per zone per day, after slack) ---
-        zone_reported = self._check_zone_end_report(
-            rachio_active, last_rachio_active_at, last_rachio_zone, now, dry_run
-        )
-        if zone_reported:
-            results.append({"zone_report": True, "zone": last_rachio_zone})
+        # --- Zone-end report (one per zone per day) ---
+        if zone_to_report is not None:
+            zone_reported = self._check_zone_end_report(
+                zone_to_report,
+                zone_to_report_number,
+                zone_last_active_at,
+                now,
+                dry_run,
+            )
+            if zone_reported:
+                results.append({"zone_report": True, "zone": zone_to_report})
 
         # --- Suppress rule evaluation while irrigating or within slack ---
         suppressed_by: Optional[str] = None
