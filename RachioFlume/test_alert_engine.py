@@ -371,7 +371,8 @@ async def test_zone_report_each_cycle(engine: AlertEngine, rule: AlertRule) -> N
     engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0])  # type: ignore[attr-defined]
     await engine.evaluate()
     assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
-    assert "Cycle" not in engine.pushover.send_message.call_args_list[0][0][0]  # type: ignore[attr-defined] (cycle 1 has no label)
+    # cycle 1 has no label
+    assert "Cycle" not in engine.pushover.send_message.call_args_list[0][0][0]  # type: ignore[attr-defined]
 
     # Cycle 3: Zone B → Zone A → report Zone B (Cycle 1)
     engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]

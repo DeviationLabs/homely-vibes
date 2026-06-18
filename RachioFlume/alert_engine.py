@@ -111,7 +111,7 @@ def _load_count_map(db: WaterTrackingDB, key: str) -> dict[str, int]:
     blob = db.get_metadata(key)
     if not blob:
         return {}
-    return json.loads(blob)
+    return json.loads(blob)  # type: ignore[no-any-return]
 
 
 def _save_count_map(db: WaterTrackingDB, key: str, d: dict[str, int]) -> None:
