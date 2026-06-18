@@ -164,9 +164,6 @@ class AlertEngine:
             ),
         )
 
-    def _clear_rachio_state(self) -> None:
-        self.db.delete_metadata(_RACHIO_STATE_KEY)
-
     def _find_zone_session(
         self, zone_name: str, zone_number: Optional[int], now: datetime
     ) -> Optional[dict]:
@@ -375,11 +372,20 @@ class AlertEngine:
             zone_last_active_at = last_rachio_active_at
 
         # Persist current state for next cycle.
+        # Only save when something changed (zone transition or active→idle).
+        # Don't refresh last_active_at on every idle cycle — that would
+        # keep the rule-suppression window open indefinitely.
         if not dry_run:
-            if rachio_active:
-                self._save_rachio_state(now, rachio_active.name, rachio_active.zone_number)
-            else:
-                self._clear_rachio_state()
+            state_changed = (zone_to_report is not None) or (
+                rachio_active and (last_rachio_zone != rachio_active.name)
+            )
+            if state_changed:
+                if rachio_active:
+                    self._save_rachio_state(now, rachio_active.name, rachio_active.zone_number)
+                else:
+                    # Active→idle transition: keep last_active_at for suppression,
+                    # clear zone to prevent re-detection.
+                    self._save_rachio_state(last_rachio_active_at or now, None, None)
 
         # Effective values for rule-suppression logic below
         if rachio_active:
