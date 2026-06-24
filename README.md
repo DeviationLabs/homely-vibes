@@ -43,6 +43,38 @@ uv run python Tesla/manage_power_clean.py
 uv run python RachioFlume/rfmanager.py
 ```
 
+## Configuration & Secrets
+
+All sensitive data (API keys, passwords, tokens, device IPs) must be stored in `config/local.yaml`, which is **gitignored** and never committed to the repository.
+
+### Setup
+
+1. Copy the template and fill in your values:
+   ```bash
+   cp config/local.yaml.example config/local.yaml
+   # Edit config/local.yaml with your actual credentials and device IPs
+   ```
+
+2. The `config/default.yaml` file contains safe placeholder values and is committed to git.
+
+3. **Never hardcode secrets or device IPs in source code or tests.** Always read from config:
+   ```python
+   from lib.config import get_config
+   cfg = get_config()
+   api_key = cfg.rachio.api_key  # ✅ Good
+   # api_key = "abc123..."        # ❌ Never do this
+   ```
+
+### What goes in local.yaml
+
+- API credentials (Rachio, Flume, Tesla, August, etc.)
+- Device IP addresses
+- Email/SMTP passwords
+- Pushover tokens
+- Any other sensitive data
+
+See `config/default.yaml` for the full structure and `config/local.yaml.example` for a template.
+
 ## Project Components
 
 | Component | Description | Documentation |

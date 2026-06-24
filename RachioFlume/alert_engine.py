@@ -21,7 +21,7 @@ from typing import Optional
 
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
-from RachioFlume.alert_rules import AlertRule
+from RachioFlume.alert_rules import AlertRule, ZoneThreshold
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient, WaterReading
 from RachioFlume.rachio_client import RachioClient
@@ -132,13 +132,85 @@ class AlertEngine:
         pushover: Pushover,
         db: WaterTrackingDB,
         rules: list[AlertRule],
+        zone_thresholds: Optional[dict[int, ZoneThreshold]] = None,
+        absolute_gpm: float = 0.5,
+        percent_above: float = 10.0,
+        min_runtime_minutes: int = 5,
     ) -> None:
         self.flume = flume_client
         self.rachio = rachio_client
         self.pushover = pushover
         self.db = db
         self.rules = rules
+        self.zone_thresholds = zone_thresholds or {}
+        self.absolute_gpm = absolute_gpm
+        self.percent_above = percent_above
+        self.min_runtime_minutes = min_runtime_minutes
         self.logger = get_logger(__name__)
+
+    # ------------------------------------------------------------------ #
+    # Zone threshold checking                                             #
+    # ------------------------------------------------------------------ #
+
+    def _get_zone_threshold(self, zone_number: Optional[int]) -> tuple[float, float]:
+        """Get threshold for a zone.
+
+        Returns:
+            (threshold_gpm, avg_gpm) tuple
+        """
+        if zone_number is None or zone_number not in self.zone_thresholds:
+            # Unknown zone: default to avg_gpm=0, threshold=0.5
+            return self.absolute_gpm, 0.0
+
+        zt = self.zone_thresholds[zone_number]
+        threshold = zt.compute_threshold(self.absolute_gpm, self.percent_above)
+        return threshold, zt.avg_gpm
+
+    def _check_zone_threshold(
+        self,
+        zone_name: str,
+        zone_number: Optional[int],
+        avg_gpm: float,
+        runtime_min: float,
+        now: datetime,
+        dry_run: bool,
+    ) -> bool:
+        """Check if zone flow exceeds threshold and send alert if so.
+
+        Only fires if runtime_min > self.min_runtime_minutes (short runs
+        are excluded to avoid false positives from test cycles or glitches).
+
+        Returns True if alert was sent (or would be sent in dry-run).
+        """
+        if runtime_min <= self.min_runtime_minutes:
+            return False
+
+        threshold, expected_avg = self._get_zone_threshold(zone_number)
+
+        if avg_gpm <= threshold:
+            return False
+
+        # Alert: zone flow exceeds threshold
+        deviation = avg_gpm - expected_avg
+        deviation_pct = (deviation / expected_avg * 100) if expected_avg > 0 else 0
+
+        msg = (
+            f"Zone '{zone_name}' flow anomaly detected.\n"
+            f"Avg flow: {avg_gpm:.2f} GPM (threshold: {threshold:.2f} GPM)\n"
+            f"Deviation: +{deviation:.2f} GPM ({deviation_pct:.0f}%)"
+        )
+
+        if not dry_run:
+            self.pushover.send_message(msg, title="RachioFlume: Zone Anomaly", priority=2)
+            self.logger.warning(
+                f"Zone anomaly alert sent for '{zone_name}': {avg_gpm:.2f} GPM > {threshold:.2f} GPM"
+            )
+        else:
+            self.logger.info(
+                f"[DRY RUN] Would alert zone anomaly for '{zone_name}': {avg_gpm:.2f} GPM > {threshold:.2f} GPM"
+            )
+
+        return True
 
     # ------------------------------------------------------------------ #
     # Zone-end reporting                                                  #
@@ -255,12 +327,20 @@ class AlertEngine:
         if not dry_run:
             if runtime_min > 0:
                 self._send_zone_report(zone_name, runtime_min, avg_gpm, total_gal, cycle)
+                # Check if flow exceeds zone threshold
+                self._check_zone_threshold(
+                    zone_name, zone_number, avg_gpm, runtime_min, now, dry_run
+                )
             counts[zone_name] = cycle
             _save_count_map(self.db, _today_key(_REPORTED_ZONES_KEY, now), counts)
         else:
             self.logger.info(
                 f"[DRY RUN] Would report zone '{zone_name}' (cycle {cycle}): {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
             )
+            if runtime_min > 0:
+                self._check_zone_threshold(
+                    zone_name, zone_number, avg_gpm, runtime_min, now, dry_run
+                )
 
         return True
 
