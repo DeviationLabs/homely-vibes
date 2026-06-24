@@ -12,7 +12,7 @@ class TestRebootTvHandler:
     def test_connect_fails_returns_1(self, mock_cls: Mock) -> None:
         mock_client = MagicMock()
         mock_client.__enter__ = Mock(
-            side_effect=ConnectionError("Failed to get TV ready at 192.168.1.4")
+            side_effect=ConnectionError("Failed to get TV ready at 192.0.2.4")
         )
         mock_client.__exit__ = Mock(return_value=False)
         mock_cls.return_value = mock_client
@@ -54,7 +54,7 @@ class TestShowStatusHandler:
     def test_connect_fails_returns_1(self, mock_cls: Mock) -> None:
         mock_client = MagicMock()
         mock_client.__enter__ = Mock(
-            side_effect=ConnectionError("Failed to get TV ready at 192.168.1.4")
+            side_effect=ConnectionError("Failed to get TV ready at 192.0.2.4")
         )
         mock_client.__exit__ = Mock(return_value=False)
         mock_cls.return_value = mock_client

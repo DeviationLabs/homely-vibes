@@ -233,12 +233,25 @@ class AlertRuleConfig:
 
 
 @dataclass
+class ZoneThresholdConfig:
+    """Per-zone flow threshold for anomaly detection"""
+
+    name: str
+    avg_gpm: float
+
+
+@dataclass
 class RachioFlumeAlertsConfig:
     """Usage alert configuration for RachioFlume"""
 
     enabled: bool
     default_retrigger_minutes: int
+    threshold_mode: str  # "adaptive", "absolute", or "percent"
+    absolute_gpm: float  # min deviation above average (GPM)
+    percent_above: float  # min deviation above average (%)
+    min_runtime_minutes: int  # zone must run this long before threshold alert fires
     rules: list[AlertRuleConfig]
+    zone_thresholds: Dict[int, ZoneThresholdConfig]  # zone_number -> threshold
 
 
 @dataclass
@@ -306,6 +319,14 @@ class VoiceNotesConfig:
 
 
 @dataclass
+class ProdControllerConfig:
+    """Prod controller remote DB host configuration"""
+
+    ssh_host: str
+    db_path: str
+
+
+@dataclass
 class Config:
     """Root configuration for homely-vibes"""
 
@@ -325,6 +346,7 @@ class Config:
     browser_alert: BrowserAlertConfig
     personal_cal_sync: PersonalCalSyncConfig
     voice_notes: VoiceNotesConfig
+    prod_controller: ProdControllerConfig
     launch_jobs: LaunchJobsConfig
     my_external_ip: str
     seconds_in_day: int
@@ -402,11 +424,17 @@ def _dict_to_config(cfg_dict: dict) -> Config:  # type: ignore
                     # Plain list (e.g., list[str])
                     kwargs[field_name] = value
             elif origin is dict:
-                # Handle Dict[str, SomeDataclass] types
+                # Handle Dict[K, SomeDataclass] types
                 args = get_args(field_type)
                 if len(args) >= 2 and is_dataclass(args[1]):
                     value_class: type = args[1]  # type: ignore[assignment]
-                    kwargs[field_name] = {k: build_nested(v, value_class) for k, v in value.items()}
+                    key_type = args[0]
+                    converted = {}
+                    for k, v in value.items():
+                        # Convert key type (e.g., str "1" -> int 1)
+                        ck = key_type(k) if key_type is not str and isinstance(k, str) else k
+                        converted[ck] = build_nested(v, value_class)
+                    kwargs[field_name] = converted
                 else:
                     kwargs[field_name] = value
             elif is_dataclass(field_type):

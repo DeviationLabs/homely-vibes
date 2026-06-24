@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from RachioFlume.alert_engine import AlertAction, AlertEngine, AlertState
-from RachioFlume.alert_rules import AlertRule
+from RachioFlume.alert_rules import AlertRule, ZoneThreshold
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import WaterReading
 from RachioFlume.rachio_client import Zone
@@ -39,12 +39,19 @@ def engine(db: WaterTrackingDB, rule: AlertRule) -> AlertEngine:
     rachio.get_active_zone.return_value = None
     pushover = MagicMock()
     pushover.send_message.return_value = True
+    # Provide zone thresholds high enough that test flow rates don't trigger anomalies
+    zone_thresholds = {
+        1: ZoneThreshold(zone_number=1, name="Z1*", avg_gpm=10.0),
+        2: ZoneThreshold(zone_number=2, name="Z2*", avg_gpm=10.0),
+        3: ZoneThreshold(zone_number=3, name="Z3*", avg_gpm=10.0),
+    }
     return AlertEngine(
         flume_client=flume,
         rachio_client=rachio,
         pushover=pushover,
         db=db,
         rules=[rule],
+        zone_thresholds=zone_thresholds,
     )
 
 
