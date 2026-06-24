@@ -33,6 +33,32 @@ Both scripts use:
 - **Email** via `lib.Mailer`
 - **Pushover** via the `NetworkCheck` app token (`config/local.yaml` → `pushover.tokens.NetworkCheck`)
 
+## Prerequisites
+
+### Speedtest CLI
+
+The uplink test requires the [Speedtest CLI by Ookla](https://www.speedtest.net/apps/cli). It is auto-detected via `PATH`.
+
+**macOS:**
+```bash
+brew install speedtest
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt-get install speedtest
+```
+
+**Linux (Raspberry Pi / snap):**
+```bash
+sudo snap install speedtest
+```
+
+Verify with:
+```bash
+speedtest --version
+```
+
 ## Usage
 
 ```bash

@@ -8,6 +8,7 @@ via email and pushover notifications. Supports retry logic for unreliable connec
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -23,7 +24,7 @@ logger = SystemLogger.get_logger(__name__)
 pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NetworkCheck"])
 
 # Constants
-SPEEDTEST_CMD = "/usr/bin/speedtest"
+SPEEDTEST_CMD = shutil.which("speedtest") or "/usr/bin/speedtest"
 SPEEDTEST_TIMEOUT = 600
 
 

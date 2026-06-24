@@ -10,21 +10,14 @@ WHITE  := $(shell tput -Txterm setaf 7)
 CYAN   := $(shell tput -Txterm setaf 6)
 RESET  := $(shell tput -Txterm sgr0)
 
-PYTHON_VERSION ?= 3.13.7
-
 all: help
 
 ## Environment setup:
 setup:
-	@echo "🚀 Setting up the development environment with python $(PYTHON_VERSION)"
-	@pyenv install $(PYTHON_VERSION) -s && pyenv local $(PYTHON_VERSION)  || (echo "🔴 Failed to run pyenv. Please review the README.md for setup instructions" && exit 1);
-	@if [ "$$(python3 -V)" != "Python $(PYTHON_VERSION)" ]; then \
-	    echo "Found python version: $$(python3 -V)"; \
-		echo "${RED}Recommended python version not in path${RESET}\n${YELLOW}Please review the README.md for setup instructions${RESET}" && exit 1; \
-	fi
+	@echo "🚀 Setting up the development environment"
 	@brew upgrade
 	@brew install libomp pre-commit yamllint -q
-	@echo "📥 Installing project dependencies for $(PYTHON_VERSION)..."
+	@echo "📥 Installing project dependencies..."
 	@uv sync --extra dev
 	@echo "📦 Initializing Git submodules..."
 	@git submodule update --init --recursive
