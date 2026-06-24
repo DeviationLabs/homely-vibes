@@ -9,7 +9,7 @@ A comprehensive home automation and monitoring system with Python-based IoT inte
 ## Quick Start
 
 ### Prerequisites
-- Python 3.13+ (managed via pyenv)
+- Python 3.13+
 - [uv](https://docs.astral.sh/uv/) - Fast Python package manager
 - [pre-commit](https://pre-commit.com/) - Git hooks for code quality
 
@@ -20,11 +20,10 @@ A comprehensive home automation and monitoring system with Python-based IoT inte
 git clone https://github.com/DeviationLabs/homely-vibes.git
 cd homely-vibes
 
-# Setup development environment (installs Python 3.13.7, dependencies, and git hooks)
+# Setup development environment (installs dependencies and git hooks)
 make setup
 
 # Or manual setup:
-pyenv install 3.13.7 && pyenv local 3.13.7
 uv sync --extra dev
 pre-commit install
 ```
