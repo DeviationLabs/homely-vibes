@@ -333,14 +333,14 @@ def main() -> int:
     print("\n  Checking for threshold violations in recent data:")
     violations = 0
     for session in sessions:
-        zone_num: int | None = session.get("zone_number")
+        session_zone_num: int | None = session.get("zone_number")
         avg_gpm = session.get("average_flow_rate") or 0
-        if avg_gpm > 0 and zone_num:
-            threshold, expected = engine._get_zone_threshold(zone_num)
+        if avg_gpm > 0 and session_zone_num:
+            threshold, expected = engine._get_zone_threshold(session_zone_num)
             if avg_gpm > threshold:
-                zone_name = session.get("zone_name", f"Zone {zone_num}")
+                zone_name = session.get("zone_name", f"Zone {session_zone_num}")
                 print(
-                    f"    ⚠ Zone {zone_num} ({zone_name}): {avg_gpm:.2f} GPM > {threshold:.2f} GPM threshold"
+                    f"    ⚠ Zone {session_zone_num} ({zone_name}): {avg_gpm:.2f} GPM > {threshold:.2f} GPM threshold"
                 )
                 violations += 1
 
