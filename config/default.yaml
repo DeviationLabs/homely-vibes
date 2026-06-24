@@ -235,11 +235,33 @@ rachio_flume:
   alerts:
     enabled: true
     default_retrigger_minutes: 30
+    # Zone-end anomaly threshold: alert when flow exceeds zone avg by the
+    # greater of absolute_gpm or (percent_above / 100 * avg_gpm).
+    # "adaptive" = max(absolute_gpm, percent_above/100 * avg_gpm)
+    threshold_mode: adaptive
+    absolute_gpm: 0.5        # min deviation above average (GPM)
+    percent_above: 10        # min deviation above average (%)
+    min_runtime_minutes: 5   # zone must run this long (min) before threshold alert fires
     rules:
       - {name: "Pipe Break", min_gpm: 8.0, duration_minutes: 10}
       - {name: "High Flow",  min_gpm: 5.4, duration_minutes: 4}
       - {name: "Mid Flow",   min_gpm: 2.6, duration_minutes: 14}
       - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
+    # Per-zone average flow rates (GPM) from historical data.
+    # Alert fires when zone-end flow > avg + max(absolute_gpm, percent_above/100 * avg).
+    zone_thresholds:
+      1:  {name: "Z1*",  avg_gpm: 5.0}
+      2:  {name: "Z2*",  avg_gpm: 6.5}
+      3:  {name: "Z3*",  avg_gpm: 2.0}
+      4:  {name: "Z4*",  avg_gpm: 3.0}
+      5:  {name: "Z5*",  avg_gpm: 3.5}
+      6:  {name: "Z6*",  avg_gpm: 4.5}
+      7:  {name: "Z7*",  avg_gpm: 2.5}
+      8:  {name: "Z8*",  avg_gpm: 3.0}
+      9:  {name: "Z9*",  avg_gpm: 1.5}
+      10: {name: "Z10*", avg_gpm: 7.0}
+      11: {name: "Z11*", avg_gpm: 6.0}
+      12: {name: "Z12*", avg_gpm: 0.75}
 
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:
@@ -262,6 +284,11 @@ launch_jobs:
     minute: 30
     stdout_path: ${paths.home}/bin/knowledge/personal/wa_summary.out.log
     stderr_path: ${paths.home}/bin/knowledge/personal/wa_summary.err.log
+
+# === Aibo (remote DB host for integration tests) ===
+aibo:
+  ssh_host: ""          # e.g. "abutala@aibo"
+  db_path: ""           # e.g. "~/logs/water_tracking.db"
 
 # === Constants ===
 my_external_ip: "hoiboi.tplinkdns.com"

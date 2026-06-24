@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 from SamsungFrame.samsung_client import SamsungFrameClient
 
-TV_HOST = "192.168.1.4"
+TV_HOST = "192.0.2.4"
 TOKEN_FILE = "/tmp/token.txt"
 
 

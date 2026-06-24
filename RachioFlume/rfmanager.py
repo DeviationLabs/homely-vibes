@@ -6,7 +6,7 @@ import argparse
 import sys
 from time import sleep
 from RachioFlume.alert_engine import AlertEngine
-from RachioFlume.alert_rules import load_rules_from_config
+from RachioFlume.alert_rules import load_rules_from_config, load_zone_thresholds_from_config
 from RachioFlume.collector import WaterTrackingCollector
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient
@@ -154,12 +154,18 @@ def main() -> int:
 def _build_alert_engine() -> AlertEngine:
     """Construct an AlertEngine sharing the rfmanager-level Pushover instance."""
     rules = load_rules_from_config()
+    zone_thresholds = load_zone_thresholds_from_config()
+    alerts_cfg = cfg.rachio_flume.alerts
     return AlertEngine(
         flume_client=FlumeClient(),
         rachio_client=RachioClient(),
         pushover=pushover,
         db=WaterTrackingDB(DB_PATH),
         rules=rules,
+        zone_thresholds=zone_thresholds,
+        absolute_gpm=alerts_cfg.absolute_gpm,
+        percent_above=alerts_cfg.percent_above,
+        min_runtime_minutes=alerts_cfg.min_runtime_minutes,
     )
 
 

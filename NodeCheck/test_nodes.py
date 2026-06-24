@@ -16,9 +16,9 @@ class TestNode:
 
     def test_node_can_be_instantiated(self) -> None:
         """Test that GenericNode can be instantiated directly"""
-        node = GenericNode("test", NodeConfig("192.168.1.1", NodeType.GENERIC))
+        node = GenericNode("test", NodeConfig("192.0.2.1", NodeType.GENERIC))
         assert node.name == "test"
-        assert node.config.ip == "192.168.1.1"
+        assert node.config.ip == "192.0.2.1"
 
 
 class TestFoscamNode:
@@ -26,7 +26,7 @@ class TestFoscamNode:
 
     @pytest.fixture
     def foscam_config(self) -> NodeConfig:
-        return NodeConfig("192.168.1.51", NodeType.FOSCAM, "testuser", "testpass")
+        return NodeConfig("192.0.2.51", NodeType.FOSCAM, "testuser", "testpass")
 
     @pytest.fixture
     def foscam_node(self, foscam_config: NodeConfig) -> FoscamNode:
@@ -35,7 +35,7 @@ class TestFoscamNode:
     def test_init(self, foscam_node: FoscamNode, foscam_config: NodeConfig) -> None:
         """Test FoscamNode initialization"""
         assert foscam_node.name == "TestCam"
-        assert foscam_node.config.ip == "192.168.1.51"
+        assert foscam_node.config.ip == "192.0.2.51"
         assert foscam_node.config == foscam_config
         assert foscam_node.is_online is False
 
@@ -48,7 +48,7 @@ class TestFoscamNode:
 
         assert result is True
         assert foscam_node.is_online is True
-        mock_ping.assert_called_once_with(node="192.168.1.51", desired_up=True)
+        mock_ping.assert_called_once_with(node="192.0.2.51", desired_up=True)
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
     def test_check_state_failure(self, mock_ping: Any, foscam_node: FoscamNode) -> None:
@@ -68,7 +68,9 @@ class TestFoscamNode:
 
         result = foscam_node.reboot_node()
 
-        expected_url = "http://192.168.1.51:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=testuser&pwd=testpass"
+        expected_url = (
+            "http://192.0.2.51:88//cgi-bin/CGIProxy.fcgi?cmd=rebootSystem&usr=testuser&pwd=testpass"
+        )
         mock_http_req.assert_called_once_with(expected_url)
         assert "reboot successful" in result
 
@@ -102,7 +104,7 @@ class TestFoscamNode:
         result = foscam_node.heartbeat()
 
         assert result is False
-        mock_ping.assert_called_once_with(node="192.168.1.51", count=3, desired_up=True)
+        mock_ping.assert_called_once_with(node="192.0.2.51", count=3, desired_up=True)
 
     # Note: Removed FoscamImager tests due to import complexity during full test suite
     # These would be better suited for integration tests
@@ -113,7 +115,7 @@ class TestWindowsNode:
 
     @pytest.fixture
     def windows_config(self) -> NodeConfig:
-        return NodeConfig("192.168.1.100", NodeType.WINDOWS, "testuser", "testpass")
+        return NodeConfig("192.0.2.100", NodeType.WINDOWS, "testuser", "testpass")
 
     @pytest.fixture
     def windows_node(self, windows_config: NodeConfig) -> WindowsNode:
@@ -122,7 +124,7 @@ class TestWindowsNode:
     def test_init(self, windows_node: WindowsNode, windows_config: NodeConfig) -> None:
         """Test WindowsNode initialization"""
         assert windows_node.name == "TestPC"
-        assert windows_node.config.ip == "192.168.1.100"
+        assert windows_node.config.ip == "192.0.2.100"
         assert windows_node.config == windows_config
         assert windows_node.is_online is False
 
@@ -134,7 +136,7 @@ class TestWindowsNode:
         result = windows_node.reboot_node()
 
         expected_cmd = 'cmd /c "shutdown /r /f & ping localhost -n 3 > nul"'
-        mock_ssh_cmd.assert_called_once_with("192.168.1.100", "testuser", "testpass", expected_cmd)
+        mock_ssh_cmd.assert_called_once_with("192.0.2.100", "testuser", "testpass", expected_cmd)
         assert "reboot initiated" in result
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
@@ -149,9 +151,9 @@ class TestWindowsNode:
         result = windows_node.heartbeat()
 
         assert result is True
-        mock_ping.assert_called_once_with(node="192.168.1.100", count=3, desired_up=True)
+        mock_ping.assert_called_once_with(node="192.0.2.100", count=3, desired_up=True)
         mock_ssh_cmd.assert_called_once_with(
-            "192.168.1.100", "testuser", "testpass", "net statistics workstation"
+            "192.0.2.100", "testuser", "testpass", "net statistics workstation"
         )
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
@@ -182,7 +184,7 @@ class TestGenericNode:
 
     @pytest.fixture
     def generic_config(self) -> NodeConfig:
-        return NodeConfig("192.168.1.200", NodeType.GENERIC)
+        return NodeConfig("192.0.2.200", NodeType.GENERIC)
 
     @pytest.fixture
     def generic_node(self, generic_config: NodeConfig) -> GenericNode:
@@ -191,7 +193,7 @@ class TestGenericNode:
     def test_init(self, generic_node: GenericNode, generic_config: NodeConfig) -> None:
         """Test GenericNode initialization"""
         assert generic_node.name == "TestDevice"
-        assert generic_node.config.ip == "192.168.1.200"
+        assert generic_node.config.ip == "192.0.2.200"
         assert generic_node.config == generic_config
         assert generic_node.is_online is False
 
@@ -209,7 +211,7 @@ class TestGenericNode:
         result = generic_node.heartbeat()
 
         assert result is True
-        mock_ping.assert_called_once_with(node="192.168.1.200", count=3, desired_up=True)
+        mock_ping.assert_called_once_with(node="192.0.2.200", count=3, desired_up=True)
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
     def test_heartbeat_failure(self, mock_ping: Any, generic_node: GenericNode) -> None:
@@ -219,7 +221,7 @@ class TestGenericNode:
         result = generic_node.heartbeat()
 
         assert result is False
-        mock_ping.assert_called_once_with(node="192.168.1.200", count=3, desired_up=True)
+        mock_ping.assert_called_once_with(node="192.0.2.200", count=3, desired_up=True)
 
 
 class TestSomfyMyLinkNode:
@@ -228,7 +230,7 @@ class TestSomfyMyLinkNode:
     @pytest.fixture
     def mylink_config(self) -> NodeConfig:
         return NodeConfig(
-            ip="192.168.1.43",
+            ip="192.0.2.43",
             node_type=NodeType.MYLINK,
             auth_token="test-token-abc",  # nosecret
         )
@@ -256,8 +258,8 @@ class TestSomfyMyLinkNode:
         mock_conn.return_value = self._make_sock_mock(response.encode())
 
         assert mylink_node.heartbeat() is True
-        mock_ping.assert_called_once_with(node="192.168.1.43", count=3, desired_up=True)
-        mock_conn.assert_called_once_with(("192.168.1.43", 44100), timeout=4)
+        mock_ping.assert_called_once_with(node="192.0.2.43", count=3, desired_up=True)
+        mock_conn.assert_called_once_with(("192.0.2.43", 44100), timeout=4)
 
     @patch("NodeCheck.nodes.NetHelpers.ping_output")
     def test_heartbeat_ping_failure_short_circuits(
@@ -352,7 +354,7 @@ class TestSomfyMyLinkNode:
         self, mock_ping: Any, mock_conn: Any
     ) -> None:
         """auth_token unset -> skip API call, return ping result with a warning"""
-        config = NodeConfig(ip="192.168.1.43", node_type=NodeType.MYLINK, auth_token=None)
+        config = NodeConfig(ip="192.0.2.43", node_type=NodeType.MYLINK, auth_token=None)
         node = SomfyMyLinkNode("Somfy", config)
         mock_ping.return_value = True
 
@@ -364,7 +366,7 @@ class TestSomfyMyLinkNode:
     def test_heartbeat_uses_port_override(self, mock_ping: Any, mock_conn: Any) -> None:
         """NodeConfig.port overrides the default 44100"""
         config = NodeConfig(
-            ip="192.168.1.43",
+            ip="192.0.2.43",
             node_type=NodeType.MYLINK,
             auth_token="tok",  # nosecret
             port=55555,
@@ -375,7 +377,7 @@ class TestSomfyMyLinkNode:
         mock_conn.return_value = self._make_sock_mock(response.encode())
 
         assert node.heartbeat() is True
-        mock_conn.assert_called_once_with(("192.168.1.43", 55555), timeout=4)
+        mock_conn.assert_called_once_with(("192.0.2.43", 55555), timeout=4)
 
 
 if __name__ == "__main__":

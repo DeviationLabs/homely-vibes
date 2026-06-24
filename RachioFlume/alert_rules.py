@@ -24,6 +24,22 @@ class AlertRule(BaseModel):
     )
 
 
+class ZoneThreshold(BaseModel):
+    """Per-zone flow threshold for anomaly detection."""
+
+    zone_number: int
+    name: str
+    avg_gpm: float
+
+    def compute_threshold(self, absolute_gpm: float, percent_above: float) -> float:
+        """Compute effective alert threshold.
+
+        threshold = avg_gpm + max(absolute_gpm, percent_above/100 * avg_gpm)
+        """
+        deviation = max(absolute_gpm, percent_above / 100.0 * self.avg_gpm)
+        return self.avg_gpm + deviation
+
+
 def load_rules_from_config() -> list[AlertRule]:
     """Build AlertRule list from `cfg.rachio_flume.alerts`."""
     cfg = get_config()
@@ -38,3 +54,17 @@ def load_rules_from_config() -> list[AlertRule]:
         )
         for r in alerts_cfg.rules
     ]
+
+
+def load_zone_thresholds_from_config() -> dict[int, ZoneThreshold]:
+    """Build zone threshold map from cfg.rachio_flume.alerts.zone_thresholds."""
+    cfg = get_config()
+    alerts_cfg = cfg.rachio_flume.alerts
+    thresholds = {}
+    for zone_num, zt_cfg in alerts_cfg.zone_thresholds.items():
+        thresholds[zone_num] = ZoneThreshold(
+            zone_number=zone_num,
+            name=zt_cfg.name,
+            avg_gpm=zt_cfg.avg_gpm,
+        )
+    return thresholds

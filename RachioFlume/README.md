@@ -9,6 +9,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 - **Data Correlation**: Match watering events with water usage patterns
 - **Usage Alerts** (`alert_engine.py`):
   - **Zone-end reports**: One P-1 Pushover notification per zone per day, sent after the zone finishes irrigating (10-min slack for data to settle). Reports runtime, precise avg GPM, and total gallons.
+  - **Zone anomaly detection**: Per-zone flow thresholds (adaptive: `avg + max(0.5 GPM, 10% of avg)`). P2 emergency alert when zone-end flow exceeds threshold. Unknown zones default to 0.5 GPM threshold.
   - **Anomaly rules**: Pipe Break / High Flow / Mid Flow / Low Flow / Leak — P2 (emergency), at most once per day per rule. Uses coefficient-of-variation filter to reject spiky noise on low-flow rules.
   - Suppressed during Rachio irrigation; mute support; P0 "all clear" on active→clear transition
 - **Synthetic Simulator** (`simulate_alerts.py`): Replay a YAML-defined scenario through the alert engine without hitting real APIs or Pushover — see [TESTABILITY.md](TESTABILITY.md)
@@ -235,6 +236,7 @@ kill <process_id>
 6. **AlertEngine** (`alert_engine.py`) + **AlertRule** (`alert_rules.py`)
    - Runs at the end of each collector cycle
    - **Zone-end reporting**: detects when a Rachio zone finishes, waits for slack, sends one P-1 report per zone per day with runtime, avg GPM, total gallons
+   - **Zone anomaly detection**: checks zone-end flow against per-zone thresholds (configured in `config/default.yaml` under `rachio_flume.alerts.zone_thresholds`). Alerts at P2 when flow exceeds `avg + max(0.5 GPM, 10% of avg)`. Unknown zones default to 0.5 GPM threshold.
    - **Anomaly rules**: evaluates each rule's predicate against trailing per-minute Flume readings — requires mean ≥ threshold AND CV ≤ max_cv (coefficient-of-variation filter rejects spiky noise)
    - Anomaly fires at P2 (emergency), at most once per day per rule; P0 clear on active→clear
    - Suppressed during (and just after) Rachio irrigation
@@ -312,9 +314,48 @@ uv run python -m pytest RachioFlume/test_alert_engine.py -v
 # Synthetic scenario assertions
 uv run python -m pytest RachioFlume/test_alert_simulation.py -v
 
+# Zone threshold integration test (fetches DB from Aibo)
+uv run python -m pytest RachioFlume/test_zone_thresholds.py -v
+# Or standalone:
+python RachioFlume/test_zone_thresholds.py
+
 # Visual playback of a scenario (events to screen, no Pushover)
 uv run python -m RachioFlume.rfmanager simulate
 ```
+
+### Zone Threshold Integration Test
+
+The `test_zone_thresholds.py` integration test validates the zone anomaly detection logic against production data:
+
+1. **Fetches the production database** from Aibo (`192.168.1.200`) via SCP
+2. **Loads zone thresholds** from config (12 zones with per-zone avg GPM)
+3. **Tests threshold computation** for known/unknown zones
+4. **Simulates zone-end scenarios** with real historical data
+5. **Checks for threshold violations** in recent production sessions
+
+**Threshold formula** (adaptive mode):
+```
+threshold = avg_gpm + max(absolute_gpm, percent_above/100 × avg_gpm)
+```
+
+| Zone | Avg GPM | Threshold |
+|------|---------|-----------|
+| Z1   | 5.00    | 5.50      |
+| Z2   | 6.50    | 7.15      |
+| Z3   | 2.00    | 2.50      |
+| Z4   | 3.00    | 3.50      |
+| Z5   | 3.50    | 4.00      |
+| Z6   | 4.50    | 5.00      |
+| Z7   | 2.50    | 3.00      |
+| Z8   | 3.00    | 3.50      |
+| Z9   | 1.50    | 2.00      |
+| Z10  | 7.00    | 7.70      |
+| Z11  | 6.00    | 6.60      |
+| Z12  | 0.75    | 1.25      |
+
+**Unknown zones** (not in config) default to `avg_gpm=0`, yielding a 0.5 GPM threshold — any flow triggers an alert.
+
+**Requirements**: SSH access to Aibo (`ssh abutala@aibo`) must work without password prompt (key-based auth).
 
 ## Development
 
