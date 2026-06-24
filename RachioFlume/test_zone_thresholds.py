@@ -1,7 +1,7 @@
-"""Integration test for zone threshold checking with real Aibo database.
+"""Integration test for zone threshold checking with production database.
 
 This test validates the zone threshold logic by:
-1. Fetching the production database from Aibo (configured in config/local.yaml)
+1. Fetching the production database from prod controller (configured in config/local.yaml)
 2. Testing threshold computation for all configured zones
 3. Simulating zone-end scenarios with actual historical data
 4. Verifying alert behavior for known/unknown zones
@@ -12,8 +12,10 @@ Or standalone: python RachioFlume/test_zone_thresholds.py
 
 import subprocess
 import tempfile
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,32 +26,32 @@ from RachioFlume.data_storage import WaterTrackingDB
 from lib.config import get_config, reset_config
 
 
-def _get_aibo_config():
-    """Load Aibo SSH config from config/local.yaml."""
+def _get_prod_controller_config() -> tuple[str, str]:
+    """Load prod controller SSH config from config/local.yaml."""
     cfg = get_config()
-    return cfg.aibo.ssh_host, cfg.aibo.db_path
+    return cfg.prod_controller.ssh_host, cfg.prod_controller.db_path
 
 
 @pytest.fixture(scope="module")
-def aibo_db_path() -> str:
-    """Fetch the production database from Aibo for testing."""
-    aibo_host, aibo_db = _get_aibo_config()
-    if not aibo_host or not aibo_db:
-        pytest.skip("Aibo SSH config not set in config/local.yaml")
+def prod_db_path() -> Generator[str, None, None]:
+    """Fetch the production database from prod controller for testing."""
+    host, db_path = _get_prod_controller_config()
+    if not host or not db_path:
+        pytest.skip("Prod controller SSH config not set in config/local.yaml")
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         tmp_path = tmp.name
 
     try:
         subprocess.run(
-            ["scp", f"{aibo_host}:{aibo_db}", tmp_path],
+            ["scp", f"{host}:{db_path}", tmp_path],
             check=True,
             capture_output=True,
             timeout=30,
         )
         yield tmp_path
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        pytest.skip(f"Could not fetch DB from Aibo: {e}")
+        pytest.skip(f"Could not fetch DB from prod controller: {e}")
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
@@ -62,9 +64,9 @@ def zone_thresholds() -> dict[int, ZoneThreshold]:
 
 
 @pytest.fixture
-def mock_engine(aibo_db_path: str, zone_thresholds: dict[int, ZoneThreshold]) -> AlertEngine:
+def mock_engine(prod_db_path: str, zone_thresholds: dict[int, ZoneThreshold]) -> AlertEngine:
     """Create an AlertEngine with real DB and mocked clients."""
-    db = WaterTrackingDB(aibo_db_path)
+    db = WaterTrackingDB(prod_db_path)
     flume = MagicMock()
     rachio = MagicMock()
     rachio.get_active_zone.return_value = None
@@ -89,7 +91,7 @@ def mock_engine(aibo_db_path: str, zone_thresholds: dict[int, ZoneThreshold]) ->
 class TestZoneThresholdComputation:
     """Test threshold computation logic."""
 
-    def test_known_zone_threshold(self, zone_thresholds: dict[int, ZoneThreshold]):
+    def test_known_zone_threshold(self, zone_thresholds: dict[int, ZoneThreshold]) -> None:
         """Verify threshold computation for known zones."""
         # Zone 10: avg=7.0, threshold = 7.0 + max(0.5, 0.10*7.0) = 7.0 + 0.7 = 7.7
         zt = zone_thresholds.get(10)
@@ -99,7 +101,7 @@ class TestZoneThresholdComputation:
         threshold = zt.compute_threshold(absolute_gpm=0.5, percent_above=10.0)
         assert threshold == pytest.approx(7.7, rel=0.01)
 
-    def test_small_zone_threshold(self, zone_thresholds: dict[int, ZoneThreshold]):
+    def test_small_zone_threshold(self, zone_thresholds: dict[int, ZoneThreshold]) -> None:
         """Verify threshold for small zones uses absolute_gpm floor."""
         # Zone 12: avg=0.75, threshold = 0.75 + max(0.5, 0.10*0.75) = 0.75 + 0.5 = 1.25
         zt = zone_thresholds.get(12)
@@ -109,7 +111,7 @@ class TestZoneThresholdComputation:
         threshold = zt.compute_threshold(absolute_gpm=0.5, percent_above=10.0)
         assert threshold == pytest.approx(1.25, rel=0.01)
 
-    def test_all_zones_configured(self, zone_thresholds: dict[int, ZoneThreshold]):
+    def test_all_zones_configured(self, zone_thresholds: dict[int, ZoneThreshold]) -> None:
         """Verify all 12 enabled zones have thresholds."""
         assert len(zone_thresholds) == 12
         for zone_num in range(1, 13):
@@ -119,25 +121,25 @@ class TestZoneThresholdComputation:
 class TestZoneThresholdChecking:
     """Test zone threshold checking with real database."""
 
-    def test_get_zone_threshold_known_zone(self, mock_engine: AlertEngine):
+    def test_get_zone_threshold_known_zone(self, mock_engine: AlertEngine) -> None:
         """Test threshold lookup for known zone."""
         threshold, avg_gpm = mock_engine._get_zone_threshold(zone_number=10)
         assert avg_gpm == 7.0
         assert threshold == pytest.approx(7.7, rel=0.01)
 
-    def test_get_zone_threshold_unknown_zone(self, mock_engine: AlertEngine):
+    def test_get_zone_threshold_unknown_zone(self, mock_engine: AlertEngine) -> None:
         """Test threshold lookup for unknown zone defaults to 0.5 GPM."""
         threshold, avg_gpm = mock_engine._get_zone_threshold(zone_number=99)
         assert avg_gpm == 0.0
         assert threshold == 0.5  # absolute_gpm default
 
-    def test_get_zone_threshold_none_zone_number(self, mock_engine: AlertEngine):
+    def test_get_zone_threshold_none_zone_number(self, mock_engine: AlertEngine) -> None:
         """Test threshold lookup with None zone_number."""
         threshold, avg_gpm = mock_engine._get_zone_threshold(zone_number=None)
         assert avg_gpm == 0.0
         assert threshold == 0.5
 
-    def test_check_zone_threshold_no_alert(self, mock_engine: AlertEngine):
+    def test_check_zone_threshold_no_alert(self, mock_engine: AlertEngine) -> None:
         """Test that normal flow doesn't trigger alert."""
         now = datetime.now()
         # Zone 10 threshold is 7.7 GPM, send 7.0 GPM (below threshold)
@@ -150,9 +152,9 @@ class TestZoneThresholdChecking:
             dry_run=False,
         )
         assert alerted is False
-        mock_engine.pushover.send_message.assert_not_called()
+        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
 
-    def test_check_zone_threshold_alert_triggered(self, mock_engine: AlertEngine):
+    def test_check_zone_threshold_alert_triggered(self, mock_engine: AlertEngine) -> None:
         """Test that excessive flow triggers alert."""
         now = datetime.now()
         # Zone 10 threshold is 7.7 GPM, send 8.5 GPM (above threshold)
@@ -165,12 +167,12 @@ class TestZoneThresholdChecking:
             dry_run=False,
         )
         assert alerted is True
-        mock_engine.pushover.send_message.assert_called_once()
-        call_args = mock_engine.pushover.send_message.call_args
+        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+        call_args: Any = mock_engine.pushover.send_message.call_args  # type: ignore[attr-defined]
         assert "anomaly" in call_args[1]["title"].lower() or "anomaly" in call_args[0][0].lower()
         assert call_args[1]["priority"] == 2  # P2 emergency
 
-    def test_check_zone_threshold_unknown_zone_alerts(self, mock_engine: AlertEngine):
+    def test_check_zone_threshold_unknown_zone_alerts(self, mock_engine: AlertEngine) -> None:
         """Test that unknown zone with any flow triggers alert."""
         now = datetime.now()
         # Unknown zone threshold is 0.5 GPM, send 0.6 GPM
@@ -183,9 +185,9 @@ class TestZoneThresholdChecking:
             dry_run=False,
         )
         assert alerted is True
-        mock_engine.pushover.send_message.assert_called_once()
+        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
 
-    def test_check_zone_threshold_dry_run(self, mock_engine: AlertEngine):
+    def test_check_zone_threshold_dry_run(self, mock_engine: AlertEngine) -> None:
         """Test dry run doesn't send actual alert."""
         now = datetime.now()
         alerted = mock_engine._check_zone_threshold(
@@ -197,9 +199,9 @@ class TestZoneThresholdChecking:
             dry_run=True,
         )
         assert alerted is True
-        mock_engine.pushover.send_message.assert_not_called()
+        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
 
-    def test_check_zone_threshold_short_run_skipped(self, mock_engine: AlertEngine):
+    def test_check_zone_threshold_short_run_skipped(self, mock_engine: AlertEngine) -> None:
         """Test that short runs (<= min_runtime_minutes) don't trigger alerts."""
         now = datetime.now()
         # Zone 10 threshold is 7.7 GPM, send 8.5 GPM (above threshold) but short runtime
@@ -212,22 +214,22 @@ class TestZoneThresholdChecking:
             dry_run=False,
         )
         assert alerted is False
-        mock_engine.pushover.send_message.assert_not_called()
+        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
 
 
 class TestRealZoneData:
     """Test with actual zone data from production database."""
 
-    def test_recent_zone_sessions_exist(self, aibo_db_path: str):
+    def test_recent_zone_sessions_exist(self, prod_db_path: str) -> None:
         """Verify the fetched DB has recent zone session data."""
-        db = WaterTrackingDB(aibo_db_path)
+        db = WaterTrackingDB(prod_db_path)
         now = datetime.now()
         sessions = db.get_zone_sessions(now - timedelta(days=7), now)
         assert len(sessions) > 0, "No zone sessions found in last 7 days"
 
-    def test_zone_sessions_have_flow_data(self, aibo_db_path: str):
+    def test_zone_sessions_have_flow_data(self, prod_db_path: str) -> None:
         """Verify zone sessions have flow rate data."""
-        db = WaterTrackingDB(aibo_db_path)
+        db = WaterTrackingDB(prod_db_path)
         now = datetime.now()
         sessions = db.get_zone_sessions(now - timedelta(days=7), now)
 
@@ -235,26 +237,26 @@ class TestRealZoneData:
         assert len(zones_with_flow) > 0, "No zones with flow data found"
 
 
-def main():
+def main() -> int:
     """Standalone test runner for manual execution."""
     print("=" * 70)
     print("Zone Threshold Integration Test")
     print("=" * 70)
 
-    # Load Aibo config
-    aibo_host, aibo_db = _get_aibo_config()
-    if not aibo_host or not aibo_db:
-        print("  ✗ Aibo SSH config not set in config/local.yaml")
+    # Load prod controller config
+    host, db_path = _get_prod_controller_config()
+    if not host or not db_path:
+        print("  ✗ Prod controller SSH config not set in config/local.yaml")
         return 1
 
-    # Fetch DB from Aibo
-    print("\n[1/4] Fetching database from Aibo...")
+    # Fetch DB from prod controller
+    print("\n[1/4] Fetching database from prod controller...")
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         tmp_path = tmp.name
 
     try:
         subprocess.run(
-            ["scp", f"{aibo_host}:{aibo_db}", tmp_path],
+            ["scp", f"{host}:{db_path}", tmp_path],
             check=True,
             capture_output=True,
             timeout=30,
@@ -331,7 +333,7 @@ def main():
     print("\n  Checking for threshold violations in recent data:")
     violations = 0
     for session in sessions:
-        zone_num = session.get("zone_number")
+        zone_num: int | None = session.get("zone_number")
         avg_gpm = session.get("average_flow_rate") or 0
         if avg_gpm > 0 and zone_num:
             threshold, expected = engine._get_zone_threshold(zone_num)

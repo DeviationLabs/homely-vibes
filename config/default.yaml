@@ -285,9 +285,9 @@ launch_jobs:
     stdout_path: ${paths.home}/bin/knowledge/personal/wa_summary.out.log
     stderr_path: ${paths.home}/bin/knowledge/personal/wa_summary.err.log
 
-# === Aibo (remote DB host for integration tests) ===
-aibo:
-  ssh_host: ""          # e.g. "abutala@aibo"
+# === Prod Controller (remote DB host for integration tests) ===
+prod_controller:
+  ssh_host: ""          # e.g. "user@host"
   db_path: ""           # e.g. "~/logs/water_tracking.db"
 
 # === Constants ===

@@ -319,8 +319,8 @@ class VoiceNotesConfig:
 
 
 @dataclass
-class AiboConfig:
-    """Aibo remote DB host configuration"""
+class ProdControllerConfig:
+    """Prod controller remote DB host configuration"""
 
     ssh_host: str
     db_path: str
@@ -346,7 +346,7 @@ class Config:
     browser_alert: BrowserAlertConfig
     personal_cal_sync: PersonalCalSyncConfig
     voice_notes: VoiceNotesConfig
-    aibo: AiboConfig
+    prod_controller: ProdControllerConfig
     launch_jobs: LaunchJobsConfig
     my_external_ip: str
     seconds_in_day: int

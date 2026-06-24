@@ -314,7 +314,7 @@ uv run python -m pytest RachioFlume/test_alert_engine.py -v
 # Synthetic scenario assertions
 uv run python -m pytest RachioFlume/test_alert_simulation.py -v
 
-# Zone threshold integration test (fetches DB from Aibo)
+# Zone threshold integration test (fetches DB from prod controller)
 uv run python -m pytest RachioFlume/test_zone_thresholds.py -v
 # Or standalone:
 python RachioFlume/test_zone_thresholds.py
@@ -327,7 +327,7 @@ uv run python -m RachioFlume.rfmanager simulate
 
 The `test_zone_thresholds.py` integration test validates the zone anomaly detection logic against production data:
 
-1. **Fetches the production database** from Aibo (`192.168.1.200`) via SCP
+1. **Fetches the production database** from prod controller via SCP
 2. **Loads zone thresholds** from config (12 zones with per-zone avg GPM)
 3. **Tests threshold computation** for known/unknown zones
 4. **Simulates zone-end scenarios** with real historical data
@@ -355,7 +355,7 @@ threshold = avg_gpm + max(absolute_gpm, percent_above/100 × avg_gpm)
 
 **Unknown zones** (not in config) default to `avg_gpm=0`, yielding a 0.5 GPM threshold — any flow triggers an alert.
 
-**Requirements**: SSH access to Aibo (`ssh abutala@aibo`) must work without password prompt (key-based auth).
+**Requirements**: SSH access to prod controller (configured in `config/local.yaml`) must work without password prompt (key-based auth).
 
 ## Development
 
