@@ -45,3 +45,4 @@ sidebar-notes.md
 
 # Xcode / iOS build artifacts (NoShorts unsigned IPA output)
 build/
+config/tokens
