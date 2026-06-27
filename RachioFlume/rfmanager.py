@@ -279,18 +279,19 @@ def list_devices(_args: argparse.Namespace) -> int:
     headers = {"Authorization": f"Bearer {api_key}"}
 
     try:
-        person = requests.get(
-            "https://api.rach.io/1/public/person/info", headers=headers, timeout=10
-        ).json()
-        pid = person["id"]
-        info = requests.get(
-            f"https://api.rach.io/1/public/person/{pid}", headers=headers, timeout=10
-        ).json()
-        bs = requests.get(
+        r = requests.get("https://api.rach.io/1/public/person/info", headers=headers, timeout=10)
+        r.raise_for_status()
+        pid = r.json()["id"]
+        r = requests.get(f"https://api.rach.io/1/public/person/{pid}", headers=headers, timeout=10)
+        r.raise_for_status()
+        info = r.json()
+        r = requests.get(
             f"https://cloud-rest.rach.io/valve/listBaseStations/{pid}",
             headers=headers,
             timeout=10,
-        ).json()
+        )
+        r.raise_for_status()
+        bs = r.json()
     except Exception as e:
         logger.error(f"Rachio API error: {e}")
         return 1
@@ -311,12 +312,13 @@ def list_devices(_args: argparse.Namespace) -> int:
     logger.info("Hose-Timer base stations (Smart Hose Timer):")
     for b in bs.get("baseStations", []):
         try:
-            valves = requests.get(
+            r = requests.get(
                 f"https://cloud-rest.rach.io/valve/listValves/{b['id']}",
                 headers=headers,
                 timeout=10,
-            ).json()
-            valve_list = [v.get("name") for v in valves.get("valves", [])]
+            )
+            r.raise_for_status()
+            valve_list = [v.get("name") for v in r.json().get("valves", [])]
         except Exception as e:
             valve_list = [f"<error: {e}>"]
         logger.info(
