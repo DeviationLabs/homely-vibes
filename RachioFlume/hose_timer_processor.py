@@ -69,7 +69,13 @@ class HoseTimerProcessor:
     def _evaluate_valve(self, valve: HoseValve, now: datetime, dry_run: bool) -> dict:
         action = valve.last_watering_action
         cached_blob = self.db.get_metadata(_state_key(valve.id))
-        cached = json.loads(cached_blob) if cached_blob else None
+        cached: Optional[dict] = None
+        if cached_blob:
+            try:
+                cached = json.loads(cached_blob)
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"Corrupt cached state for valve {valve.id} ({e}); ignoring")
+                cached = None
 
         entry: dict = {
             "device": self.client.label,
