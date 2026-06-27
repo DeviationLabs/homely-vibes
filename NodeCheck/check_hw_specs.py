@@ -80,9 +80,30 @@ emit "USB" "$(lsusb 2>/dev/null | sed 's/^Bus [0-9]* Device [0-9]*: ID [0-9a-f:]
 OS_NAME=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME")
 emit "OS" "${OS_NAME:-n/a}"
 emit "Kernel" "$(uname -srm 2>/dev/null)"
-emit "Firmware" "$(vcgencmd version 2>/dev/null | head -1 | sed 's/^ *//')"
-TEMP=$(vcgencmd measure_temp 2>/dev/null | sed "s/temp=//; s/'C/ C/")
-[ -z "$TEMP" ] && TEMP=$(awk '{printf "%.1f C",$1/1000}' /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+# Firmware + Temperature: Pi uses vcgencmd (needs a *readable* /dev/vcio, i.e.
+# user in the video group). Other hosts, or Pis where the user lacks perms,
+# fall back to DMI sysfs (firmware) and thermal_zone sysfs (temperature).
+if [ -r /dev/vcio ] && command -v vcgencmd >/dev/null 2>&1; then
+    emit "Firmware" "$(vcgencmd version 2>/dev/null | head -1 | sed 's/^ *//')"
+    TEMP=$(vcgencmd measure_temp 2>/dev/null | sed "s/temp=//; s/'C/ C/")
+else
+    FW_VER=$(cat /sys/class/dmi/id/bios_version 2>/dev/null)
+    FW_DATE=$(cat /sys/class/dmi/id/bios_date 2>/dev/null)
+    if [ -n "$FW_VER" ] || [ -n "$FW_DATE" ]; then
+        emit "Firmware" "${FW_VER:-unknown} (${FW_DATE:-unknown})"
+    else
+        emit "Firmware" "n/a"
+    fi
+    TEMP=""
+fi
+if [ -z "$TEMP" ]; then
+    # Prefer a CPU thermal zone; fall back to thermal_zone0.
+    TZ=$(for z in /sys/class/thermal/thermal_zone*; do
+             [ -r "$z/type" ] && grep -qi cpu "$z/type" && echo "$z/temp" && break
+         done)
+    [ -z "$TZ" ] && TZ=/sys/class/thermal/thermal_zone0/temp
+    [ -r "$TZ" ] && TEMP=$(awk '{printf "%.1f C",$1/1000}' "$TZ" 2>/dev/null)
+fi
 emit "Temperature" "${TEMP:-n/a}"
 """
 
