@@ -196,8 +196,15 @@ def _build_alert_engine() -> AlertEngine:
 
 
 def _build_hose_processors(db: WaterTrackingDB) -> list[HoseTimerProcessor]:
-    """One HoseTimerProcessor per Smart Hose Timer base station in config."""
+    """One HoseTimerProcessor per Smart Hose Timer base station in config.
+
+    Each processor gets a shared FlumeClient so the zone-end report uses the
+    same house-water source as the controller path.
+    """
     all_thresholds = load_zone_thresholds_from_config()
+    flume_client = (
+        FlumeClient() if any(d.type == "hose_timer" for d in cfg.rachio.devices) else None
+    )
     processors: list[HoseTimerProcessor] = []
     for dev in cfg.rachio.devices:
         if dev.type != "hose_timer":
@@ -213,6 +220,7 @@ def _build_hose_processors(db: WaterTrackingDB) -> list[HoseTimerProcessor]:
                 pushover=pushover,
                 db=db,
                 thresholds=all_thresholds.get(dev.label, {}),
+                flume_client=flume_client,
             )
         )
     return processors

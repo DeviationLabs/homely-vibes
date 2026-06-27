@@ -117,7 +117,9 @@ class TestHoseTimerProcessor:
         msg = call_args[0][0]
         assert "Hose Drip Jasmine" in msg
         assert "Upper Deck Planters" in msg
-        assert "0.50 GPM" in msg  # configured baseline
+        assert "thresh 0.50" in msg  # configured baseline appears in flow line
+        assert "Avg flow:" in msg
+        assert "Total:" in msg
         assert "Flow sensor: detected" in msg
         # Session row persisted
         sessions = tmp_db.get_hose_zone_sessions(
@@ -147,7 +149,9 @@ class TestHoseTimerProcessor:
 
         pushover.send_message.assert_called_once()
         msg = pushover.send_message.call_args[0][0]
-        assert "No configured baseline" in msg
+        # No baseline -> just "Avg flow: X.XX GPM" without (thresh ...)
+        assert "Avg flow:" in msg
+        assert "thresh" not in msg
 
     def test_completion_only_after_window_elapses(self, tmp_db: WaterTrackingDB) -> None:
         """If action disappears before start+duration, don't finalize yet.
