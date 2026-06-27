@@ -21,7 +21,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from RachioFlume.alert_engine import AlertEngine
-from RachioFlume.alert_rules import ZoneThreshold, load_zone_thresholds_from_config
+from RachioFlume.alert_rules import (
+    ZoneThreshold,
+    get_controller_zone_thresholds,
+    load_zone_thresholds_from_config,
+)
 from RachioFlume.data_storage import WaterTrackingDB
 from lib.config import get_config, reset_config
 
@@ -58,9 +62,10 @@ def prod_db_path() -> Generator[str, None, None]:
 
 @pytest.fixture
 def zone_thresholds() -> dict[int, ZoneThreshold]:
-    """Load zone thresholds from config."""
+    """Load Rachio-Eden controller thresholds from config (keyed by zone_number)."""
     reset_config()
-    return load_zone_thresholds_from_config()
+    all_thresholds = load_zone_thresholds_from_config()
+    return get_controller_zone_thresholds(all_thresholds, "Rachio-Eden")
 
 
 @pytest.fixture
@@ -269,7 +274,8 @@ def main() -> int:
     # Load config and thresholds
     print("\n[2/4] Loading zone thresholds from config...")
     reset_config()
-    zone_thresholds = load_zone_thresholds_from_config()
+    all_thresholds = load_zone_thresholds_from_config()
+    zone_thresholds = get_controller_zone_thresholds(all_thresholds, "Rachio-Eden")
     print(f"  ✓ Loaded {len(zone_thresholds)} zone thresholds")
     for zone_num in sorted(zone_thresholds.keys()):
         zt = zone_thresholds[zone_num]
