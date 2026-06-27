@@ -7,6 +7,7 @@ NodeCheck provides monitoring and management for Foscam cameras, Windows machine
 - **`manage_nodes.py`** - Device management, health checks, and reboots
 - **`heartbeat_nodes.py`** - Continuous monitoring with smart notifications
 - **`nodes.py`** - Shared Node class hierarchy
+- **`check_hw_specs.py`** - Remote hardware specs gatherer (SSH into a Linux/Pi host)
 
 ## Quick Start
 
@@ -25,6 +26,18 @@ uv run NodeCheck/manage_nodes.py --type foscam
 uv run NodeCheck/manage_nodes.py --type windows --reboot
 uv run NodeCheck/manage_nodes.py --type foscam --always_email
 ```
+
+### Hardware Specs
+
+```bash
+uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200
+uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200 --user abutala --port 22
+```
+
+SSHes into the host and prints model, SoC, CPU, memory, storage, network
+(ethernet link speed via `ethtool`), PCI/USB buses, OS, firmware, and
+temperature. Prompts for a sudo password only if the remote requires one
+(tries passwordless first).
 
 ## Features
 
