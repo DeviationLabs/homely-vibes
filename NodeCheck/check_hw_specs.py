@@ -97,8 +97,12 @@ else
     TEMP=""
 fi
 if [ -z "$TEMP" ]; then
-    TZ=$(ls /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1)
-    [ -n "$TZ" ] && TEMP=$(awk '{printf "%.1f C",$1/1000}' "$TZ" 2>/dev/null)
+    # Prefer a CPU thermal zone; fall back to thermal_zone0.
+    TZ=$(for z in /sys/class/thermal/thermal_zone*; do
+             [ -r "$z/type" ] && grep -qi cpu "$z/type" && echo "$z/temp" && break
+         done)
+    [ -z "$TZ" ] && TZ=/sys/class/thermal/thermal_zone0/temp
+    [ -r "$TZ" ] && TEMP=$(awk '{printf "%.1f C",$1/1000}' "$TZ" 2>/dev/null)
 fi
 emit "Temperature" "${TEMP:-n/a}"
 """
