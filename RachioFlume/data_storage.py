@@ -96,6 +96,62 @@ class WaterTrackingDB:
             """
             )
 
+            # === Hose-timer tables (Rachio Smart Hose Timer / cloud-rest.rach.io) ===
+            # Kept in separate tables from the controller schema so multiple
+            # Bluetooth valves under one or more base stations can coexist
+            # without zone_number collisions or schema migrations.
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hose_valves (
+                    id TEXT PRIMARY KEY,                    -- valveId
+                    base_station_id TEXT NOT NULL,
+                    base_station_label TEXT NOT NULL,       -- human label (e.g. "Hose Drip Jasmine")
+                    name TEXT NOT NULL,                     -- valve name (e.g. "Upper Deck Planters")
+                    default_runtime_seconds INTEGER,
+                    detect_flow BOOLEAN DEFAULT 0,
+                    battery_status TEXT,
+                    connected BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hose_watering_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    valve_id TEXT NOT NULL,
+                    base_station_id TEXT NOT NULL,
+                    event_date TIMESTAMP NOT NULL,          -- run start time
+                    event_type TEXT NOT NULL,               -- ZONE_STARTED | ZONE_COMPLETED
+                    duration_seconds INTEGER,               -- planned (start) or actual (complete)
+                    reason TEXT,                            -- QUICK_RUN | SCHEDULE | etc.
+                    flow_detected INTEGER,                  -- 0/1, NULL if not reported
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(valve_id, event_date, event_type)
+                )
+            """
+            )
+
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hose_zone_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    valve_id TEXT NOT NULL,
+                    base_station_id TEXT NOT NULL,
+                    valve_name TEXT NOT NULL,
+                    base_station_label TEXT NOT NULL,
+                    start_time TIMESTAMP NOT NULL,
+                    end_time TIMESTAMP,
+                    duration_seconds INTEGER,
+                    flow_detected INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(valve_id, start_time)
+                )
+            """
+            )
+
             # Create indexes for better query performance
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_watering_events_date ON watering_events(event_date)"
@@ -108,6 +164,12 @@ class WaterTrackingDB:
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_zone_sessions_times ON zone_sessions(start_time, end_time)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_hose_events_valve ON hose_watering_events(valve_id, event_date)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_hose_sessions_times ON hose_zone_sessions(start_time, end_time)"
             )
 
             conn.commit()
@@ -435,6 +497,107 @@ class WaterTrackingDB:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM collection_metadata WHERE key = ?", (key,))
             conn.commit()
+
+    # =====================================================================
+    # Hose-timer storage (separate from controller schema)
+    # =====================================================================
+
+    def save_hose_valves(self, valves: List[Dict[str, Any]]) -> None:
+        """Upsert hose-timer valves (one row per (base_station, valve))."""
+        if not valves:
+            return
+        self.logger.info(f"Saving {len(valves)} hose-timer valves")
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            for v in valves:
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO hose_valves (
+                        id, base_station_id, base_station_label, name,
+                        default_runtime_seconds, detect_flow, battery_status,
+                        connected, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        v["id"],
+                        v["base_station_id"],
+                        v["base_station_label"],
+                        v["name"],
+                        v.get("default_runtime_seconds"),
+                        1 if v.get("detect_flow") else 0,
+                        v.get("battery_status"),
+                        1 if v.get("connected", True) else 0,
+                        datetime.now(),
+                    ),
+                )
+            conn.commit()
+
+    def save_hose_watering_event(self, event: Dict[str, Any]) -> None:
+        """Insert a hose-timer event (idempotent on (valve_id, event_date, event_type))."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO hose_watering_events (
+                    valve_id, base_station_id, event_date, event_type,
+                    duration_seconds, reason, flow_detected
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event["valve_id"],
+                    event["base_station_id"],
+                    event["event_date"],
+                    event["event_type"],
+                    event.get("duration_seconds"),
+                    event.get("reason"),
+                    None
+                    if event.get("flow_detected") is None
+                    else (1 if event["flow_detected"] else 0),
+                ),
+            )
+            conn.commit()
+
+    def save_hose_zone_session(self, session: Dict[str, Any]) -> None:
+        """Insert a finalized hose-timer session row."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO hose_zone_sessions (
+                    valve_id, base_station_id, valve_name, base_station_label,
+                    start_time, end_time, duration_seconds, flow_detected
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session["valve_id"],
+                    session["base_station_id"],
+                    session["valve_name"],
+                    session["base_station_label"],
+                    session["start_time"],
+                    session["end_time"],
+                    session["duration_seconds"],
+                    None
+                    if session.get("flow_detected") is None
+                    else (1 if session["flow_detected"] else 0),
+                ),
+            )
+            conn.commit()
+
+    def get_hose_zone_sessions(
+        self, start_date: datetime, end_date: datetime
+    ) -> List[Dict[str, Any]]:
+        """Get hose-timer sessions for a date range."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM hose_zone_sessions
+                WHERE start_time >= ? AND start_time <= ?
+                ORDER BY start_time
+                """,
+                (start_date, end_date),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_last_data_timestamp(self, source: str) -> Optional[datetime]:
         """Get the actual last timestamp from data tables."""

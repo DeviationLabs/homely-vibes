@@ -206,11 +206,30 @@ class SamsungFrameConfig:
 
 
 @dataclass
+class RachioDeviceConfig:
+    """One Rachio device.
+
+    `type` selects the API surface: 'controller' for traditional Rachio
+    Smart Sprinkler Controllers (api.rach.io/1/public/device/*), 'hose_timer'
+    for Smart Hose Timer base stations (cloud-rest.rach.io/valve/*).
+    `id` is the deviceId for controllers or the baseStationId for hose timers.
+    """
+
+    id: str
+    label: str
+    type: str  # "controller" | "hose_timer"
+
+
+@dataclass
 class RachioConfig:
-    """Rachio irrigation system configuration"""
+    """Rachio irrigation system configuration.
+
+    Single shared `api_key` works for both controller and hose-timer endpoints.
+    Add one entry per physical device in `devices`.
+    """
 
     api_key: str
-    rachio_id: str
+    devices: list[RachioDeviceConfig]
 
 
 @dataclass
@@ -251,7 +270,10 @@ class RachioFlumeAlertsConfig:
     percent_above: float  # min deviation above average (%)
     min_runtime_minutes: int  # zone must run this long before threshold alert fires
     rules: list[AlertRuleConfig]
-    zone_thresholds: Dict[int, ZoneThresholdConfig]  # zone_number -> threshold
+    # device_label -> zone_key -> threshold.
+    # For controllers, zone_key is the integer zone_number (as a string for YAML).
+    # For hose timers, zone_key is the valve name (matches getValve.name).
+    zone_thresholds: Dict[str, Dict[str, ZoneThresholdConfig]]
 
 
 @dataclass

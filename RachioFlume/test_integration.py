@@ -25,8 +25,14 @@ class TestRachioClient:
     @patch("RachioFlume.rachio_client.get_config")
     def test_init_missing_credentials(self, mock_config: Mock) -> None:
         """Test initialization fails without credentials."""
-        # Mock config to return empty values
-        mock_config.return_value = Mock(rachio=Mock(api_key="", rachio_id=""))
+        # Mock config: empty api_key, but one controller device so we exercise
+        # the api_key check rather than the no-devices path.
+        mock_config.return_value = Mock(
+            rachio=Mock(
+                api_key="",
+                devices=[Mock(id="dev1", label="Test", type="controller")],
+            )
+        )
         with pytest.raises(ValueError, match="Rachio API key required"):
             RachioClient()
 

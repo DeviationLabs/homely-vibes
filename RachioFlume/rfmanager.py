@@ -6,11 +6,17 @@ import argparse
 import sys
 from time import sleep
 from RachioFlume.alert_engine import AlertEngine
-from RachioFlume.alert_rules import load_rules_from_config, load_zone_thresholds_from_config
+from RachioFlume.alert_rules import (
+    get_controller_zone_thresholds,
+    load_rules_from_config,
+    load_zone_thresholds_from_config,
+)
 from RachioFlume.collector import WaterTrackingCollector
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient
+from RachioFlume.hose_timer_processor import HoseTimerProcessor
 from RachioFlume.rachio_client import RachioClient
+from RachioFlume.rachio_hose_client import RachioHoseClient
 from lib.MyPushover import Pushover
 from RachioFlume.reporter import WeeklyReporter
 from lib.logger import get_logger
@@ -50,6 +56,12 @@ def main() -> int:
 
     # Status command
     subparsers.add_parser("status", help="Show current system status")
+
+    # List-devices command
+    subparsers.add_parser(
+        "list-devices",
+        help="List all Rachio devices visible from the API (controllers + hose timers)",
+    )
 
     # Reporting commands
     report_parser = subparsers.add_parser("report", help="Generate period reports")
@@ -137,6 +149,8 @@ def main() -> int:
         return run_collection(args)
     elif args.command == "status":
         return show_status(args)
+    elif args.command == "list-devices":
+        return list_devices(args)
     elif args.command == "report":
         return generate_report(args)
     elif args.command == "summary":
@@ -152,21 +166,64 @@ def main() -> int:
 
 
 def _build_alert_engine() -> AlertEngine:
-    """Construct an AlertEngine sharing the rfmanager-level Pushover instance."""
+    """Construct an AlertEngine sharing the rfmanager-level Pushover instance.
+
+    Uses the first controller device in cfg.rachio.devices. Zone thresholds
+    are filtered to that controller's labelled block.
+    """
     rules = load_rules_from_config()
-    zone_thresholds = load_zone_thresholds_from_config()
+    all_thresholds = load_zone_thresholds_from_config()
     alerts_cfg = cfg.rachio_flume.alerts
+
+    controllers = [d for d in cfg.rachio.devices if d.type == "controller"]
+    if not controllers:
+        raise ValueError("No controller device configured in cfg.rachio.devices")
+    primary = controllers[0]
+    rachio_client = RachioClient(device_id=primary.id, label=primary.label)
+    controller_thresholds = get_controller_zone_thresholds(all_thresholds, primary.label)
+
     return AlertEngine(
         flume_client=FlumeClient(),
-        rachio_client=RachioClient(),
+        rachio_client=rachio_client,
         pushover=pushover,
         db=WaterTrackingDB(DB_PATH),
         rules=rules,
-        zone_thresholds=zone_thresholds,
+        zone_thresholds=controller_thresholds,
         absolute_gpm=alerts_cfg.absolute_gpm,
         percent_above=alerts_cfg.percent_above,
         min_runtime_minutes=alerts_cfg.min_runtime_minutes,
     )
+
+
+def _build_hose_processors(db: WaterTrackingDB) -> list[HoseTimerProcessor]:
+    """One HoseTimerProcessor per Smart Hose Timer base station in config.
+
+    Each processor gets a shared FlumeClient so the zone-end report uses the
+    same house-water source as the controller path.
+    """
+    all_thresholds = load_zone_thresholds_from_config()
+    flume_client = (
+        FlumeClient() if any(d.type == "hose_timer" for d in cfg.rachio.devices) else None
+    )
+    processors: list[HoseTimerProcessor] = []
+    for dev in cfg.rachio.devices:
+        if dev.type != "hose_timer":
+            continue
+        client = RachioHoseClient(
+            api_key=cfg.rachio.api_key,
+            base_station_id=dev.id,
+            label=dev.label,
+        )
+        processors.append(
+            HoseTimerProcessor(
+                client=client,
+                pushover=pushover,
+                db=db,
+                thresholds=all_thresholds.get(dev.label, {}),
+                flume_client=flume_client,
+            )
+        )
+    return processors
 
 
 def run_collection(args: argparse.Namespace) -> int:
@@ -176,9 +233,20 @@ def run_collection(args: argparse.Namespace) -> int:
     try:
         cfg = get_config()
         alert_engine = _build_alert_engine() if cfg.rachio_flume.alerts.enabled else None
-        collector = WaterTrackingCollector(DB_PATH, args.interval, alert_engine=alert_engine)
+        db = WaterTrackingDB(DB_PATH)
+        hose_processors = _build_hose_processors(db)
+        collector = WaterTrackingCollector(
+            DB_PATH,
+            args.interval,
+            alert_engine=alert_engine,
+            hose_processors=hose_processors,
+        )
         if alert_engine is not None:
             logger.info(f"Alerts enabled with {len(alert_engine.rules)} rules")
+        if hose_processors:
+            logger.info(
+                f"Hose-timer processors active for: {[p.client.label for p in hose_processors]}"
+            )
 
         logger.info(f"Starting continuous collection every {args.interval} seconds")
         logger.info("Press Ctrl+C to stop")
@@ -197,6 +265,69 @@ def run_collection(args: argparse.Namespace) -> int:
         )
         sleep(3600)  ## cooldown for an hour.
         return 1
+
+
+def list_devices(_args: argparse.Namespace) -> int:
+    """Print all Rachio devices visible from the live API."""
+    import requests
+
+    logger = get_logger(__name__)
+    api_key = cfg.rachio.api_key
+    if not api_key:
+        logger.error("cfg.rachio.api_key is empty")
+        return 1
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    try:
+        r = requests.get("https://api.rach.io/1/public/person/info", headers=headers, timeout=10)
+        r.raise_for_status()
+        pid = r.json()["id"]
+        r = requests.get(f"https://api.rach.io/1/public/person/{pid}", headers=headers, timeout=10)
+        r.raise_for_status()
+        info = r.json()
+        r = requests.get(
+            f"https://cloud-rest.rach.io/valve/listBaseStations/{pid}",
+            headers=headers,
+            timeout=10,
+        )
+        r.raise_for_status()
+        bs = r.json()
+    except Exception as e:
+        logger.error(f"Rachio API error: {e}")
+        return 1
+
+    logger.info("=" * 60)
+    logger.info(f"Rachio person_id: {pid}")
+    logger.info("=" * 60)
+
+    logger.info("Controllers (Smart Sprinkler):")
+    for d in info.get("devices", []):
+        zones = [(z.get("zoneNumber"), z.get("name")) for z in d.get("zones", [])]
+        logger.info(
+            f"  id={d.get('id')}  name='{d.get('name')}'  model={d.get('model')}  "
+            f"on={d.get('on')}  zones={len(zones)}"
+        )
+
+    logger.info("")
+    logger.info("Hose-Timer base stations (Smart Hose Timer):")
+    for b in bs.get("baseStations", []):
+        try:
+            r = requests.get(
+                f"https://cloud-rest.rach.io/valve/listValves/{b['id']}",
+                headers=headers,
+                timeout=10,
+            )
+            r.raise_for_status()
+            valve_list = [v.get("name") for v in r.json().get("valves", [])]
+        except Exception as e:
+            valve_list = [f"<error: {e}>"]
+        logger.info(
+            f"  id={b.get('id')}  name='{b.get('name')}'  "
+            f"serial={b.get('serialNumber')}  valves={valve_list}"
+        )
+
+    logger.info("=" * 60)
+    return 0
 
 
 def show_status(_args: argparse.Namespace) -> int:

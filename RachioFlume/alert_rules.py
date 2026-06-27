@@ -25,9 +25,15 @@ class AlertRule(BaseModel):
 
 
 class ZoneThreshold(BaseModel):
-    """Per-zone flow threshold for anomaly detection."""
+    """Per-zone flow baseline for anomaly detection.
 
-    zone_number: int
+    `zone_key` is the device-local identifier — stringified zone_number for
+    controllers (e.g. "1") or the valve name for hose timers
+    (e.g. "Upper Deck Planters"). Device scope is tracked separately by the
+    caller's keying strategy (see load_zone_thresholds_from_config).
+    """
+
+    zone_key: str
     name: str
     avg_gpm: float
 
@@ -56,15 +62,51 @@ def load_rules_from_config() -> list[AlertRule]:
     ]
 
 
-def load_zone_thresholds_from_config() -> dict[int, ZoneThreshold]:
-    """Build zone threshold map from cfg.rachio_flume.alerts.zone_thresholds."""
+def load_zone_thresholds_from_config() -> dict[str, dict[str, ZoneThreshold]]:
+    """Build {device_label -> {zone_key -> ZoneThreshold}} from config.
+
+    `zone_key` is a stringified zone_number for controllers, or the valve name
+    for hose timers — matches the structure of cfg.rachio_flume.alerts.zone_thresholds.
+
+    Inner entries arrive as plain dicts (OmegaConf does not auto-construct
+    dataclasses at depth-2 of Dict[Dict[...]]). Read fields by key.
+    """
     cfg = get_config()
     alerts_cfg = cfg.rachio_flume.alerts
-    thresholds = {}
-    for zone_num, zt_cfg in alerts_cfg.zone_thresholds.items():
-        thresholds[zone_num] = ZoneThreshold(
-            zone_number=zone_num,
-            name=zt_cfg.name,
-            avg_gpm=zt_cfg.avg_gpm,
-        )
-    return thresholds
+    out: dict[str, dict[str, ZoneThreshold]] = {}
+    for device_label, zones in alerts_cfg.zone_thresholds.items():
+        out[device_label] = {}
+        for zone_key, zt_cfg in zones.items():
+            zk = str(zone_key)
+            # zt_cfg may be a dict (depth-2 OmegaConf) or a ZoneThresholdConfig
+            # (if the loader was ever extended). Accept both.
+            if isinstance(zt_cfg, dict):
+                name = zt_cfg["name"]
+                avg_gpm = zt_cfg["avg_gpm"]
+            else:
+                name = zt_cfg.name
+                avg_gpm = zt_cfg.avg_gpm
+            out[device_label][zk] = ZoneThreshold(
+                zone_key=zk,
+                name=name,
+                avg_gpm=avg_gpm,
+            )
+    return out
+
+
+def get_controller_zone_thresholds(
+    all_thresholds: dict[str, dict[str, ZoneThreshold]],
+    device_label: str,
+) -> dict[int, ZoneThreshold]:
+    """Filter to controller thresholds for one device, keyed by zone_number (int).
+
+    Convenience for AlertEngine which historically keys by int zone_number.
+    """
+    out: dict[int, ZoneThreshold] = {}
+    for zone_key, zt in all_thresholds.get(device_label, {}).items():
+        try:
+            out[int(zone_key)] = zt
+        except ValueError:
+            # Non-integer keys belong to hose timers; skip.
+            continue
+    return out
