@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 from RachioFlume.alert_engine import AlertEngine
+from RachioFlume.hose_timer_processor import HoseTimerProcessor
 from RachioFlume.rachio_client import RachioClient
 from RachioFlume.flume_client import FlumeClient
 from RachioFlume.data_storage import WaterTrackingDB
@@ -19,6 +20,7 @@ class WaterTrackingCollector:
         db_path: str,
         poll_interval_seconds: int = 300,  # 5 minutes default
         alert_engine: Optional[AlertEngine] = None,
+        hose_processors: Optional[List[HoseTimerProcessor]] = None,
     ):
         self.logger = get_logger(__name__)
 
@@ -27,6 +29,7 @@ class WaterTrackingCollector:
         self.flume_client = FlumeClient()
         self.poll_interval = poll_interval_seconds
         self.alert_engine = alert_engine
+        self.hose_processors = hose_processors or []
 
         # Initialize last collection times from database to avoid duplicates
         self.last_rachio_collection: Optional[datetime] = self.db.get_last_collection_timestamp(
@@ -141,6 +144,15 @@ class WaterTrackingCollector:
 
         # Process the collected data
         await self.process_collected_data()
+
+        # Evaluate hose-timer processors (one per Smart Hose Timer base station).
+        # Synchronous calls — each issues 1-2 HTTP requests per valve, well
+        # under the 5-minute poll cadence even with several base stations.
+        for proc in self.hose_processors:
+            try:
+                proc.evaluate()
+            except Exception as e:
+                self.logger.error(f"Hose-timer processor '{proc.client.label}' failed: {e}")
 
         # Evaluate usage alerts (no-op if engine not configured)
         if self.alert_engine is not None:

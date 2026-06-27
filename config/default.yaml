@@ -215,9 +215,12 @@ samsung_frame:
   slideshow_delay_seconds: 3  # delay before starting slideshow after upload
 
 # === Rachio Irrigation ===
+# `type`: "controller"  -> api.rach.io/1/public/device/*  (Smart Sprinkler Controller)
+#         "hose_timer"  -> cloud-rest.rach.io/valve/*     (Smart Hose Timer base station)
+# Override `devices` in local.yaml with real ids/labels.
 rachio:
-  api_key: ""  
-  rachio_id: ""  
+  api_key: ""
+  devices: []
 
 # === Flume Water Monitoring ===
 flume:
@@ -247,21 +250,13 @@ rachio_flume:
       - {name: "High Flow",  min_gpm: 5.4, duration_minutes: 4}
       - {name: "Mid Flow",   min_gpm: 2.6, duration_minutes: 14}
       - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
-    # Per-zone average flow rates (GPM) from historical data.
+    # Per-zone baseline flow rates (GPM) from historical data.
+    # Outer key = device label (matches rachio.devices[].label).
+    # Inner key = zone identifier:
+    #   - Controllers: stringified zone_number (e.g. "1")
+    #   - Hose timers: valve name (e.g. "Upper Deck Planters")
     # Alert fires when zone-end flow > avg + max(absolute_gpm, percent_above/100 * avg).
-    zone_thresholds:
-      1:  {name: "Z1*",  avg_gpm: 5.0}
-      2:  {name: "Z2*",  avg_gpm: 6.5}
-      3:  {name: "Z3*",  avg_gpm: 2.0}
-      4:  {name: "Z4*",  avg_gpm: 3.0}
-      5:  {name: "Z5*",  avg_gpm: 3.5}
-      6:  {name: "Z6*",  avg_gpm: 4.5}
-      7:  {name: "Z7*",  avg_gpm: 2.5}
-      8:  {name: "Z8*",  avg_gpm: 3.0}
-      9:  {name: "Z9*",  avg_gpm: 1.5}
-      10: {name: "Z10*", avg_gpm: 7.0}
-      11: {name: "Z11*", avg_gpm: 6.0}
-      12: {name: "Z12*", avg_gpm: 0.75}
+    zone_thresholds: {}
 
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:

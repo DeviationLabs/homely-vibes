@@ -266,13 +266,29 @@ class AlertEngine:
         )[0]
 
     def _send_zone_report(
-        self, zone_name: str, runtime_min: float, avg_gpm: float, total_gal: float, cycle: int
+        self,
+        zone_name: str,
+        zone_number: Optional[int],
+        runtime_min: float,
+        avg_gpm: float,
+        total_gal: float,
+        cycle: int,
     ) -> None:
         cycle_label = f" (Cycle {cycle})" if cycle > 1 else ""
+        baseline = (
+            self.zone_thresholds[zone_number].avg_gpm
+            if zone_number is not None and zone_number in self.zone_thresholds
+            else None
+        )
+        flow_line = (
+            f"Avg flow: {avg_gpm:.2f} GPM (thresh {baseline:.2f})"
+            if baseline is not None
+            else f"Avg flow: {avg_gpm:.2f} GPM"
+        )
         msg = (
             f"Zone '{zone_name}' completed{cycle_label}.\n"
             f"Runtime: {runtime_min:.0f} min\n"
-            f"Avg flow: {avg_gpm:.2f} GPM\n"
+            f"{flow_line}\n"
             f"Total: {total_gal:.1f} gal"
         )
         self.pushover.send_message(msg, title="RachioFlume: Zone Report", priority=-1)
@@ -326,7 +342,9 @@ class AlertEngine:
 
         if not dry_run:
             if runtime_min > 0:
-                self._send_zone_report(zone_name, runtime_min, avg_gpm, total_gal, cycle)
+                self._send_zone_report(
+                    zone_name, zone_number, runtime_min, avg_gpm, total_gal, cycle
+                )
                 # Check if flow exceeds zone threshold
                 self._check_zone_threshold(
                     zone_name, zone_number, avg_gpm, runtime_min, now, dry_run

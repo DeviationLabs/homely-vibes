@@ -35,16 +35,29 @@ class RachioClient:
 
     BASE_URL = "https://api.rach.io/1/public"
 
-    def __init__(self, api_key: Optional[str] = None, device_id: Optional[str] = None):
-        """Initialize Rachio client.
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        device_id: Optional[str] = None,
+        label: Optional[str] = None,
+    ):
+        """Initialize Rachio Smart Sprinkler Controller client.
 
         Args:
             api_key: Rachio API key (defaults to cfg.rachio.api_key)
-            device_id: Rachio device ID (defaults to cfg.rachio.rachio_id)
+            device_id: Rachio device ID (defaults to first controller in cfg.rachio.devices)
+            label: Human-readable device label (defaults to matching controller's label)
         """
         cfg = get_config()
         self.api_key = api_key or cfg.rachio.api_key
-        self.device_id = device_id or cfg.rachio.rachio_id
+        if device_id is None:
+            controllers = [d for d in cfg.rachio.devices if d.type == "controller"]
+            if not controllers:
+                raise ValueError("No controller device configured in cfg.rachio.devices")
+            device_id = controllers[0].id
+            label = label or controllers[0].label
+        self.device_id = device_id
+        self.label = label or device_id
 
         if not self.api_key:
             raise ValueError("Rachio API key required")

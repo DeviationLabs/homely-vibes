@@ -1,7 +1,7 @@
 """Weekly reporting system for water tracking data."""
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from pathlib import Path
@@ -35,6 +35,18 @@ class ReportSummary:
 
 
 @dataclass
+class HoseValveStats:
+    """Statistics for a single hose-timer valve in a reporting period."""
+
+    base_station_label: str
+    valve_name: str
+    sessions: int
+    total_duration_hours: float
+    average_duration_minutes: float
+    flow_detected_sessions: int
+
+
+@dataclass
 class WaterUsageReport:
     """Complete water usage report."""
 
@@ -43,6 +55,7 @@ class WaterUsageReport:
     period_end: datetime
     summary: ReportSummary
     zones: List[ZoneStats]
+    hose_valves: List[HoseValveStats] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for compatibility."""
@@ -109,6 +122,37 @@ class WeeklyReporter:
             zones_watered=len(zone_stats),
         )
 
+        # Aggregate hose-timer sessions
+        hose_sessions = self.db.get_hose_zone_sessions(period_start, period_end)
+        hose_agg: Dict[tuple, Dict[str, Any]] = {}
+        for s in hose_sessions:
+            key = (s["base_station_label"], s["valve_name"])
+            slot = hose_agg.setdefault(
+                key,
+                {"sessions": 0, "duration_sec_total": 0, "flow_detected": 0},
+            )
+            slot["sessions"] += 1
+            slot["duration_sec_total"] += s.get("duration_seconds") or 0
+            if s.get("flow_detected"):
+                slot["flow_detected"] += 1
+
+        hose_valves = sorted(
+            (
+                HoseValveStats(
+                    base_station_label=label,
+                    valve_name=name,
+                    sessions=v["sessions"],
+                    total_duration_hours=round(v["duration_sec_total"] / 3600.0, 2),
+                    average_duration_minutes=round(
+                        (v["duration_sec_total"] / max(v["sessions"], 1)) / 60.0, 1
+                    ),
+                    flow_detected_sessions=v["flow_detected"],
+                )
+                for (label, name), v in hose_agg.items()
+            ),
+            key=lambda h: (h.base_station_label, h.valve_name),
+        )
+
         # Create and return the report
         return WaterUsageReport(
             report_generated=datetime.now(),
@@ -116,6 +160,7 @@ class WeeklyReporter:
             period_end=period_end,
             summary=summary,
             zones=formatted_zones,
+            hose_valves=hose_valves,
         )
 
     def save_report_to_file(self, report: WaterUsageReport, filename: str) -> None:
@@ -168,6 +213,21 @@ class WeeklyReporter:
                     f"{zone.average_flow_rate_gpm:<4.1f}"
                 )
                 report_text.append(zone_line)
+
+        if report.hose_valves:
+            report_text.append("\nHOSE TIMER VALVES:")
+            header = f"{'Base/Valve':<32} {'Runs':<4} {'Hrs':<5} {'Avg(m)':<6} {'Flow':<4}"
+            report_text.append(header)
+            report_text.append("-" * len(header))
+            for hv in report.hose_valves:
+                label = f"{hv.base_station_label}/{hv.valve_name}"[:32]
+                report_text.append(
+                    f"{label:<32} "
+                    f"{hv.sessions:<4} "
+                    f"{hv.total_duration_hours:<5.1f} "
+                    f"{hv.average_duration_minutes:<6.1f} "
+                    f"{hv.flow_detected_sessions:<4}"
+                )
 
         report_text.append("\n" + "=" * 35)
         return "\n".join(report_text)
