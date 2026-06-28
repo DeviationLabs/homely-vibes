@@ -1,18 +1,35 @@
 # Synthetic water-usage timeline for testing the RachioFlume alert engine.
-# Played back by:  uv run python -m RachioFlume.rfmanager simulate
+# Played back by:  uv run python RachioFlume/rfmanager.py simulate
 #
-# `kind` values:
+# `kind` values for `events`:
 #   - household recipes (see RachioFlume/synthetic_data.py:HOUSEHOLD_RECIPES):
 #       shower (8min @ 2.4gpm), dishwasher (60min @ 0.8gpm), laundry (45min @ 1.5gpm),
 #       toilet (1min @ 4.0gpm), sink (3min @ 1.2gpm), hose (10min @ 3.5gpm)
-#   - irrigation: requires zone, duration_minutes, gpm — Rachio reports active during window
+#   - irrigation: requires zone, duration_minutes, gpm, zone_number — Rachio active during window
 #   - slow_leak: requires duration_hours, gpm
 #   - pipe_break: requires duration_minutes, gpm
 #
 # Day numbers are 0-indexed from start_date.
+#
+# Optional `zone_thresholds:` block injects ZoneThreshold baselines for the
+# AlertEngine without touching cfg.rachio_flume.alerts.zone_anomaly. Use it to
+# exercise the Zone Anomaly P2 path (avg_flow > avg_gpm + max(absolute_gpm,
+# percent_above/100 * avg_gpm)). Keys are zone_number (int).
+#
+# Optional knobs `absolute_gpm`, `percent_above`, `min_runtime_minutes` override
+# the AlertEngine defaults for this simulation only.
 
 start_date: "2026-05-01"
 days: 10
+
+# === Per-zone baselines for the simulation ===
+# Zone 3 (Front Yard) and zone 5 (Back Yard) referenced in events below.
+zone_thresholds:
+  3: {name: "Front Yard*", avg_gpm: 4.0}
+  5: {name: "Back Yard*",  avg_gpm: 3.5}
+absolute_gpm: 0.5
+percent_above: 10
+min_runtime_minutes: 5
 
 events:
   # --- Routine household usage across the timeline ---
@@ -24,17 +41,37 @@ events:
   - {day: 1, hour: 12, minute: 0,  kind: sink}
   - {day: 1, hour: 18, minute: 0,  kind: hose}
 
-  # --- Day 2: scheduled irrigation (should suppress any concurrent alerts) ---
+  # --- Day 2: scheduled irrigation, flow IN-band ---
+  # Zone 3 baseline=4.0, threshold=4.5; runs at 4.2 GPM → Zone Report (P-1) only.
+  # Zone 5 baseline=3.5, threshold=4.0; runs at 3.8 GPM → Zone Report (P-1) only.
+  # Both fully Rachio-active windows; whole-house Flume rules suppressed.
   - {day: 2, hour: 6,  minute: 1,  kind: irrigation, zone: "Front Yard",
      duration_minutes: 30, gpm: 4.2, zone_number: 3}
   - {day: 2, hour: 6,  minute: 35, kind: irrigation, zone: "Back Yard",
      duration_minutes: 25, gpm: 3.8, zone_number: 5}
 
-  # --- Day 3 onward: slow leak forms (should fire Leak rule, NOT Mid/High) ---
-  - {day: 3, hour: 0,  minute: 0,  kind: slow_leak,  duration_hours: 72, gpm: 0.18}
+  # --- Day 3: zone-end anomaly path ---
+  # Zone 3 runs at 6.0 GPM (>> threshold 4.5) for 15 min → Zone Anomaly (P2).
+  # Validates: single dispatch (anomaly takes precedence over routine report),
+  # unified `(thresh 4.50)` value in pushover, Deviation line + Total line.
+  - {day: 3, hour: 6,  minute: 1,  kind: irrigation, zone: "Front Yard",
+     duration_minutes: 15, gpm: 6.0, zone_number: 3}
 
-  # --- Day 7: pipe break (should fire Pipe Break rule within 11 minutes) ---
+  # --- Day 4 onward: slow leak forms (fires Leak rule, NOT Mid/High) ---
+  # Off the back of Rachio activity by enough days that the rachio-suppression
+  # window has elapsed; should fire ~2h after start.
+  - {day: 4, hour: 0,  minute: 0,  kind: slow_leak,  duration_hours: 72, gpm: 0.18}
+
+  # --- Day 7: pipe break (fires Pipe Break within 11 min after suppression lifts) ---
   - {day: 7, hour: 14, minute: 0,  kind: pipe_break, duration_minutes: 20, gpm: 9.0}
 
-  # --- Day 8: long shower run + extra usage (high but short — should NOT fire High Flow) ---
+  # --- Day 8: short shower — high gpm but short, should NOT fire High Flow ---
   - {day: 8, hour: 7,  minute: 30, kind: shower}
+
+# === Coverage gaps (not yet exercised by synthetic; verified via unit tests) ===
+# - Hose-timer dispatch (test_hose_timer.py): synthetic harness only drives
+#   AlertEngine; HoseTimerProcessor is a separate code path.
+# - Stale-zone monitor (test_stale_zone_checker.py): time-jump semantics
+#   not naturally expressible in this event timeline.
+# - Hose-timer activity → Flume rule suppression via shared metadata key
+#   (test_hose_timer.py::TestHoseActivitySuppression).

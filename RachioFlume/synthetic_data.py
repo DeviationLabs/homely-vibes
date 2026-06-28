@@ -50,11 +50,18 @@ class Event:
 
 @dataclass
 class SyntheticDataset:
-    """A timeline of water-usage events."""
+    """A timeline of water-usage events.
+
+    Optional `engine_overrides` lets a synthetic scenario inject AlertEngine
+    constructor parameters (zone_thresholds, absolute_gpm, percent_above,
+    min_runtime_minutes) without depending on cfg.rachio_flume.alerts. Lets
+    synthetic test the Zone Anomaly path without polluting the global config.
+    """
 
     start: datetime
     days: int
     events: list[Event] = field(default_factory=list)
+    engine_overrides: dict = field(default_factory=dict)
 
     @property
     def end(self) -> datetime:
@@ -192,7 +199,26 @@ def load_dataset_from_yaml(path: str | Path) -> SyntheticDataset:
         # OmegaConf may surface a date object; combine with midnight.
         start = datetime.combine(start_raw, datetime.min.time())
     days = int(blob["days"])
-    ds = SyntheticDataset(start=start, days=days)
+
+    # Optional engine overrides — let synthetic scenarios test the
+    # Zone Anomaly path by injecting baselines without editing global config.
+    overrides: dict = {}
+    if "zone_thresholds" in blob:
+        from RachioFlume.alert_rules import ZoneThreshold
+
+        zt_map: dict[int, ZoneThreshold] = {}
+        for zk, zv in blob["zone_thresholds"].items():
+            zt_map[int(zk)] = ZoneThreshold(
+                zone_key=str(zk),
+                name=zv.get("name", f"Z{zk}"),
+                avg_gpm=float(zv["avg_gpm"]),
+            )
+        overrides["zone_thresholds"] = zt_map
+    for k in ("absolute_gpm", "percent_above", "min_runtime_minutes"):
+        if k in blob:
+            overrides[k] = blob[k]
+
+    ds = SyntheticDataset(start=start, days=days, engine_overrides=overrides)
 
     for ev in blob.get("events", []):
         kind = ev["kind"]

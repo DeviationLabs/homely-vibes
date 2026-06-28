@@ -99,12 +99,14 @@ async def run_simulation(
     fake_flume = _FakeFlume(dataset)
     fake_rachio = _FakeRachio(dataset)
     fake_pushover = _CapturingPushover()
+    engine_overrides = getattr(dataset, "engine_overrides", None) or {}
     engine = AlertEngine(
         flume_client=fake_flume,  # type: ignore[arg-type]
         rachio_client=fake_rachio,  # type: ignore[arg-type]
         pushover=fake_pushover,  # type: ignore[arg-type]
         db=db,
         rules=rules,
+        **engine_overrides,
     )
 
     result = SimulationResult(dataset=dataset, rules=rules)
@@ -139,8 +141,17 @@ async def run_simulation(
             # Print any pushes triggered by this cycle, as they happen.
             if print_events:
                 for push in fake_pushover.sent[pre_count:]:
-                    kind = "FIRE " if push.priority == 2 else "CLEAR"
-                    print(f"  {push.when:%Y-%m-%d %H:%M}  P{push.priority}  {kind}  {push.title}")
+                    if push.priority == 2:
+                        kind = "FIRE  "
+                    elif push.priority == 0:
+                        kind = "CLEAR "
+                    elif push.priority == -1:
+                        kind = "REPORT"
+                    else:
+                        kind = f"P{push.priority:>3}"
+                    print(
+                        f"  {push.when:%Y-%m-%d %H:%M}  P{push.priority:>2}  {kind}  {push.title}"
+                    )
 
             sim_now += step
     finally:
