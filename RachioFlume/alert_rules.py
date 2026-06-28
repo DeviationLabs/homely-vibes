@@ -47,7 +47,12 @@ class ZoneThreshold(BaseModel):
 
 
 def load_rules_from_config() -> list[AlertRule]:
-    """Build AlertRule list from `cfg.rachio_flume.alerts`."""
+    """Build non-Rachio flow-rule list from `cfg.rachio_flume.alerts`.
+
+    These are whole-house sustained-flow rules (Pipe Break / High Flow / Mid
+    Flow / Leak) that apply to Flume readings independent of Rachio activity.
+    Suppressed during/just-after any Rachio activity (controller or hose timer).
+    """
     cfg = get_config()
     alerts_cfg = cfg.rachio_flume.alerts
     default_retrigger = alerts_cfg.default_retrigger_minutes
@@ -58,7 +63,7 @@ def load_rules_from_config() -> list[AlertRule]:
             duration_minutes=r.duration_minutes,
             retrigger_minutes=default_retrigger,
         )
-        for r in alerts_cfg.rules
+        for r in alerts_cfg.default_flow_rules
     ]
 
 
@@ -66,15 +71,16 @@ def load_zone_thresholds_from_config() -> dict[str, dict[str, ZoneThreshold]]:
     """Build {device_label -> {zone_key -> ZoneThreshold}} from config.
 
     `zone_key` is a stringified zone_number for controllers, or the valve name
-    for hose timers — matches the structure of cfg.rachio_flume.alerts.zone_thresholds.
+    for hose timers — matches the structure of
+    cfg.rachio_flume.alerts.zone_anomaly.zone_thresholds.
 
     Inner entries arrive as plain dicts (OmegaConf does not auto-construct
     dataclasses at depth-2 of Dict[Dict[...]]). Read fields by key.
     """
     cfg = get_config()
-    alerts_cfg = cfg.rachio_flume.alerts
+    za_cfg = cfg.rachio_flume.alerts.zone_anomaly
     out: dict[str, dict[str, ZoneThreshold]] = {}
-    for device_label, zones in alerts_cfg.zone_thresholds.items():
+    for device_label, zones in za_cfg.zone_thresholds.items():
         out[device_label] = {}
         for zone_key, zt_cfg in zones.items():
             zk = str(zone_key)

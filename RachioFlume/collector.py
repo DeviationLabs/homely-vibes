@@ -9,6 +9,7 @@ from RachioFlume.hose_timer_processor import HoseTimerProcessor
 from RachioFlume.rachio_client import RachioClient
 from RachioFlume.flume_client import FlumeClient
 from RachioFlume.data_storage import WaterTrackingDB
+from RachioFlume.stale_zone_checker import StaleZoneChecker
 from lib.logger import get_logger
 
 
@@ -21,6 +22,7 @@ class WaterTrackingCollector:
         poll_interval_seconds: int = 300,  # 5 minutes default
         alert_engine: Optional[AlertEngine] = None,
         hose_processors: Optional[List[HoseTimerProcessor]] = None,
+        stale_zone_checker: Optional[StaleZoneChecker] = None,
     ):
         self.logger = get_logger(__name__)
 
@@ -30,6 +32,7 @@ class WaterTrackingCollector:
         self.poll_interval = poll_interval_seconds
         self.alert_engine = alert_engine
         self.hose_processors = hose_processors or []
+        self.stale_zone_checker = stale_zone_checker
 
         # Initialize last collection times from database to avoid duplicates
         self.last_rachio_collection: Optional[datetime] = self.db.get_last_collection_timestamp(
@@ -160,6 +163,13 @@ class WaterTrackingCollector:
                 await self.alert_engine.evaluate()
             except Exception as e:
                 self.logger.error(f"Error evaluating alerts: {e}")
+
+        # Stale-zone check (gated to once per hour internally)
+        if self.stale_zone_checker is not None:
+            try:
+                self.stale_zone_checker.maybe_evaluate()
+            except Exception as e:
+                self.logger.error(f"Error checking stale zones: {e}")
 
         self.logger.info("Data collection cycle completed")
 

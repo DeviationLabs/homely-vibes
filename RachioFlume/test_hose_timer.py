@@ -11,7 +11,11 @@ import pytest
 
 from RachioFlume.alert_rules import ZoneThreshold
 from RachioFlume.data_storage import WaterTrackingDB
-from RachioFlume.hose_timer_processor import HoseTimerProcessor, _state_key
+from RachioFlume.hose_timer_processor import (
+    _HOSE_LAST_ACTIVE_KEY,
+    HoseTimerProcessor,
+    _state_key,
+)
 from RachioFlume.rachio_hose_client import HoseValve, RachioHoseClient
 
 
@@ -117,7 +121,8 @@ class TestHoseTimerProcessor:
         msg = call_args[0][0]
         assert "Hose Drip Jasmine" in msg
         assert "Upper Deck Planters" in msg
-        assert "thresh 0.50" in msg  # configured baseline appears in flow line
+        # Unified anomaly threshold (computed): baseline 0.5 + max(0.5, 10%*0.5) = 1.00
+        assert "thresh 1.00" in msg
         assert "Avg flow:" in msg
         assert "Total:" in msg
         assert "Flow sensor: detected" in msg
@@ -197,6 +202,80 @@ class TestHoseTimerProcessor:
         # No state persisted
         assert tmp_db.get_metadata(_state_key("valve-1")) is None
         pushover.send_message.assert_not_called()
+
+
+class TestZoneOutcomeDispatch:
+    """Verify _send_zone_outcome routes to Anomaly vs Report correctly."""
+
+    def _outcome_call(self, pushover: MagicMock) -> Any:
+        return pushover.send_message.call_args
+
+    def test_outcome_below_threshold_is_report(self, tmp_db: WaterTrackingDB) -> None:
+        valve = _valve()
+        proc, pushover = _make_processor(tmp_db, valve)
+        # baseline=0.5, thresh=1.0; avg_gpm=0.4 → below → report
+        proc._send_zone_outcome(
+            valve, duration_sec=600, avg_gpm=0.4, total_gal=4.0, flow_detected=False
+        )
+        call = self._outcome_call(pushover)
+        assert call[1]["priority"] == -1
+        assert call[1]["title"] == "RachioFlume: Zone Report"
+        assert "Deviation" not in call[0][0]
+        assert "'Upper Deck Planters' @ Hose Drip Jasmine" in call[0][0]
+
+    def test_outcome_above_threshold_is_anomaly(self, tmp_db: WaterTrackingDB) -> None:
+        valve = _valve()
+        proc, pushover = _make_processor(tmp_db, valve)
+        # baseline=0.5, thresh=1.0; avg_gpm=1.5 with 10-min runtime → anomaly
+        proc._send_zone_outcome(
+            valve, duration_sec=600, avg_gpm=1.5, total_gal=15.0, flow_detected=True
+        )
+        call = self._outcome_call(pushover)
+        assert call[1]["priority"] == 2
+        assert call[1]["title"] == "RachioFlume: Zone Anomaly"
+        body = call[0][0]
+        assert "Deviation" in body
+        assert "Total: 15.0 gal" in body
+        assert "(thresh 1.00)" in body  # unified threshold
+
+    def test_outcome_short_run_skips_anomaly(self, tmp_db: WaterTrackingDB) -> None:
+        valve = _valve()
+        proc, pushover = _make_processor(tmp_db, valve)
+        # Short 1-min run, over threshold, but min_runtime_minutes=5 → report
+        proc._send_zone_outcome(
+            valve, duration_sec=60, avg_gpm=1.5, total_gal=1.5, flow_detected=False
+        )
+        call = self._outcome_call(pushover)
+        assert call[1]["priority"] == -1
+        assert call[1]["title"] == "RachioFlume: Zone Report"
+        assert "Deviation" not in call[0][0]
+
+
+class TestHoseActivitySuppression:
+    """Verify that running valves stamp the cross-component suppression key."""
+
+    def test_active_run_writes_last_active_key(self, tmp_db: WaterTrackingDB) -> None:
+        action = {
+            "start": "2026-06-27T07:46:46Z",
+            "durationSeconds": "60",
+            "reason": "QUICK_RUN",
+            "flowDetected": False,
+        }
+        valve = _valve(action)
+        proc, _ = _make_processor(tmp_db, valve)
+        # Cycle 1 sees a new run → run_started, should stamp key
+        proc.evaluate(now=datetime(2026, 6, 27, 7, 47, 0))
+        blob = tmp_db.get_metadata(_HOSE_LAST_ACTIVE_KEY)
+        assert blob is not None
+        data = json.loads(blob)
+        assert data["device"] == "Hose Drip Jasmine"
+        assert "at" in data
+
+    def test_idle_valve_does_not_stamp_key(self, tmp_db: WaterTrackingDB) -> None:
+        valve = _valve(action=None)
+        proc, _ = _make_processor(tmp_db, valve)
+        proc.evaluate(now=datetime(2026, 6, 27, 7, 47, 0))
+        assert tmp_db.get_metadata(_HOSE_LAST_ACTIVE_KEY) is None
 
 
 class TestListValvesParsing:

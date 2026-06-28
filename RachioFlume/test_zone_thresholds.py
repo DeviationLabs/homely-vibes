@@ -99,7 +99,7 @@ def mock_engine(prod_db_path: str, zone_thresholds: dict[int, ZoneThreshold]) ->
     pushover = MagicMock()
 
     cfg = get_config()
-    alerts_cfg = cfg.rachio_flume.alerts
+    za_cfg = cfg.rachio_flume.alerts.zone_anomaly
 
     return AlertEngine(
         flume_client=flume,
@@ -108,9 +108,9 @@ def mock_engine(prod_db_path: str, zone_thresholds: dict[int, ZoneThreshold]) ->
         db=db,
         rules=[],
         zone_thresholds=zone_thresholds,
-        absolute_gpm=alerts_cfg.absolute_gpm,
-        percent_above=alerts_cfg.percent_above,
-        min_runtime_minutes=alerts_cfg.min_runtime_minutes,
+        absolute_gpm=za_cfg.absolute_gpm,
+        percent_above=za_cfg.percent_above,
+        min_runtime_minutes=za_cfg.min_runtime_minutes,
     )
 
 
@@ -165,82 +165,55 @@ class TestZoneThresholdChecking:
         assert avg_gpm == 0.0
         assert threshold == 0.5
 
-    def test_check_zone_threshold_no_alert(self, mock_engine: AlertEngine) -> None:
-        """Test that normal flow doesn't trigger alert."""
-        now = datetime.now()
-        # Zone 10 threshold is 7.7 GPM, send 7.0 GPM (below threshold)
-        alerted = mock_engine._check_zone_threshold(
-            zone_name="Z10 BB - Redwoods",
-            zone_number=10,
-            avg_gpm=7.0,
-            runtime_min=10.0,
-            now=now,
-            dry_run=False,
-        )
-        assert alerted is False
-        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
-
-    def test_check_zone_threshold_alert_triggered(self, mock_engine: AlertEngine) -> None:
-        """Test that excessive flow triggers alert."""
-        now = datetime.now()
-        # Zone 10 threshold is 7.7 GPM, send 8.5 GPM (above threshold)
-        alerted = mock_engine._check_zone_threshold(
-            zone_name="Z10 BB - Redwoods",
-            zone_number=10,
-            avg_gpm=8.5,
-            runtime_min=10.0,
-            now=now,
-            dry_run=False,
-        )
-        assert alerted is True
-        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    def _outcome_title(self, mock_engine: AlertEngine) -> str:
         call_args: Any = mock_engine.pushover.send_message.call_args  # type: ignore[attr-defined]
-        assert "anomaly" in call_args[1]["title"].lower() or "anomaly" in call_args[0][0].lower()
-        assert call_args[1]["priority"] == 2  # P2 emergency
+        return call_args[1]["title"]  # type: ignore[no-any-return]
 
-    def test_check_zone_threshold_unknown_zone_alerts(self, mock_engine: AlertEngine) -> None:
-        """Test that unknown zone with any flow triggers alert."""
-        now = datetime.now()
-        # Unknown zone threshold is 0.5 GPM, send 0.6 GPM
-        alerted = mock_engine._check_zone_threshold(
-            zone_name="Unknown Zone",
-            zone_number=99,
-            avg_gpm=0.6,
-            runtime_min=10.0,
-            now=now,
-            dry_run=False,
-        )
-        assert alerted is True
+    def _outcome_priority(self, mock_engine: AlertEngine) -> int:
+        call_args: Any = mock_engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+        return call_args[1]["priority"]  # type: ignore[no-any-return]
+
+    def _outcome_body(self, mock_engine: AlertEngine) -> str:
+        call_args: Any = mock_engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+        return call_args[0][0]  # type: ignore[no-any-return]
+
+    def test_zone_outcome_below_threshold_is_report(self, mock_engine: AlertEngine) -> None:
+        """Normal flow → routine Zone Report (P-1), not anomaly."""
+        # Zone 10 threshold is 7.7 GPM, send 7.0 GPM (below threshold)
+        mock_engine._send_zone_outcome("Z10 BB - Redwoods", 10, 10.0, 7.0, 70.0, 1)
         mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+        assert "Zone Report" in self._outcome_title(mock_engine)
+        assert self._outcome_priority(mock_engine) == -1
+        assert "Deviation" not in self._outcome_body(mock_engine)
 
-    def test_check_zone_threshold_dry_run(self, mock_engine: AlertEngine) -> None:
-        """Test dry run doesn't send actual alert."""
-        now = datetime.now()
-        alerted = mock_engine._check_zone_threshold(
-            zone_name="Z10 BB - Redwoods",
-            zone_number=10,
-            avg_gpm=8.5,
-            runtime_min=10.0,
-            now=now,
-            dry_run=True,
-        )
-        assert alerted is True
-        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    def test_zone_outcome_above_threshold_is_anomaly(self, mock_engine: AlertEngine) -> None:
+        """Excessive flow → Zone Anomaly (P2) with Deviation line + Total."""
+        # Zone 10 threshold is 7.7 GPM, send 8.5 GPM (above)
+        mock_engine._send_zone_outcome("Z10 BB - Redwoods", 10, 10.0, 8.5, 85.0, 1)
+        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+        assert "Zone Anomaly" in self._outcome_title(mock_engine)
+        assert self._outcome_priority(mock_engine) == 2
+        body = self._outcome_body(mock_engine)
+        assert "Deviation" in body
+        assert "Total: 85.0 gal" in body
+        assert "(thresh 7.70)" in body  # unified threshold value
 
-    def test_check_zone_threshold_short_run_skipped(self, mock_engine: AlertEngine) -> None:
-        """Test that short runs (<= min_runtime_minutes) don't trigger alerts."""
-        now = datetime.now()
-        # Zone 10 threshold is 7.7 GPM, send 8.5 GPM (above threshold) but short runtime
-        alerted = mock_engine._check_zone_threshold(
-            zone_name="Z10 BB - Redwoods",
-            zone_number=10,
-            avg_gpm=8.5,
-            runtime_min=3.0,  # less than min_runtime_minutes (5)
-            now=now,
-            dry_run=False,
-        )
-        assert alerted is False
-        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    def test_zone_outcome_unknown_zone_no_baseline(self, mock_engine: AlertEngine) -> None:
+        """Unknown zone has no configured baseline → routine report, no thresh."""
+        mock_engine._send_zone_outcome("Unknown Zone", 99, 10.0, 0.6, 6.0, 1)
+        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+        assert "Zone Report" in self._outcome_title(mock_engine)
+        body = self._outcome_body(mock_engine)
+        assert "(thresh" not in body  # no baseline → no thresh display
+        assert "Deviation" not in body  # no baseline → can't be anomaly
+
+    def test_zone_outcome_short_run_is_report_not_anomaly(self, mock_engine: AlertEngine) -> None:
+        """Short run (<= min_runtime_minutes) skips the anomaly path even when over threshold."""
+        # 3 min run, well over threshold, but below min_runtime_minutes → report only
+        mock_engine._send_zone_outcome("Z10 BB - Redwoods", 10, 3.0, 8.5, 25.5, 1)
+        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+        assert "Zone Report" in self._outcome_title(mock_engine)
+        assert "Deviation" not in self._outcome_body(mock_engine)
 
 
 class TestRealZoneData:
@@ -301,9 +274,8 @@ def main() -> int:
     for zone_num in sorted(zone_thresholds.keys()):
         zt = zone_thresholds[zone_num]
         cfg = get_config()
-        threshold = zt.compute_threshold(
-            cfg.rachio_flume.alerts.absolute_gpm, cfg.rachio_flume.alerts.percent_above
-        )
+        za_cfg = cfg.rachio_flume.alerts.zone_anomaly
+        threshold = zt.compute_threshold(za_cfg.absolute_gpm, za_cfg.percent_above)
         print(f"    Zone {zone_num:2d}: avg={zt.avg_gpm:5.2f} GPM, threshold={threshold:5.2f} GPM")
 
     # Test threshold checking
@@ -315,7 +287,7 @@ def main() -> int:
     pushover = MagicMock()
 
     cfg = get_config()
-    alerts_cfg = cfg.rachio_flume.alerts
+    za_cfg = cfg.rachio_flume.alerts.zone_anomaly
 
     engine = AlertEngine(
         flume_client=flume,
@@ -324,9 +296,9 @@ def main() -> int:
         db=db,
         rules=[],
         zone_thresholds=zone_thresholds,
-        absolute_gpm=alerts_cfg.absolute_gpm,
-        percent_above=alerts_cfg.percent_above,
-        min_runtime_minutes=alerts_cfg.min_runtime_minutes,
+        absolute_gpm=za_cfg.absolute_gpm,
+        percent_above=za_cfg.percent_above,
+        min_runtime_minutes=za_cfg.min_runtime_minutes,
     )
 
     # Test known zone
@@ -337,16 +309,19 @@ def main() -> int:
     threshold, avg = engine._get_zone_threshold(99)
     print(f"  ✓ Zone 99 (unknown): avg={avg:.2f}, threshold={threshold:.2f}")
 
-    # Test alert triggering
-    now = datetime.now()
-    alerted = engine._check_zone_threshold("Z10 BB", 10, 8.5, 10.0, now, dry_run=True)
-    print(f"  ✓ Zone 10 @ 8.5 GPM: alert={'YES' if alerted else 'NO'} (expected: YES)")
+    # Test outcome dispatch via _send_zone_outcome
+    now = datetime.now()  # noqa: F841 -- kept for downstream code below
+    engine._send_zone_outcome("Z10 BB", 10, 10.0, 8.5, 85.0, 1)
+    title = engine.pushover.send_message.call_args[1]["title"]  # type: ignore[attr-defined]
+    print(f"  ✓ Zone 10 @ 8.5 GPM: {title} (expected: Zone Anomaly)")
 
-    alerted = engine._check_zone_threshold("Z10 BB", 10, 7.0, 10.0, now, dry_run=True)
-    print(f"  ✓ Zone 10 @ 7.0 GPM: alert={'YES' if alerted else 'NO'} (expected: NO)")
+    engine._send_zone_outcome("Z10 BB", 10, 10.0, 7.0, 70.0, 1)
+    title = engine.pushover.send_message.call_args[1]["title"]  # type: ignore[attr-defined]
+    print(f"  ✓ Zone 10 @ 7.0 GPM: {title} (expected: Zone Report)")
 
-    alerted = engine._check_zone_threshold("Unknown", 99, 0.6, 10.0, now, dry_run=True)
-    print(f"  ✓ Zone 99 @ 0.6 GPM: alert={'YES' if alerted else 'NO'} (expected: YES)")
+    engine._send_zone_outcome("Unknown", 99, 10.0, 0.6, 6.0, 1)
+    title = engine.pushover.send_message.call_args[1]["title"]  # type: ignore[attr-defined]
+    print(f"  ✓ Zone 99 @ 0.6 GPM: {title} (expected: Zone Report; unknown→no baseline)")
 
     # Check real data
     print("\n[4/4] Checking real zone data from production...")

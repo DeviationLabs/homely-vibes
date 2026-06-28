@@ -260,20 +260,39 @@ class ZoneThresholdConfig:
 
 
 @dataclass
-class RachioFlumeAlertsConfig:
-    """Usage alert configuration for RachioFlume"""
+class ZoneAnomalyConfig:
+    """Per-zone anomaly check for Rachio-sourced runs (controller + hose timer).
 
-    enabled: bool
-    default_retrigger_minutes: int
-    threshold_mode: str  # "adaptive", "absolute", or "percent"
+    Fires at zone end when measured flow exceeds the configured baseline:
+      threshold = avg_gpm + max(absolute_gpm, percent_above/100 * avg_gpm)
+    """
+
+    threshold_mode: str  # "adaptive", "absolute", or "percent" (currently informational)
     absolute_gpm: float  # min deviation above average (GPM)
     percent_above: float  # min deviation above average (%)
-    min_runtime_minutes: int  # zone must run this long before threshold alert fires
-    rules: list[AlertRuleConfig]
+    min_runtime_minutes: int  # zone must run this long before anomaly fires
     # device_label -> zone_key -> threshold.
     # For controllers, zone_key is the integer zone_number (as a string for YAML).
     # For hose timers, zone_key is the valve name (matches getValve.name).
     zone_thresholds: Dict[str, Dict[str, ZoneThresholdConfig]]
+
+
+@dataclass
+class RachioFlumeAlertsConfig:
+    """Usage alert configuration for RachioFlume.
+
+    Two independent alert paths share this block:
+    - zone_anomaly: scoped to Rachio events (per-zone, at run end).
+    - default_flow_rules: whole-house sustained-flow rules (Flume only);
+      suppressed while any Rachio activity is recent.
+    - stale_zone_days: heads-up if an enabled zone hasn't run in N days.
+    """
+
+    enabled: bool
+    default_retrigger_minutes: int  # cadence for re-firing default_flow_rules
+    zone_anomaly: ZoneAnomalyConfig
+    default_flow_rules: list[AlertRuleConfig]
+    stale_zone_days: int
 
 
 @dataclass
