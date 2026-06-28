@@ -17,6 +17,7 @@ from RachioFlume.flume_client import FlumeClient
 from RachioFlume.hose_timer_processor import HoseTimerProcessor
 from RachioFlume.rachio_client import RachioClient
 from RachioFlume.rachio_hose_client import RachioHoseClient
+from RachioFlume.stale_zone_checker import StaleZoneChecker
 from lib.MyPushover import Pushover
 from RachioFlume.reporter import WeeklyReporter
 from lib.logger import get_logger
@@ -173,7 +174,7 @@ def _build_alert_engine() -> AlertEngine:
     """
     rules = load_rules_from_config()
     all_thresholds = load_zone_thresholds_from_config()
-    alerts_cfg = cfg.rachio_flume.alerts
+    za_cfg = cfg.rachio_flume.alerts.zone_anomaly
 
     controllers = [d for d in cfg.rachio.devices if d.type == "controller"]
     if not controllers:
@@ -189,9 +190,9 @@ def _build_alert_engine() -> AlertEngine:
         db=WaterTrackingDB(DB_PATH),
         rules=rules,
         zone_thresholds=controller_thresholds,
-        absolute_gpm=alerts_cfg.absolute_gpm,
-        percent_above=alerts_cfg.percent_above,
-        min_runtime_minutes=alerts_cfg.min_runtime_minutes,
+        absolute_gpm=za_cfg.absolute_gpm,
+        percent_above=za_cfg.percent_above,
+        min_runtime_minutes=za_cfg.min_runtime_minutes,
     )
 
 
@@ -199,9 +200,12 @@ def _build_hose_processors(db: WaterTrackingDB) -> list[HoseTimerProcessor]:
     """One HoseTimerProcessor per Smart Hose Timer base station in config.
 
     Each processor gets a shared FlumeClient so the zone-end report uses the
-    same house-water source as the controller path.
+    same house-water source as the controller path, plus the same
+    absolute_gpm / percent_above so the displayed (thresh ...) matches the
+    actual anomaly trigger value used by the controller path.
     """
     all_thresholds = load_zone_thresholds_from_config()
+    za_cfg = cfg.rachio_flume.alerts.zone_anomaly
     flume_client = (
         FlumeClient() if any(d.type == "hose_timer" for d in cfg.rachio.devices) else None
     )
@@ -221,6 +225,9 @@ def _build_hose_processors(db: WaterTrackingDB) -> list[HoseTimerProcessor]:
                 db=db,
                 thresholds=all_thresholds.get(dev.label, {}),
                 flume_client=flume_client,
+                absolute_gpm=za_cfg.absolute_gpm,
+                percent_above=za_cfg.percent_above,
+                min_runtime_minutes=za_cfg.min_runtime_minutes,
             )
         )
     return processors
@@ -235,11 +242,17 @@ def run_collection(args: argparse.Namespace) -> int:
         alert_engine = _build_alert_engine() if cfg.rachio_flume.alerts.enabled else None
         db = WaterTrackingDB(DB_PATH)
         hose_processors = _build_hose_processors(db)
+        stale_checker = StaleZoneChecker(
+            db=db,
+            pushover=pushover,
+            stale_zone_days=cfg.rachio_flume.alerts.stale_zone_days,
+        )
         collector = WaterTrackingCollector(
             DB_PATH,
             args.interval,
             alert_engine=alert_engine,
             hose_processors=hose_processors,
+            stale_zone_checker=stale_checker,
         )
         if alert_engine is not None:
             logger.info(f"Alerts enabled with {len(alert_engine.rules)} rules")

@@ -23,6 +23,13 @@ def _state_key(valve_id: str) -> str:
     return f"hose::valve::{valve_id}::last_action"
 
 
+# Cross-component key: AlertEngine reads this to suppress Flume rule alerts
+# while a hose-timer valve is running or recently ran. Mirrors the controller's
+# in-memory rachio state — kept in DB metadata so the two processors stay
+# decoupled (HoseTimerProcessor writes; AlertEngine reads).
+_HOSE_LAST_ACTIVE_KEY = "alert::__hose__::last_active"
+
+
 class HoseTimerProcessor:
     """Detect runs on hose-timer valves and emit pushover zone-end reports.
 
@@ -37,12 +44,18 @@ class HoseTimerProcessor:
         db: WaterTrackingDB,
         thresholds: Optional[dict[str, ZoneThreshold]] = None,
         flume_client: Optional[FlumeClient] = None,
+        absolute_gpm: float = 0.5,
+        percent_above: float = 10.0,
+        min_runtime_minutes: int = 5,
     ) -> None:
         self.client = client
         self.pushover = pushover
         self.db = db
         self.thresholds = thresholds or {}
         self.flume = flume_client
+        self.absolute_gpm = absolute_gpm
+        self.percent_above = percent_above
+        self.min_runtime_minutes = min_runtime_minutes
         self.logger = get_logger(__name__)
 
     def evaluate(self, *, dry_run: bool = False, now: Optional[datetime] = None) -> list[dict]:
@@ -60,9 +73,20 @@ class HoseTimerProcessor:
         if not dry_run and valves:
             self.db.save_hose_valves([v.model_dump() for v in valves])
 
+        any_active = False
         for valve in valves:
             entry = self._evaluate_valve(valve, now, dry_run)
             results.append(entry)
+            if entry["action"] in ("run_started", "still_running", "run_completed"):
+                any_active = True
+
+        # Stamp last-active timestamp so AlertEngine can suppress Flume rules
+        # while a hose valve is running or just ran.
+        if any_active and not dry_run:
+            self.db.set_metadata(
+                _HOSE_LAST_ACTIVE_KEY,
+                json.dumps({"at": now.isoformat(), "device": self.client.label}),
+            )
 
         return results
 
@@ -167,7 +191,7 @@ class HoseTimerProcessor:
                             _state_key(valve.id),
                             json.dumps({**cached, "finalized": True}),
                         )
-                        self._send_zone_report(
+                        self._send_zone_outcome(
                             valve, duration_sec, avg_gpm, total_gal, flow_detected
                         )
                     entry["action"] = "run_completed"
@@ -205,7 +229,7 @@ class HoseTimerProcessor:
         avg_gpm = total_gal / len(readings) if readings else 0.0
         return total_gal, avg_gpm
 
-    def _send_zone_report(
+    def _send_zone_outcome(
         self,
         valve: HoseValve,
         duration_sec: int,
@@ -213,11 +237,25 @@ class HoseTimerProcessor:
         total_gal: float,
         flow_detected: Optional[bool],
     ) -> None:
+        """Emit exactly one Pushover per valve run.
+
+        Routes to Zone Anomaly (P2) when measured flow exceeds the configured
+        baseline's anomaly threshold (same formula as the controller path);
+        otherwise sends Zone Report (P-1). The trimmed first line clusters
+        visually with controller zone entries in the Pushover feed.
+        """
         runtime_min = duration_sec / 60.0
-        baseline = self.thresholds[valve.name].avg_gpm if valve.name in self.thresholds else None
+        zt = self.thresholds.get(valve.name)
+        baseline = zt.avg_gpm if zt else 0.0
+        threshold = (
+            zt.compute_threshold(self.absolute_gpm, self.percent_above) if zt else self.absolute_gpm
+        )
+        is_anomaly = runtime_min > self.min_runtime_minutes and baseline > 0 and avg_gpm > threshold
+
+        header = f"'{valve.name}' @ {valve.base_station_label}"
         flow_line = (
-            f"Avg flow: {avg_gpm:.2f} GPM (thresh {baseline:.2f})"
-            if baseline is not None
+            f"Avg flow: {avg_gpm:.2f} GPM (thresh {threshold:.2f})"
+            if baseline > 0
             else f"Avg flow: {avg_gpm:.2f} GPM"
         )
         sensor_line = (
@@ -226,17 +264,26 @@ class HoseTimerProcessor:
             else ("Flow sensor: NOT detected" if flow_detected is False else "")
         )
         lines = [
-            f"Valve '{valve.name}' on {valve.base_station_label} completed.",
+            header,
             f"Runtime: {runtime_min:.0f} min",
             flow_line,
             f"Total: {total_gal:.1f} gal",
         ]
+        if is_anomaly:
+            deviation = avg_gpm - baseline
+            deviation_pct = (deviation / baseline * 100) if baseline > 0 else 0
+            lines.append(f"Deviation: +{deviation:.2f} GPM ({deviation_pct:.0f}%)")
         if sensor_line:
             lines.append(sensor_line)
-        msg = "\n".join(lines)
-        self.pushover.send_message(msg, title="RachioFlume: Hose Run", priority=-1)
+
+        if is_anomaly:
+            title, priority = "RachioFlume: Zone Anomaly", 2
+        else:
+            title, priority = "RachioFlume: Zone Report", -1
+
+        self.pushover.send_message("\n".join(lines), title=title, priority=priority)
         self.logger.info(
-            f"Hose zone-end report sent for '{valve.base_station_label}/{valve.name}': "
+            f"Hose zone outcome sent for '{valve.base_station_label}/{valve.name}': "
             f"{runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal, "
-            f"flow_detected={flow_detected}"
+            f"anomaly={is_anomaly}, flow_detected={flow_detected}"
         )

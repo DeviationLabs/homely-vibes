@@ -237,26 +237,34 @@ flume:
 rachio_flume:
   alerts:
     enabled: true
-    default_retrigger_minutes: 30
-    # Zone-end anomaly threshold: alert when flow exceeds zone avg by the
-    # greater of absolute_gpm or (percent_above / 100 * avg_gpm).
-    # "adaptive" = max(absolute_gpm, percent_above/100 * avg_gpm)
-    threshold_mode: adaptive
-    absolute_gpm: 0.5        # min deviation above average (GPM)
-    percent_above: 10        # min deviation above average (%)
-    min_runtime_minutes: 5   # zone must run this long (min) before threshold alert fires
-    rules:
+    default_retrigger_minutes: 30   # cadence for re-firing default_flow_rules
+
+    # === Per-zone anomaly check (Rachio-sourced; fires at run end) ===
+    # threshold = avg_gpm + max(absolute_gpm, percent_above/100 * avg_gpm)
+    zone_anomaly:
+      threshold_mode: adaptive       # informational; computation is "adaptive"
+      absolute_gpm: 0.5              # min deviation above average (GPM)
+      percent_above: 10              # min deviation above average (%)
+      min_runtime_minutes: 5         # zone must run this long before anomaly fires
+      # Per-zone baseline flow rates (GPM) from historical data.
+      # Outer key = device label (matches rachio.devices[].label).
+      # Inner key = zone identifier:
+      #   - Controllers: stringified zone_number (e.g. "1")
+      #   - Hose timers: valve name (e.g. "Upper Deck Planters")
+      zone_thresholds: {}
+
+    # === Whole-house sustained-flow rules (Flume only; no Rachio context) ===
+    # Suppressed while any Rachio activity (controller OR hose-timer) is recent.
+    default_flow_rules:
       - {name: "Pipe Break", min_gpm: 8.0, duration_minutes: 10}
       - {name: "High Flow",  min_gpm: 5.4, duration_minutes: 4}
       - {name: "Mid Flow",   min_gpm: 2.6, duration_minutes: 14}
       - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
-    # Per-zone baseline flow rates (GPM) from historical data.
-    # Outer key = device label (matches rachio.devices[].label).
-    # Inner key = zone identifier:
-    #   - Controllers: stringified zone_number (e.g. "1")
-    #   - Hose timers: valve name (e.g. "Upper Deck Planters")
-    # Alert fires when zone-end flow > avg + max(absolute_gpm, percent_above/100 * avg).
-    zone_thresholds: {}
+
+    # === Stale-zone monitoring ===
+    # Fire a P-1 heads-up if any enabled controller zone or connected
+    # hose-timer valve hasn't run within this many days.
+    stale_zone_days: 7
 
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:
