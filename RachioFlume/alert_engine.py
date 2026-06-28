@@ -153,64 +153,18 @@ class AlertEngine:
     # ------------------------------------------------------------------ #
 
     def _get_zone_threshold(self, zone_number: Optional[int]) -> tuple[float, float]:
-        """Get threshold for a zone.
+        """Get anomaly threshold + configured baseline for a zone.
 
         Returns:
-            (threshold_gpm, avg_gpm) tuple
+            (threshold_gpm, baseline_avg_gpm) tuple.
+            For unknown zones returns (absolute_gpm, 0.0).
         """
         if zone_number is None or zone_number not in self.zone_thresholds:
-            # Unknown zone: default to avg_gpm=0, threshold=0.5
             return self.absolute_gpm, 0.0
 
         zt = self.zone_thresholds[zone_number]
         threshold = zt.compute_threshold(self.absolute_gpm, self.percent_above)
         return threshold, zt.avg_gpm
-
-    def _check_zone_threshold(
-        self,
-        zone_name: str,
-        zone_number: Optional[int],
-        avg_gpm: float,
-        runtime_min: float,
-        now: datetime,
-        dry_run: bool,
-    ) -> bool:
-        """Check if zone flow exceeds threshold and send alert if so.
-
-        Only fires if runtime_min > self.min_runtime_minutes (short runs
-        are excluded to avoid false positives from test cycles or glitches).
-
-        Returns True if alert was sent (or would be sent in dry-run).
-        """
-        if runtime_min <= self.min_runtime_minutes:
-            return False
-
-        threshold, expected_avg = self._get_zone_threshold(zone_number)
-
-        if avg_gpm <= threshold:
-            return False
-
-        # Alert: zone flow exceeds threshold
-        deviation = avg_gpm - expected_avg
-        deviation_pct = (deviation / expected_avg * 100) if expected_avg > 0 else 0
-
-        msg = (
-            f"Zone '{zone_name}' flow anomaly detected.\n"
-            f"Avg flow: {avg_gpm:.2f} GPM (threshold: {threshold:.2f} GPM)\n"
-            f"Deviation: +{deviation:.2f} GPM ({deviation_pct:.0f}%)"
-        )
-
-        if not dry_run:
-            self.pushover.send_message(msg, title="RachioFlume: Zone Anomaly", priority=2)
-            self.logger.warning(
-                f"Zone anomaly alert sent for '{zone_name}': {avg_gpm:.2f} GPM > {threshold:.2f} GPM"
-            )
-        else:
-            self.logger.info(
-                f"[DRY RUN] Would alert zone anomaly for '{zone_name}': {avg_gpm:.2f} GPM > {threshold:.2f} GPM"
-            )
-
-        return True
 
     # ------------------------------------------------------------------ #
     # Zone-end reporting                                                  #
@@ -265,7 +219,7 @@ class AlertEngine:
             reverse=True,
         )[0]
 
-    def _send_zone_report(
+    def _send_zone_outcome(
         self,
         zone_name: str,
         zone_number: Optional[int],
@@ -274,26 +228,41 @@ class AlertEngine:
         total_gal: float,
         cycle: int,
     ) -> None:
+        """Emit exactly one Pushover per zone end.
+
+        Picks (title, priority) based on whether the anomaly threshold is
+        exceeded; otherwise sends the routine Zone Report. The displayed
+        `(thresh X.XX)` is always the anomaly trigger value (matches what
+        actually fires the anomaly), and Total is included on both paths.
+        """
+        threshold, baseline = self._get_zone_threshold(zone_number)
+        is_anomaly = runtime_min > self.min_runtime_minutes and baseline > 0 and avg_gpm > threshold
+
         cycle_label = f" (Cycle {cycle})" if cycle > 1 else ""
-        baseline = (
-            self.zone_thresholds[zone_number].avg_gpm
-            if zone_number is not None and zone_number in self.zone_thresholds
-            else None
-        )
+        header = f"'{zone_name}'{cycle_label}"
         flow_line = (
-            f"Avg flow: {avg_gpm:.2f} GPM (thresh {baseline:.2f})"
-            if baseline is not None
+            f"Avg flow: {avg_gpm:.2f} GPM (thresh {threshold:.2f})"
+            if baseline > 0
             else f"Avg flow: {avg_gpm:.2f} GPM"
         )
-        msg = (
-            f"Zone '{zone_name}' completed{cycle_label}.\n"
-            f"Runtime: {runtime_min:.0f} min\n"
-            f"{flow_line}\n"
-            f"Total: {total_gal:.1f} gal"
-        )
-        self.pushover.send_message(msg, title="RachioFlume: Zone Report", priority=-1)
+        lines = [
+            header,
+            f"Runtime: {runtime_min:.0f} min",
+            flow_line,
+            f"Total: {total_gal:.1f} gal",
+        ]
+        if is_anomaly:
+            deviation = avg_gpm - baseline
+            deviation_pct = (deviation / baseline * 100) if baseline > 0 else 0
+            lines.append(f"Deviation: +{deviation:.2f} GPM ({deviation_pct:.0f}%)")
+            title, priority = "RachioFlume: Zone Anomaly", 2
+        else:
+            title, priority = "RachioFlume: Zone Report", -1
+
+        self.pushover.send_message("\n".join(lines), title=title, priority=priority)
         self.logger.info(
-            f"Zone-end report sent for '{zone_name}'{cycle_label}: {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
+            f"Zone outcome sent for '{zone_name}'{cycle_label}: "
+            f"{runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal, anomaly={is_anomaly}"
         )
 
     def _check_zone_end_report(
@@ -342,23 +311,17 @@ class AlertEngine:
 
         if not dry_run:
             if runtime_min > 0:
-                self._send_zone_report(
+                # Single dispatch: report or anomaly, never both.
+                self._send_zone_outcome(
                     zone_name, zone_number, runtime_min, avg_gpm, total_gal, cycle
-                )
-                # Check if flow exceeds zone threshold
-                self._check_zone_threshold(
-                    zone_name, zone_number, avg_gpm, runtime_min, now, dry_run
                 )
             counts[zone_name] = cycle
             _save_count_map(self.db, _today_key(_REPORTED_ZONES_KEY, now), counts)
         else:
             self.logger.info(
-                f"[DRY RUN] Would report zone '{zone_name}' (cycle {cycle}): {runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
+                f"[DRY RUN] Would emit outcome for '{zone_name}' (cycle {cycle}): "
+                f"{runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal"
             )
-            if runtime_min > 0:
-                self._check_zone_threshold(
-                    zone_name, zone_number, avg_gpm, runtime_min, now, dry_run
-                )
 
         return True
 
@@ -509,6 +472,10 @@ class AlertEngine:
                 results.append({"zone_report": True, "zone": zone_to_report})
 
         # --- Suppress rule evaluation while irrigating or within slack ---
+        # Two independent suppression sources: (a) the in-process Rachio
+        # controller state above, (b) the cross-process hose-timer
+        # last-active key written by HoseTimerProcessor. Same slack window
+        # applies to both so behavior is symmetric.
         suppressed_by: Optional[str] = None
         if rachio_active:
             suppressed_by = f"rachio:{rachio_active.name}"
@@ -517,6 +484,19 @@ class AlertEngine:
             threshold = timedelta(minutes=max_duration + RACHIO_POST_ACTIVE_SLACK_MINUTES)
             if now - last_rachio_active_at < threshold:
                 suppressed_by = f"rachio:{last_rachio_zone} (recent)"
+
+        if not suppressed_by:
+            hose_blob = self.db.get_metadata("alert::__hose__::last_active")
+            if hose_blob:
+                try:
+                    hose_data = json.loads(hose_blob)
+                    last_hose_at = datetime.fromisoformat(hose_data["at"])
+                    max_duration = max((r.duration_minutes for r in self.rules), default=0)
+                    threshold = timedelta(minutes=max_duration + RACHIO_POST_ACTIVE_SLACK_MINUTES)
+                    if now - last_hose_at < threshold:
+                        suppressed_by = f"hose:{hose_data.get('device')} (recent)"
+                except (json.JSONDecodeError, KeyError, ValueError) as e:
+                    self.logger.warning(f"Bad hose last-active blob, ignoring: {e}")
 
         if suppressed_by:
             self.logger.debug(f"Rule evaluation suppressed by: {suppressed_by}")
