@@ -73,20 +73,24 @@ def test_predicate_does_not_fire_on_single_zero_minute(
     assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 3.0]), rule) is False
 
 
-def test_predicate_accepts_sustained_flow_with_low_cv(engine: AlertEngine, rule: AlertRule) -> None:
-    # mean([3.0, 2.8, 3.0, 2.5]) = 2.825 >= 2.6, low CV → sustained flow accepted
+def test_predicate_accepts_sustained_flow_above_threshold(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    # mean([3.0, 2.8, 3.0, 2.5]) = 2.825 >= 2.6 — sustained flow accepted
     assert engine._rule_matches(_readings([3.0, 2.8, 3.0, 2.5]), rule) is True
 
 
-def test_predicate_rejects_spiky_flow_even_if_mean_passes(
+def test_predicate_fires_on_intermittent_flow_when_mean_exceeds(
     engine: AlertEngine, rule: AlertRule
 ) -> None:
-    # mean([3.0, 0.0, 3.0, 4.5]) = 2.625 >= 2.6 but CV ≈ 0.62 >> max_cv ≈ 0.25
-    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 4.5]), rule) is False
+    # mean([3.0, 0.0, 3.0, 4.5]) = 2.625 >= 2.6 — intermittent leak fires.
+    # Per-minute zeros are fine; predicate is mean alone.
+    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 4.5]), rule) is True
 
 
-def test_predicate_single_spike_among_zeros_does_not_fire() -> None:
-    # mean([8.0, 0.0, 0.0, 0.0]) = 2.0 < 8.0 — a momentary surge is not a pipe break
+def test_predicate_single_spike_below_mean_threshold_does_not_fire() -> None:
+    # mean([8.0, 0.0, 0.0, 0.0]) = 2.0 < 8.0 — a one-minute surge can't pull
+    # a 4-minute mean above 8 GPM, so no Pipe Break fires.
     pipe_rule = AlertRule(name="Pipe Break", min_gpm=8.0, duration_minutes=4, retrigger_minutes=30)
     engine = AlertEngine(
         flume_client=MagicMock(),

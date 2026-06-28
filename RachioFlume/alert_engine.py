@@ -333,41 +333,21 @@ class AlertEngine:
     # Variance-aware rule matching                                      #
     # ------------------------------------------------------------------#
 
-    @staticmethod
-    def _max_cv(min_gpm: float) -> float:
-        """Max acceptable coefficient of variation for a rule.
-
-        Lower thresholds need tighter variance control — Flume's absolute
-        sensor noise is a larger fraction of a 0.1 GPM signal than an 8 GPM
-        pipe break.  Formula calibrated empirically; capped to [0.15, 0.5].
-        """
-        cv = 0.5 - 0.04 * min_gpm
-        return max(0.15, min(0.5, cv))
-
     def _rule_matches(self, readings: list[WaterReading], rule: AlertRule) -> bool:
+        """Fire when the window's mean flow meets or exceeds the rule threshold.
+
+        Per-minute zeros are fine — intermittent leaks (e.g. a dripping joint
+        that pulses) should still trip the Leak rule as long as the average
+        across the window meets the threshold. Previously a CV-based variance
+        gate rejected high-variance windows; that suppressed legitimate
+        intermittent failures. The mean test alone is the predicate now.
+        """
         if len(readings) < rule.duration_minutes:
             return False
         recent = readings[-rule.duration_minutes :]
         values = [r.value for r in recent]
         mean_gpm = sum(values) / len(values)
-
-        if mean_gpm < rule.min_gpm:
-            return False
-
-        # Variance guard: sustained flow must have low relative variation.
-        # Spiky noise (a few high readings among mostly-zero minutes) will
-        # have a high CV and be rejected even if the mean passes.
-        if len(values) >= 2 and mean_gpm > 0:
-            variance = sum((x - mean_gpm) ** 2 for x in values) / len(values)
-            cv = variance**0.5 / mean_gpm
-            if cv > self._max_cv(rule.min_gpm):
-                self.logger.debug(
-                    f"Rule '{rule.name}' mean {mean_gpm:.2f} passes threshold "
-                    f"but CV {cv:.3f} > {self._max_cv(rule.min_gpm):.3f} — rejecting"
-                )
-                return False
-
-        return True
+        return mean_gpm >= rule.min_gpm
 
     def _decide_action(
         self,
