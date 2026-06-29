@@ -256,9 +256,12 @@ class FlumeClient:
         # location it gives the engine a single coherent flow series instead
         # of N interleaved per-device rows. Sum is the correct combinator
         # because each meter measures a disjoint physical sub-flow.
+        # Round timestamps to the minute before merging so sub-second drift
+        # between per-device responses doesn't escape the dedup.
         merged: dict[datetime, float] = {}
         for r in all_readings:
-            merged[r.timestamp] = merged.get(r.timestamp, 0.0) + r.value
+            minute_key = r.timestamp.replace(second=0, microsecond=0)
+            merged[minute_key] = merged.get(minute_key, 0.0) + r.value
         deduped = [WaterReading(timestamp=ts, value=v) for ts, v in sorted(merged.items())]
         if len(deduped) != len(all_readings):
             self.logger.debug(
