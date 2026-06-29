@@ -7,6 +7,7 @@ from typing import Any
 import json
 import socket
 from unittest.mock import MagicMock
+from NodeCheck.manage_nodes import NodeChecker
 from NodeCheck.nodes import FoscamNode, GenericNode, SomfyMyLinkNode, WindowsNode
 from lib.config import NodeConfig, NodeType
 
@@ -378,6 +379,41 @@ class TestSomfyMyLinkNode:
 
         assert node.heartbeat() is True
         mock_conn.assert_called_once_with(("192.0.2.43", 55555), timeout=4)
+
+
+class TestWaitForHeartbeat:
+    """Test NodeChecker._wait_for_heartbeat — the post-reboot deep recovery probe.
+
+    Bypasses NodeChecker.__init__ (which loads full config) since the method only
+    needs `self`. delay=0 keeps tests instant without patching time.sleep.
+    """
+
+    def _checker(self) -> NodeChecker:
+        return NodeChecker.__new__(NodeChecker)
+
+    def test_passes_on_first_attempt(self) -> None:
+        """Healthy node -> no retries."""
+        node = MagicMock()
+        node.heartbeat.return_value = True
+
+        assert self._checker()._wait_for_heartbeat(node, attempts=3, delay=0) is True
+        node.heartbeat.assert_called_once()
+
+    def test_passes_after_retries(self) -> None:
+        """Node needs a few attempts before deep heartbeat succeeds (services coming up)."""
+        node = MagicMock()
+        node.heartbeat.side_effect = [False, False, True]
+
+        assert self._checker()._wait_for_heartbeat(node, attempts=5, delay=0) is True
+        assert node.heartbeat.call_count == 3
+
+    def test_exhausts_attempts(self) -> None:
+        """Node never recovers -> False after exactly `attempts` probes."""
+        node = MagicMock()
+        node.heartbeat.return_value = False
+
+        assert self._checker()._wait_for_heartbeat(node, attempts=4, delay=0) is False
+        assert node.heartbeat.call_count == 4
 
 
 if __name__ == "__main__":
