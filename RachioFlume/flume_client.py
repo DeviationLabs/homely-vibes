@@ -151,32 +151,37 @@ class FlumeClient:
                 except Exception:
                     pass  # Fall back to default naming
 
+        # Flume API enumerates type=1 (Wi-Fi bridge — relay only, no flow)
+        # and type=2 (water sensor — the actual meter). Bridges always report
+        # value=0 every minute, which used to produce duplicate-zero rows in
+        # water_readings and inflate-CV the engine's sustained-flow predicate
+        # into rejecting genuine multi-fixture events (e.g. a shower at
+        # 2.4 GPM showing as `[2.4, 0.0, 2.4, 0.0, ...]` after interleave).
+        # Skip non-meter device types entirely.
         devices = []
+        skipped = 0
         for device_data in device_list:
-            # Create meaningful device names based on type and location
             device_type = device_data.get("type", 0)
-            product = device_data.get("product", "flume")
-
-            if device_type == 1:
-                # Type 1 is typically the bridge/hub
-                device_name = f"{location_name or 'Flume'} Bridge"
-            elif device_type == 2:
-                # Type 2 is typically the water sensor
-                device_name = f"{location_name or 'Flume'} Water Sensor"
-            else:
-                device_name = f"{location_name or 'Flume'} Device ({product})"
-
+            if device_type != 2:
+                skipped += 1
+                self.logger.debug(
+                    f"Skipping non-meter Flume device id={device_data.get('id')} type={device_type}"
+                )
+                continue
             devices.append(
                 Device(
                     id=device_data["id"],
-                    name=device_name,
+                    name=f"{location_name or 'Flume'} Water Sensor",
                     location=location_name,
                     active=device_data.get("connected", True),
                 )
             )
 
         self._devices = devices
-        self.logger.info(f"Found {len(devices)} Flume devices: {[d.name for d in devices]}")
+        self.logger.info(
+            f"Found {len(devices)} Flume water meters "
+            f"(skipped {skipped} non-meter devices): {[d.name for d in devices]}"
+        )
         return devices
 
     def get_usage(
@@ -246,10 +251,24 @@ class FlumeClient:
                 )
                 continue
 
-        # Sort readings by timestamp
-        all_readings.sort(key=lambda x: x.timestamp)
-        self.logger.info(f"Retrieved {len(all_readings)} total water readings across all devices")
-        return all_readings
+        # Aggregate per-minute across all meters (sum). With one water meter
+        # this is a no-op deduplication; with multiple meters at the same
+        # location it gives the engine a single coherent flow series instead
+        # of N interleaved per-device rows. Sum is the correct combinator
+        # because each meter measures a disjoint physical sub-flow.
+        # Round timestamps to the minute before merging so sub-second drift
+        # between per-device responses doesn't escape the dedup.
+        merged: dict[datetime, float] = {}
+        for r in all_readings:
+            minute_key = r.timestamp.replace(second=0, microsecond=0)
+            merged[minute_key] = merged.get(minute_key, 0.0) + r.value
+        deduped = [WaterReading(timestamp=ts, value=v) for ts, v in sorted(merged.items())]
+        if len(deduped) != len(all_readings):
+            self.logger.debug(
+                f"Merged {len(all_readings)} per-device rows → {len(deduped)} per-minute rows"
+            )
+        self.logger.info(f"Retrieved {len(deduped)} per-minute water readings")
+        return deduped
 
     def get_current_usage_rate(self) -> Optional[float]:
         """Get current water usage rate across all devices in gallons per minute."""
