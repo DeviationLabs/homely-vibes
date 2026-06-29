@@ -174,6 +174,61 @@ class WaterTrackingDB:
 
             conn.commit()
 
+        # One-shot dedup of legacy per-device rows in water_readings.
+        # Pre-2026-06-28, the Flume collector saved one row per (timestamp,
+        # device), so each minute had two rows: the real meter value and a
+        # 0.0 from the bridge. Dedup by keeping MAX value per timestamp —
+        # since the bridge always read 0, MAX preserves the meter's reading
+        # for every minute that ever had real flow.
+        self._dedup_water_readings()
+
+    def _dedup_water_readings(self) -> None:
+        """Collapse duplicate-per-timestamp rows in water_readings (one-shot).
+
+        Uses an atomic DML transaction (UPDATE-then-DELETE) rather than a
+        DDL table-swap. sqlite3's `executescript` auto-commits between
+        statements, so a failure mid-script between DROP and RENAME would
+        leave the table missing; UPDATE+DELETE inside one BEGIN/COMMIT can
+        be cleanly rolled back on error.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) - COUNT(DISTINCT timestamp) AS dupes FROM water_readings"
+            )
+            row = cursor.fetchone()
+            dupes = (row["dupes"] if row else 0) or 0
+            if dupes == 0:
+                return
+            self.logger.info(f"Deduping {dupes} legacy duplicate-per-timestamp water_readings rows")
+            try:
+                cursor.execute("BEGIN")
+                # Promote every duplicate row's value to the max for its timestamp,
+                # so legacy bridge=0 / meter=N pairs all carry the meter's reading
+                # before we delete duplicates.
+                cursor.execute(
+                    """
+                    UPDATE water_readings
+                    SET value = (
+                        SELECT MAX(value) FROM water_readings AS w2
+                        WHERE w2.timestamp = water_readings.timestamp
+                    )
+                    """
+                )
+                # Keep lowest-id row per timestamp; delete the rest.
+                cursor.execute(
+                    """
+                    DELETE FROM water_readings
+                    WHERE id NOT IN (
+                        SELECT MIN(id) FROM water_readings GROUP BY timestamp
+                    )
+                    """
+                )
+                cursor.execute("COMMIT")
+            except Exception:
+                cursor.execute("ROLLBACK")
+                raise
+
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Get database connection with automatic cleanup."""
