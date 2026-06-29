@@ -7,11 +7,14 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 - **Rachio Integration**: Monitor active zones and watering events
 - **Flume Integration**: Track real-time water consumption across all devices
 - **Data Correlation**: Match watering events with water usage patterns
+- **Smart Hose Timer support** (`rachio_hose_client.py`, `hose_timer_processor.py`): Rachio Smart Hose Timer base stations exposed via `cloud-rest.rach.io` alongside the controller. Runs detected via `lastWateringAction` state polling; flow stats from Flume.
 - **Usage Alerts** (`alert_engine.py`):
-  - **Zone-end reports**: One P-1 Pushover notification per zone per day, sent after the zone finishes irrigating (10-min slack for data to settle). Reports runtime, precise avg GPM, and total gallons.
-  - **Zone anomaly detection**: Per-zone flow thresholds (adaptive: `avg + max(0.5 GPM, 10% of avg)`). P2 emergency alert when zone-end flow exceeds threshold. Unknown zones default to 0.5 GPM threshold.
-  - **Anomaly rules**: Pipe Break / High Flow / Mid Flow / Low Flow / Leak — P2 (emergency), at most once per day per rule. Uses coefficient-of-variation filter to reject spiky noise on low-flow rules.
-  - Suppressed during Rachio irrigation; mute support; P0 "all clear" on active→clear transition
+  - **Single dispatch per zone end**: One Pushover per zone end — `RachioFlume: Zone Report` (P-1) below anomaly threshold, `RachioFlume: Zone Anomaly` (P2) above. Never both. Includes runtime, avg GPM, `(thresh X.XX)` (computed anomaly threshold), Total, and Deviation line on anomalies.
+  - **Zone anomaly detection**: Per-zone baselines under `rachio_flume.alerts.zone_anomaly.zone_thresholds`, keyed by device label then zone identifier (controller: stringified `zone_number`; hose-timer: valve name). Threshold formula: `avg_gpm + max(absolute_gpm, percent_above/100 × avg_gpm)`.
+  - **Default flow rules** (whole-house, Flume-only): Pipe Break / High Flow / Mid Flow / Leak — P2 (emergency), at most once per day per rule. CV-based variance filter rejects spiky noise on low-flow rules.
+  - **Cross-source suppression**: Controller-active OR hose-timer-active state suppresses Flume rules for `max_rule_duration + 10min` slack. Symmetric.
+  - **Stale-zone monitor** (`stale_zone_checker.py`): P-1 heads-up if any enabled zone hasn't run within `stale_zone_days` (default 7). Daily dedup; hourly evaluation gate.
+  - Mute support; P0 "all clear" on active→clear transition for sustained-flow rules.
 - **Synthetic Simulator** (`simulate_alerts.py`): Replay a YAML-defined scenario through the alert engine without hitting real APIs or Pushover — see [TESTABILITY.md](TESTABILITY.md)
 - **Period Reports**: Generate detailed reports with:
   - Average watering rate by zone
@@ -27,10 +30,16 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 Add your API credentials to `config/local.yaml`:
 
 ```yaml
-# Rachio API credentials
+# Rachio API credentials. Single api_key works for both controllers and hose timers.
+# `type` selects the API surface:
+#   - "controller": api.rach.io/1/public/device/*    (Smart Sprinkler Controller)
+#   - "hose_timer": cloud-rest.rach.io/valve/*       (Smart Hose Timer base station)
+# `id` is the deviceId (controllers) or baseStationId (hose timers).
 rachio:
   api_key: abc123...
-  rachio_id: device-uuid...
+  devices:
+    - {id: "5d11b1a5-...", label: "Rachio-Eden",       type: "controller"}
+    - {id: "a632eacc-...", label: "Hose Drip Jasmine", type: "hose_timer"}
 
 # Flume API credentials (get from https://portal.flumetech.com/#token)
 flume:
@@ -39,6 +48,10 @@ flume:
   user_email: your-email@example.com
   password: your-password...
 ```
+
+Run `uv run python RachioFlume/rfmanager.py list-devices` after setting
+`api_key` to enumerate all controllers and hose-timer base stations the API
+sees, then populate `devices` with the printed ids/labels.
 
 **Note**: The credentials are sourced from `config/local.yaml` (gitignored) for security.
 
@@ -121,43 +134,99 @@ uv run python rfmanager.py raw --hours 48
 
 ### 🚨 Usage Alerts
 
-The collector evaluates configurable flow-rate alerts each polling cycle. Defaults
-mirror the Flume app screenshots (Pipe Break, High Flow, Mid Flow, Low Flow, Leak)
-and live in `config/default.yaml` under `rachio_flume.alerts` — override per-house
-in `config/local.yaml`.
+The collector evaluates two independent alert paths each polling cycle.
+Config lives under `rachio_flume.alerts` in `config/default.yaml`,
+overridable per-house in `config/local.yaml`. The block is split by scope:
+
+- **`zone_anomaly`** — per-zone anomaly check (Rachio-sourced; fires at run end).
+  Holds `threshold_mode`, `absolute_gpm`, `percent_above`, `min_runtime_minutes`,
+  and `zone_thresholds`. Computes `threshold = avg_gpm + max(absolute_gpm, percent_above/100 × avg_gpm)`.
+- **`default_flow_rules`** — whole-house sustained-flow rules (Flume only, no
+  Rachio context). Pipe Break, High Flow, Mid Flow, Leak. Suppressed while any
+  Rachio activity (controller OR hose-timer) is recent.
+- **`stale_zone_days`** — heads-up threshold for the stale-zone monitor.
 
 Key behaviors:
-- **Zone-end report (P-1)** — one notification per zone per day, sent after the zone finishes irrigating (10-min slack). Reports runtime, avg GPM, and total gallons.
-- **Anomaly rules fire at P2** (emergency — retries until you ack), at most once per day per rule
-- **CV-based variance filter** — rules require both mean ≥ threshold AND low coefficient of variation. Rejects spiky noise (e.g. a few high readings among zeros) that would pass a mean-only check. Formula: `max_cv = 0.5 - 0.04 × min_gpm`, capped [0.15, 0.5].
-- **Priority-0 "all clear" notification** on the cycle the condition transitions active → clear
-- **Suppression while Rachio irrigates** (plus a 10-min slack after the zone completes)
-- **Report failures escalate to Pushover** — if the weekly email report fails (e.g. Gmail auth error), a priority-2 Pushover notification is sent so you know immediately
+
+- **One Pushover per zone end** — `_send_zone_outcome` on both AlertEngine and
+  HoseTimerProcessor picks `(title, priority)` based on whether measured flow
+  exceeds the anomaly threshold. Either `RachioFlume: Zone Report` (P-1) OR
+  `RachioFlume: Zone Anomaly` (P2). Never both. Anomaly variant adds a
+  `Deviation: +X.XX GPM (Y%)` line. Both variants include `Total: N.N gal`.
+- **Unified threshold value** — the `(thresh X.XX)` shown on every zone-end
+  report is the computed anomaly trigger value, matching what actually fires.
+- **Sustained-flow rules fire at P2** (emergency — retries until acked), at
+  most once per day per rule. P-0 "all clear" on transition active → clear.
+- **Final detector logic for sustained-flow rules** — implemented in
+  [`AlertEngine._rule_matches`](alert_engine.py). A rule fires when both
+  conditions hold across the trailing `duration_minutes` window:
+  1. **Mean test** — `mean(values) ≥ rule.min_gpm`.
+  2. **CV variance gate** — `cv = stddev / mean ≤ max_cv(rule.min_gpm)`,
+     where `max_cv = clip(0.5 − 0.04 × min_gpm, 0.15, 0.5)`. Rejects
+     spiky windows where a handful of high readings drag the mean up
+     past threshold but the rest are zero — Flume sensor noise has a
+     larger relative footprint at low GPM, so low-threshold rules
+     (Leak at 0.1 GPM) get a tighter CV cap than high-threshold rules
+     (Pipe Break at 8 GPM).
+
+  Tradeoff: an *intermittent* leak (e.g. a joint that pulses) where most
+  per-minute readings are zero will fail the CV gate and stay silent.
+  This is a deliberate choice: we tried removing the CV gate on this
+  branch (commits a672f9c → 652bb31 in PR #201) and a 7-day replay
+  showed 6 Leak fires/week of ambiguous origin. Restored the gate;
+  the proper fix for true intermittent leaks is to lower the per-rule
+  `duration_minutes` so a shorter window can fully encompass each
+  pulse, rather than weaken the noise rejection.
+- **Cross-source suppression** — controller-active OR hose-timer-active state
+  suppresses Flume `default_flow_rules` for `max_rule_duration + 10min`
+  slack. Symmetric. HoseTimerProcessor writes `alert::__hose__::last_active`;
+  AlertEngine reads it.
+- **Stale-zone monitor** — separate `StaleZoneChecker` fires P-1 if any
+  enabled controller zone or connected hose-timer valve hasn't run within
+  `stale_zone_days` (default 7). Daily dedup per zone; hourly evaluation gate.
+  Catches: schedule accidentally disabled, hose-timer hub offline, dead
+  valve battery, etc.
+- **Report failures escalate to Pushover** — weekly-email failure (e.g.
+  Gmail auth error) fires P2 Pushover so you know immediately.
 
 ```bash
 # Dry-run all rules against live Flume / Rachio (no Pushover sent)
-uv run python -m RachioFlume.rfmanager alerts test
+uv run python RachioFlume/rfmanager.py alerts test
 
 # Show per-rule state
-uv run python -m RachioFlume.rfmanager alerts status
+uv run python RachioFlume/rfmanager.py alerts status
 
 # Mute a rule (e.g. while doing plumbing work)
-uv run python -m RachioFlume.rfmanager alerts mute "Pipe Break" --hours 4
-uv run python -m RachioFlume.rfmanager alerts unmute "Pipe Break"
+uv run python RachioFlume/rfmanager.py alerts mute "Pipe Break" --hours 4
+uv run python RachioFlume/rfmanager.py alerts unmute "Pipe Break"
 ```
 
-### 🔁 DB Replay — validate rules against real data
+### 🔁 DB Replay — validate alerts against real data
 
-Replay production `water_readings` through the alert engine without hitting the
-Flume/Rachio APIs or sending Pushover. Useful for tuning predicates.
+Replay production `water_readings` + `watering_events` through the alert
+engine without hitting Flume/Rachio APIs or sending Pushover. Useful for
+verifying logic changes don't false-trigger on real data, and for tuning
+predicates.
+
+Two patterns:
 
 ```bash
-# Replay last 24 hours of production data (default)
-uv run python -m RachioFlume.rfmanager alerts replay
+# 1. Replay against the LOCAL DB (whatever's in your config path)
+uv run python RachioFlume/rfmanager.py alerts replay --hours 168   # 7 days
 
-# Replay last 7 days
-uv run python -m RachioFlume.rfmanager alerts replay --hours 168
+# 2. Replay against a COPY of the prod DB (safest — no risk of writes to prod)
+scp abutala@aibo:/home/abutala/logs/water_tracking.db /tmp/aibo_water_tracking.db
+uv run python RachioFlume/rfmanager.py alerts replay \
+    --hours 168 --db /tmp/aibo_water_tracking.db
 ```
+
+Output is tab-aligned and shows the new label set: `REPORT` (P-1), `FIRE` (P2),
+`CLEAR` (P0). Suppressed cycles are summarized at the bottom (the suppression
+window includes both controller and hose-timer activity).
+
+A clean 7-day replay against current prod data should produce ~24 `Zone Report`
+entries (12 active zones × 2 cycles/week) and zero false `Pipe Break` / `Leak`
+fires while irrigation is active.
 
 ### 🌐 Remote test loop on omega
 
@@ -176,20 +245,18 @@ ssh omega "git clone https://github.com/DeviationLabs/homely-vibes ~/Code-test &
 ssh omega "ln -sf ~/Code/config/local.yaml ~/Code-test/config/local.yaml"
 ```
 
-### 🧪 Synthetic Simulator
+### 🧪 Synthetic Scenarios (unit tests only)
 
-Replay a hand-crafted scenario through the engine — no real APIs, no Pushover,
-events printed to stdout. Useful for tuning rules or validating changes.
+Hand-crafted scenarios (pipe break, slow leak, irrigation-overlap-leak, etc.)
+live in [test_alert_simulation.py](test_alert_simulation.py) as pytest
+assertions — built in-code via `SyntheticDataset.add_*` builders from
+[synthetic_data.py](synthetic_data.py). No YAML, no separate CLI verb —
+running `make test` exercises them.
 
-```bash
-# Default scenario at config/synthetic_alerts.yaml
-uv run python -m RachioFlume.rfmanager simulate
-
-# Custom scenario file + poll cadence
-uv run python -m RachioFlume.rfmanager simulate --config my_scenario.yaml --poll-interval 5
-```
-
-See [TESTABILITY.md](TESTABILITY.md) for the scenario schema and worked examples.
+The simulator's AlertEngine is constructed against the real merged config
+(`default.yaml` + `local.yaml`), so a scenario run is also an integration
+test of the config shape your production collector uses. See
+[TESTABILITY.md](TESTABILITY.md) for the scenario taxonomy + assertions.
 
 ### 🛑 Stop Data Collection
 
@@ -202,6 +269,54 @@ kill <process_id>
 
 # Or if running in foreground, just use Ctrl+C
 ```
+
+### 🚀 Deployment runbook (aibo)
+
+Production lives on `aibo`. The collector runs from cron's `@reboot` wrapped in
+`run-one-constantly` (auto-restarts on exit), so deploying new code is a
+3-step ritual.
+
+Before any production deploy that changes the `rachio_flume.alerts` schema,
+**migrate aibo's `local.yaml` first**. The new structured-config loader is
+strict — an outdated schema crashes on startup.
+
+```bash
+# 1) Backup aibo's local.yaml (gitignored, host-specific)
+ssh abutala@aibo 'cp ~/bin/Common-configs/Code_config_local.yaml \
+    ~/bin/Common-configs/Code_config_local.yaml.bak-$(date +%Y%m%d-%H%M%S)'
+
+# 2) Migrate the rachio_flume block to the new shape — easiest is:
+#    a. scp it down, edit locally, scp back
+#    b. or edit in place via ssh + python script
+scp abutala@aibo:/home/abutala/bin/Common-configs/Code_config_local.yaml /tmp/aibo_local.yaml
+# (edit /tmp/aibo_local.yaml to match new schema — keep host-specific blocks like node_check, prod_controller unchanged)
+scp /tmp/aibo_local.yaml abutala@aibo:/home/abutala/bin/Common-configs/Code_config_local.yaml
+
+# 3) Pull new code on aibo
+ssh abutala@aibo 'cd ~/Code && git fetch origin && git pull origin main'
+
+# 4) Verify new config loads cleanly before restart
+ssh abutala@aibo 'cd ~/Code && uv run python -c "
+from lib.config import reset_config, get_config; reset_config()
+cfg = get_config()
+print(\"zone_anomaly:\", cfg.rachio_flume.alerts.zone_anomaly.absolute_gpm)
+print(\"flow rules:\", [r.name for r in cfg.rachio_flume.alerts.default_flow_rules])
+print(\"stale days:\", cfg.rachio_flume.alerts.stale_zone_days)
+"'
+
+# 5) Kill the python collector process; run-one-constantly auto-restarts with new code
+ssh abutala@aibo 'pkill -f ".venv/bin/python3 RachioFlume/rfmanager.py"'
+sleep 12
+ssh abutala@aibo 'ps auxf | grep ".venv/bin/python3 RachioFlume/rfmanager.py" | grep -v grep'
+
+# 6) Tail logs to confirm a clean cycle
+ssh abutala@aibo 'tail -25 ~/logs/rfmanager.py.log'
+```
+
+The first post-restart cycle should show: zones saved, Flume readings
+saved, hose-timer valves listed (if any), and (if any zones are stale
+beyond the threshold) the very first `Stale-zone alert sent: ...` message
+— that's expected on new code or fresh DB.
 
 ## Architecture
 

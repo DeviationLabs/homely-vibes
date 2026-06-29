@@ -10,10 +10,7 @@ can stack scenarios (e.g. a household shower running during a slow leak).
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Optional
-
-from omegaconf import OmegaConf
 
 from RachioFlume.flume_client import WaterReading
 from RachioFlume.rachio_client import Zone
@@ -50,7 +47,13 @@ class Event:
 
 @dataclass
 class SyntheticDataset:
-    """A timeline of water-usage events."""
+    """A timeline of water-usage events.
+
+    Built in-code via the `add_*` methods. The AlertEngine that consumes
+    this dataset reads its own knobs (zone_thresholds, absolute_gpm, etc.)
+    from `cfg.rachio_flume.alerts` — exactly the same config the production
+    collector uses, so simulating is also a test of the config shape.
+    """
 
     start: datetime
     days: int
@@ -164,79 +167,8 @@ class SyntheticDataset:
         return readings
 
 
-# -------- YAML loader --------
-
-
-def load_dataset_from_yaml(path: str | Path) -> SyntheticDataset:
-    """Load a SyntheticDataset from a YAML file.
-
-    Expected schema:
-        start_date: "2026-05-01"   # ISO date or datetime
-        days: 30
-        events:
-          - {day: 1, hour: 7, minute: 30, kind: shower}
-          - {day: 2, hour: 6, kind: irrigation, zone: "Front", duration_minutes: 30, gpm: 4.0}
-          - {day: 3, hour: 0, kind: slow_leak, duration_hours: 72, gpm: 0.15}
-          - {day: 7, hour: 14, kind: pipe_break, duration_minutes: 20, gpm: 9.0}
-    """
-    cfg = OmegaConf.load(str(path))
-    blob = OmegaConf.to_container(cfg, resolve=True)
-    if not isinstance(blob, dict):
-        raise ValueError(f"Expected top-level mapping in {path}, got {type(blob).__name__}")
-    start_raw = blob["start_date"]
-    if isinstance(start_raw, str):
-        start = datetime.fromisoformat(start_raw)
-    elif isinstance(start_raw, datetime):
-        start = start_raw
-    else:
-        # OmegaConf may surface a date object; combine with midnight.
-        start = datetime.combine(start_raw, datetime.min.time())
-    days = int(blob["days"])
-    ds = SyntheticDataset(start=start, days=days)
-
-    for ev in blob.get("events", []):
-        kind = ev["kind"]
-        day = int(ev["day"])
-        hour = int(ev["hour"])
-        minute = int(ev.get("minute", 0))
-
-        if kind in HOUSEHOLD_RECIPES:
-            ds.add_household(day=day, hour=hour, kind=kind, minute=minute)
-        elif kind == "irrigation":
-            ds.add_irrigation(
-                day=day,
-                hour=hour,
-                minute=minute,
-                zone_name=ev["zone"],
-                duration_minutes=int(ev["duration_minutes"]),
-                gpm=float(ev["gpm"]),
-                zone_number=int(ev.get("zone_number", 1)),
-            )
-        elif kind == "slow_leak":
-            ds.add_slow_leak(
-                start_day=day,
-                hour=hour,
-                minute=minute,
-                duration_hours=int(ev["duration_hours"]),
-                gpm=float(ev["gpm"]),
-            )
-        elif kind == "pipe_break":
-            ds.add_pipe_break(
-                day=day,
-                hour=hour,
-                minute=minute,
-                duration_minutes=int(ev["duration_minutes"]),
-                gpm=float(ev["gpm"]),
-            )
-        else:
-            raise ValueError(f"Unknown event kind '{kind}' in {path}")
-
-    return ds
-
-
 __all__ = [
     "Event",
     "HOUSEHOLD_RECIPES",
     "SyntheticDataset",
-    "load_dataset_from_yaml",
 ]

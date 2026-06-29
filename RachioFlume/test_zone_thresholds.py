@@ -207,13 +207,11 @@ class TestZoneThresholdChecking:
         assert "(thresh" not in body  # no baseline → no thresh display
         assert "Deviation" not in body  # no baseline → can't be anomaly
 
-    def test_zone_outcome_short_run_is_report_not_anomaly(self, mock_engine: AlertEngine) -> None:
-        """Short run (<= min_runtime_minutes) skips the anomaly path even when over threshold."""
-        # 3 min run, well over threshold, but below min_runtime_minutes → report only
+    def test_zone_outcome_short_run_emits_nothing(self, mock_engine: AlertEngine) -> None:
+        """Short run (<= min_runtime_minutes) is fully silenced — no Pushover at all."""
+        # 3-min run, well over the 7.7 threshold, but below min_runtime_minutes (5)
         mock_engine._send_zone_outcome("Z10 BB - Redwoods", 10, 3.0, 8.5, 25.5, 1)
-        mock_engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
-        assert "Zone Report" in self._outcome_title(mock_engine)
-        assert "Deviation" not in self._outcome_body(mock_engine)
+        mock_engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
 
 
 class TestRealZoneData:

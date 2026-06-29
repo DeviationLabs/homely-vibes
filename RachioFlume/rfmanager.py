@@ -92,24 +92,6 @@ def main() -> int:
         help="Number of hours for raw data report (default: 24)",
     )
 
-    # Simulate command (synthetic playback — no Pushover sent)
-    sim_parser = subparsers.add_parser(
-        "simulate",
-        help="Replay a synthetic scenario through the alert engine (screen only, no Pushover)",
-    )
-    sim_parser.add_argument(
-        "--config",
-        type=str,
-        default="config/synthetic_alerts.yaml",
-        help="Path to synthetic scenario YAML (default: config/synthetic_alerts.yaml)",
-    )
-    sim_parser.add_argument(
-        "--poll-interval",
-        type=int,
-        default=5,
-        help="Simulated poll cadence in minutes (default: 5)",
-    )
-
     # Alerts subcommands
     alerts_parser = subparsers.add_parser("alerts", help="Manage usage alerts")
     alerts_sub = alerts_parser.add_subparsers(dest="alerts_command", help="Alert subcommands")
@@ -160,8 +142,6 @@ def main() -> int:
         return generate_raw_report(args)
     elif args.command == "alerts":
         return run_alerts_command(args)
-    elif args.command == "simulate":
-        return run_simulate_command(args)
 
     return 0
 
@@ -459,22 +439,6 @@ def generate_raw_report(args: argparse.Namespace) -> int:
             title="RachioFlume Report Error",
             priority=2,
         )
-        return 1
-
-
-def run_simulate_command(args: argparse.Namespace) -> int:
-    """Replay a synthetic scenario through the alert engine and print events."""
-    from RachioFlume.simulate_alerts import run_simulation_from_yaml
-
-    logger = get_logger(__name__)
-    try:
-        run_simulation_from_yaml(args.config, poll_interval_minutes=args.poll_interval)
-        return 0
-    except FileNotFoundError as e:
-        logger.error(f"Scenario file not found: {e}")
-        return 1
-    except Exception as e:
-        logger.error(f"Simulation failed: {e}")
         return 1
 
 
