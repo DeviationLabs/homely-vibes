@@ -237,20 +237,31 @@ class HoseTimerProcessor:
         total_gal: float,
         flow_detected: Optional[bool],
     ) -> None:
-        """Emit exactly one Pushover per valve run.
+        """Emit at most one Pushover per valve run.
 
-        Routes to Zone Anomaly (P2) when measured flow exceeds the configured
-        baseline's anomaly threshold (same formula as the controller path);
-        otherwise sends Zone Report (P-1). The trimmed first line clusters
-        visually with controller zone entries in the Pushover feed.
+        Short runs (≤ min_runtime_minutes, default 5) are silenced entirely —
+        same gate as the controller path so test/quick-run pulses don't flood
+        the feed. Above the threshold, routes to Zone Anomaly (P2) when flow
+        exceeds the configured baseline's anomaly threshold; otherwise sends
+        Zone Report (P-1). The trimmed first line clusters visually with
+        controller zone entries in the Pushover feed.
         """
         runtime_min = duration_sec / 60.0
+        if runtime_min <= self.min_runtime_minutes:
+            self.logger.info(
+                f"Skipping hose zone outcome for "
+                f"'{valve.base_station_label}/{valve.name}': "
+                f"runtime {runtime_min:.0f}min ≤ min_runtime_minutes "
+                f"{self.min_runtime_minutes}min"
+            )
+            return
+
         zt = self.thresholds.get(valve.name)
         baseline = zt.avg_gpm if zt else 0.0
         threshold = (
             zt.compute_threshold(self.absolute_gpm, self.percent_above) if zt else self.absolute_gpm
         )
-        is_anomaly = runtime_min > self.min_runtime_minutes and baseline > 0 and avg_gpm > threshold
+        is_anomaly = baseline > 0 and avg_gpm > threshold
 
         header = f"'{valve.name}' @ {valve.base_station_label}"
         flow_line = (

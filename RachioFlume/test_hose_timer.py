@@ -98,20 +98,22 @@ class TestHoseTimerProcessor:
         assert cached["duration_seconds"] == 60
 
     def test_run_completed_sends_pushover_and_session(self, tmp_db: WaterTrackingDB) -> None:
-        # Seed processor with a started run
+        # Seed processor with a started run — 600s = 10 min > min_runtime_minutes (5)
         action = {
             "start": "2026-06-27T07:46:46Z",
-            "durationSeconds": "60",
+            "durationSeconds": "600",
             "reason": "QUICK_RUN",
             "flowDetected": True,
         }
         valve = _valve(action)
         proc, pushover = _make_processor(tmp_db, valve)
-        proc.evaluate(now=datetime(2026, 6, 27, 7, 47, 0))
+        local_start = RachioHoseClient.parse_action_start(action)
+        assert local_start is not None
+        proc.evaluate(now=local_start + timedelta(seconds=14))
 
         # Next poll: action gone, now > start + duration
         proc.client.list_valves.return_value = [_valve(action=None)]  # type: ignore[attr-defined]
-        results = proc.evaluate(now=datetime(2026, 6, 27, 7, 49, 0))
+        results = proc.evaluate(now=local_start + timedelta(minutes=11))
 
         assert results[0]["action"] == "run_completed"
         assert results[0]["flow_detected"] is True
@@ -128,16 +130,17 @@ class TestHoseTimerProcessor:
         assert "Flow sensor: detected" in msg
         # Session row persisted
         sessions = tmp_db.get_hose_zone_sessions(
-            datetime(2026, 6, 27, 0, 0, 0), datetime(2026, 6, 27, 23, 59, 0)
+            local_start - timedelta(hours=1), local_start + timedelta(hours=1)
         )
         assert len(sessions) == 1
-        assert sessions[0]["duration_seconds"] == 60
+        assert sessions[0]["duration_seconds"] == 600
         assert sessions[0]["flow_detected"] == 1
 
     def test_no_pushover_when_no_baseline(self, tmp_db: WaterTrackingDB) -> None:
+        # 600s = 10 min > min_runtime_minutes (5) — gate passes; no baseline → report path
         action = {
             "start": "2026-06-27T07:46:46Z",
-            "durationSeconds": "60",
+            "durationSeconds": "600",
             "reason": "QUICK_RUN",
             "flowDetected": None,
         }
@@ -147,10 +150,12 @@ class TestHoseTimerProcessor:
         client.list_valves.return_value = [valve]
         pushover = MagicMock()
         proc = HoseTimerProcessor(client=client, pushover=pushover, db=tmp_db, thresholds={})
+        local_start = RachioHoseClient.parse_action_start(action)
+        assert local_start is not None
 
-        proc.evaluate(now=datetime(2026, 6, 27, 7, 47, 0))
+        proc.evaluate(now=local_start + timedelta(seconds=14))
         client.list_valves.return_value = [_valve(action=None)]
-        proc.evaluate(now=datetime(2026, 6, 27, 7, 49, 0))
+        proc.evaluate(now=local_start + timedelta(minutes=11))
 
         pushover.send_message.assert_called_once()
         msg = pushover.send_message.call_args[0][0]
@@ -238,17 +243,14 @@ class TestZoneOutcomeDispatch:
         assert "Total: 15.0 gal" in body
         assert "(thresh 1.00)" in body  # unified threshold
 
-    def test_outcome_short_run_skips_anomaly(self, tmp_db: WaterTrackingDB) -> None:
+    def test_outcome_short_run_emits_nothing(self, tmp_db: WaterTrackingDB) -> None:
         valve = _valve()
         proc, pushover = _make_processor(tmp_db, valve)
-        # Short 1-min run, over threshold, but min_runtime_minutes=5 → report
+        # 1-min run, even over threshold → fully silenced by the runtime gate
         proc._send_zone_outcome(
             valve, duration_sec=60, avg_gpm=1.5, total_gal=1.5, flow_detected=False
         )
-        call = self._outcome_call(pushover)
-        assert call[1]["priority"] == -1
-        assert call[1]["title"] == "RachioFlume: Zone Report"
-        assert "Deviation" not in call[0][0]
+        pushover.send_message.assert_not_called()
 
 
 class TestHoseActivitySuppression:

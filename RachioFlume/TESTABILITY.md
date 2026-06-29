@@ -48,100 +48,40 @@ The DB-replay path complements: synthetic exercises pathological scenarios
 the engine has to handle; DB-replay verifies the engine doesn't false-fire
 on real (boring) data.
 
-## Scenario YAML schema
+## Scenario authoring
 
-```yaml
-start_date: "2026-05-01"   # ISO date — day 0 of the simulation
-days: 10                    # how long the timeline runs
+Scenarios are built in-code via [SyntheticDataset](synthetic_data.py) builders
+inside [test_alert_simulation.py](test_alert_simulation.py). Each scenario
+is a pytest function that constructs a fresh timeline, runs it through
+`run_simulation`, and asserts on the captured pushover stream.
 
-# Optional: inject ZoneThreshold baselines for this simulation only.
-# Lets you exercise the Zone Anomaly P2 dispatch without editing global
-# cfg.rachio_flume.alerts.zone_anomaly.zone_thresholds. Keys = zone_number.
-zone_thresholds:
-  3: {name: "Front Yard*", avg_gpm: 4.0}
-  5: {name: "Back Yard*",  avg_gpm: 3.5}
+```python
+ds = SyntheticDataset(start=datetime(2026, 5, 1), days=10)
+ds.add_household(day=0, hour=7, kind="shower")
+ds.add_irrigation(day=2, hour=6, minute=1, zone_name="Front Yard",
+                  duration_minutes=30, gpm=4.2, zone_number=3)
+ds.add_slow_leak(start_day=3, hour=0, duration_hours=72, gpm=0.18)
+ds.add_pipe_break(day=7, hour=14, duration_minutes=20, gpm=9.0)
 
-# Optional: override AlertEngine knobs for this simulation only.
-absolute_gpm: 0.5
-percent_above: 10
-min_runtime_minutes: 5
-
-events:                     # list of overlapping water-using events
-  # Household recipes (duration + gpm baked into synthetic_data.py:HOUSEHOLD_RECIPES):
-  - {day: 0, hour: 7,  minute: 0,  kind: shower}     # 8 min @ 2.4 gpm
-  - {day: 0, hour: 19, minute: 30, kind: dishwasher} # 60 min @ 0.8 gpm
-  - {day: 1, hour: 21, minute: 0,  kind: laundry}    # 45 min @ 1.5 gpm
-  - {day: 1, hour: 12, minute: 0,  kind: sink}       # 3 min @ 1.2 gpm
-  - {day: 1, hour: 18, minute: 0,  kind: hose}       # 10 min @ 3.5 gpm
-  - {day: 1, hour: 13, minute: 0,  kind: toilet}     # 1 min @ 4.0 gpm
-
-  # Rachio irrigation — Rachio reports the zone active during the window
-  - {day: 2, hour: 6, minute: 1, kind: irrigation,
-     zone: "Front Yard", duration_minutes: 30, gpm: 4.2, zone_number: 3}
-
-  # Synthetic failure modes
-  - {day: 3, hour: 0,  minute: 0, kind: slow_leak,  duration_hours: 72,  gpm: 0.18}
-  - {day: 7, hour: 14, minute: 0, kind: pipe_break, duration_minutes: 20, gpm: 9.0}
+result = await run_simulation(ds, _rules(), poll_interval_minutes=5)
 ```
 
 GPM at any minute is the **sum of all events active at that minute**, so you
 can stack: a shower running during a slow leak just adds the two flow rates.
 
-## What the default scenario exercises
-
-[config/synthetic_alerts.yaml](../config/synthetic_alerts.yaml) is shaped to
-cover all 5 alert paths in one pass:
-
-| Path | Event in scenario | Expected output (P-1 = REPORT, P2 = FIRE, P0 = CLEAR) |
-| --- | --- | --- |
-| Routine zone report | Day 2 irrigation in-band (4.2 GPM vs threshold 4.5) | `REPORT  RachioFlume: Zone Report` |
-| Zone anomaly | Day 3 irrigation over threshold (6.0 GPM vs threshold 4.5) | `FIRE    RachioFlume: Zone Anomaly` with Deviation line |
-| Slow leak | Day 4+ continuous 0.18 GPM for 72h | `FIRE    RachioFlume: Leak` × 4 days (daily dedup) |
-| Pipe break / High / Mid Flow | Day 8 sustained 9.0 GPM for 20 min | All three rules fire within their windows; clears once each |
-| Rachio suppression | Day 2 + Day 3 irrigation windows | High-flow events during irrigation never fire Flume rules |
+The AlertEngine constructed by `run_simulation` reads its knobs (zone
+thresholds, `absolute_gpm`, `percent_above`, `min_runtime_minutes`) from
+your real merged config (`default.yaml` + `local.yaml`) — same values the
+production collector runs with. Running a scenario therefore also exercises
+the config loader end-to-end. In CI (no `local.yaml`), the defaults apply
+and `zone_thresholds` is empty, which means the Zone Anomaly path stays
+silent; sustained-flow rule scenarios still exercise fully.
 
 **Coverage gaps** (verified separately):
 
 - **Hose-timer dispatch + suppression** — [test_hose_timer.py](test_hose_timer.py) covers them. The synthetic harness only drives `AlertEngine.evaluate`; `HoseTimerProcessor` is a separate code path that needs its own mock-client harness.
 - **Stale-zone monitor** — [test_stale_zone_checker.py](test_stale_zone_checker.py) covers time-jump semantics that are awkward to express in the synthetic event timeline.
 - **Hose-timer activity → Flume rule suppression** — `test_hose_timer.py::TestHoseActivitySuppression` writes the shared metadata key and verifies the cross-component contract.
-
-## Worked example: running the default scenario
-
-```bash
-uv run python RachioFlume/rfmanager.py simulate
-```
-
-Output (excerpt):
-
-```
-========================================================================
-Simulation: 10 days from 2026-05-01  poll every 5 min
-------------------------------------------------------------------------
-Alerts fired (priority 2 = FIRE; priority 0 = CLEAR):
-  2026-05-03 06:35  P-1  REPORT  RachioFlume: Zone Report
-  2026-05-03 07:00  P-1  REPORT  RachioFlume: Zone Report
-  2026-05-04 06:20  P 2  FIRE    RachioFlume: Zone Anomaly
-  2026-05-05 01:40  P 2  FIRE    RachioFlume: Leak
-  2026-05-06 00:00  P 2  FIRE    RachioFlume: Leak
-  2026-05-07 00:00  P 2  FIRE    RachioFlume: Leak
-  2026-05-08 00:00  P 2  FIRE    RachioFlume: Leak
-  2026-05-08 00:25  P 0  CLEAR   RachioFlume: Leak cleared
-  2026-05-08 14:05  P 2  FIRE    RachioFlume: High Flow
-  2026-05-08 14:10  P 2  FIRE    RachioFlume: Pipe Break
-  2026-05-08 14:15  P 2  FIRE    RachioFlume: Mid Flow
-  2026-05-08 14:25  P 0  CLEAR   RachioFlume: Pipe Break cleared
-  2026-05-08 14:25  P 0  CLEAR   RachioFlume: High Flow cleared
-  2026-05-08 14:25  P 0  CLEAR   RachioFlume: Mid Flow cleared
-------------------------------------------------------------------------
-Summary: 2881 cycles, 14 pushes (10 fires, 4 clears), 232 suppressed by Rachio
-  Fires by rule:  Zone Report=2, Zone Anomaly=1, Leak=4, High Flow=1, Pipe Break=1, Mid Flow=1
-  Clears by rule: Leak=1, Pipe Break=1, High Flow=1, Mid Flow=1
-========================================================================
-```
-
-The Day-8 ordering during the pipe break (High Flow → Pipe Break → Mid Flow
-at +5 / +10 / +15 min) is by design: shorter windows latch first.
 
 ## What scenario tests assert
 
@@ -218,17 +158,14 @@ deferred until evidence demands it.
 
 Workflow:
 
-1. Edit [config/synthetic_alerts.yaml](../config/synthetic_alerts.yaml) to
-   add or stress the scenario you care about. Use the in-file
-   `zone_thresholds` / `absolute_gpm` overrides to test threshold tuning
-   without touching `config/local.yaml`.
-2. Run `uv run python RachioFlume/rfmanager.py simulate` and inspect the
-   summary.
-3. Iterate until the alert count / timing looks right.
-4. Capture the expectation as an assertion in
-   [test_alert_simulation.py](test_alert_simulation.py) so the tuning
-   sticks under future changes.
-5. Verify against real data with `alerts replay --hours 168 --db <copy of prod>`.
+1. Add a new test in [test_alert_simulation.py](test_alert_simulation.py)
+   that constructs a `SyntheticDataset`, exercises the path you care about,
+   and asserts on the captured pushover stream.
+2. Run `uv run pytest RachioFlume/test_alert_simulation.py -v -s` and
+   inspect output (the `-s` flag streams the simulator's per-cycle prints).
+3. Adjust rule thresholds in `config/local.yaml` if needed (the simulator
+   reads them from your real config — same values production uses).
+4. Verify against real data with `alerts replay --hours 168 --db <copy of prod>`.
 
 ## Test invocations cheat-sheet
 
@@ -241,9 +178,6 @@ uv run python -m pytest RachioFlume/test_alert_simulation.py -v 2>&1 | tee /tmp/
 
 # Full RachioFlume regression
 uv run python -m pytest RachioFlume/ -v 2>&1 | tee /tmp/rf_full.log
-
-# Visual playback for ad-hoc tuning
-uv run python RachioFlume/rfmanager.py simulate 2>&1 | tee /tmp/rf_sim.log
 
 # DB replay against a SCP'd prod copy
 scp abutala@aibo:/home/abutala/logs/water_tracking.db /tmp/aibo_water_tracking.db

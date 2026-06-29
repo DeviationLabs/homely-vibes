@@ -228,15 +228,26 @@ class AlertEngine:
         total_gal: float,
         cycle: int,
     ) -> None:
-        """Emit exactly one Pushover per zone end.
+        """Emit at most one Pushover per zone end.
 
-        Picks (title, priority) based on whether the anomaly threshold is
-        exceeded; otherwise sends the routine Zone Report. The displayed
-        `(thresh X.XX)` is always the anomaly trigger value (matches what
-        actually fires the anomaly), and Total is included on both paths.
+        Short runs (≤ min_runtime_minutes, default 5) are silenced entirely —
+        they're test cycles, brief manual triggers, or noise, and emitting a
+        Pushover for each one floods the feed. Above the threshold, picks
+        (title, priority) based on whether the anomaly threshold is exceeded;
+        otherwise sends the routine Zone Report. The displayed `(thresh X.XX)`
+        is always the anomaly trigger value, and Total is included on both
+        paths.
         """
+        if runtime_min <= self.min_runtime_minutes:
+            self.logger.info(
+                f"Skipping zone outcome for '{zone_name}' (cycle {cycle}): "
+                f"runtime {runtime_min:.0f}min ≤ min_runtime_minutes "
+                f"{self.min_runtime_minutes}min"
+            )
+            return
+
         threshold, baseline = self._get_zone_threshold(zone_number)
-        is_anomaly = runtime_min > self.min_runtime_minutes and baseline > 0 and avg_gpm > threshold
+        is_anomaly = baseline > 0 and avg_gpm > threshold
 
         cycle_label = f" (Cycle {cycle})" if cycle > 1 else ""
         header = f"'{zone_name}'{cycle_label}"

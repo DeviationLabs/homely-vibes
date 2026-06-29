@@ -157,9 +157,26 @@ Key behaviors:
   report is the computed anomaly trigger value, matching what actually fires.
 - **Sustained-flow rules fire at P2** (emergency — retries until acked), at
   most once per day per rule. P-0 "all clear" on transition active → clear.
-- **CV-based variance filter** — sustained-flow rules require both mean ≥
-  threshold AND low coefficient of variation. Rejects spiky noise. Formula:
-  `max_cv = 0.5 - 0.04 × min_gpm`, capped [0.15, 0.5].
+- **Final detector logic for sustained-flow rules** — implemented in
+  [`AlertEngine._rule_matches`](alert_engine.py). A rule fires when both
+  conditions hold across the trailing `duration_minutes` window:
+  1. **Mean test** — `mean(values) ≥ rule.min_gpm`.
+  2. **CV variance gate** — `cv = stddev / mean ≤ max_cv(rule.min_gpm)`,
+     where `max_cv = clip(0.5 − 0.04 × min_gpm, 0.15, 0.5)`. Rejects
+     spiky windows where a handful of high readings drag the mean up
+     past threshold but the rest are zero — Flume sensor noise has a
+     larger relative footprint at low GPM, so low-threshold rules
+     (Leak at 0.1 GPM) get a tighter CV cap than high-threshold rules
+     (Pipe Break at 8 GPM).
+
+  Tradeoff: an *intermittent* leak (e.g. a joint that pulses) where most
+  per-minute readings are zero will fail the CV gate and stay silent.
+  This is a deliberate choice: we tried removing the CV gate on this
+  branch (commits a672f9c → 652bb31 in PR #201) and a 7-day replay
+  showed 6 Leak fires/week of ambiguous origin. Restored the gate;
+  the proper fix for true intermittent leaks is to lower the per-rule
+  `duration_minutes` so a shorter window can fully encompass each
+  pulse, rather than weaken the noise rejection.
 - **Cross-source suppression** — controller-active OR hose-timer-active state
   suppresses Flume `default_flow_rules` for `max_rule_duration + 10min`
   slack. Symmetric. HoseTimerProcessor writes `alert::__hose__::last_active`;
@@ -228,45 +245,18 @@ ssh omega "git clone https://github.com/DeviationLabs/homely-vibes ~/Code-test &
 ssh omega "ln -sf ~/Code/config/local.yaml ~/Code-test/config/local.yaml"
 ```
 
-### 🧪 Synthetic Simulator
+### 🧪 Synthetic Scenarios (unit tests only)
 
-Replay a hand-crafted scenario through the engine — no real APIs, no Pushover,
-events printed to stdout. Useful for validating logic changes don't regress
-any of the alert paths.
+Hand-crafted scenarios (pipe break, slow leak, irrigation-overlap-leak, etc.)
+live in [test_alert_simulation.py](test_alert_simulation.py) as pytest
+assertions — built in-code via `SyntheticDataset.add_*` builders from
+[synthetic_data.py](synthetic_data.py). No YAML, no separate CLI verb —
+running `make test` exercises them.
 
-```bash
-# Default scenario at config/synthetic_alerts.yaml — exercises all 5 paths
-uv run python RachioFlume/rfmanager.py simulate
-
-# Custom scenario file + poll cadence
-uv run python RachioFlume/rfmanager.py simulate --config my_scenario.yaml --poll-interval 5
-```
-
-`config/synthetic_alerts.yaml` covers:
-
-| Path | Trigger | Expected output |
-| --- | --- | --- |
-| Routine zone report (P-1) | Day-2 irrigation under threshold | `Zone Report` |
-| Zone anomaly (P2) | Day-3 irrigation over computed threshold | `Zone Anomaly` + Deviation line |
-| Slow leak (P2) | Day-4 onwards, 0.18 GPM for 72h | `Leak` × 4 days (daily dedup) |
-| Pipe Break / High Flow / Mid Flow (P2) | Day-8 sustained 9 GPM | All three rules fire within their windows |
-| Rachio suppression | Day-2 + Day-3 irrigation windows | High-flow events during irrigation never fire Flume rules |
-
-The synthetic YAML's optional `zone_thresholds:` block injects baselines into
-the AlertEngine for the simulation only — no need to pollute global config to
-test the anomaly path. Inner keys are integer `zone_number`.
-
-**Coverage gaps** (verified separately via unit tests, not by the synthetic
-simulator):
-
-- **Hose-timer dispatch + suppression** — `test_hose_timer.py` (8 tests
-  covering parse, started/completed/short-run/dry-run + anomaly dispatch +
-  cross-component suppression-key stamp).
-- **Stale-zone monitor** — `test_stale_zone_checker.py` (8 tests covering
-  fresh/stale/never-run zones, disabled-skip, hose-valve path, daily dedup,
-  hourly evaluation gate, dry-run).
-
-See [TESTABILITY.md](TESTABILITY.md) for the scenario schema in depth.
+The simulator's AlertEngine is constructed against the real merged config
+(`default.yaml` + `local.yaml`), so a scenario run is also an integration
+test of the config shape your production collector uses. See
+[TESTABILITY.md](TESTABILITY.md) for the scenario taxonomy + assertions.
 
 ### 🛑 Stop Data Collection
 

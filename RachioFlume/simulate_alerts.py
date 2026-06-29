@@ -22,11 +22,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 from RachioFlume.alert_engine import AlertEngine
-from RachioFlume.alert_rules import AlertRule, load_rules_from_config
+from RachioFlume.alert_rules import (
+    AlertRule,
+    get_controller_zone_thresholds,
+    load_zone_thresholds_from_config,
+)
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import WaterReading
 from RachioFlume.rachio_client import Zone
-from RachioFlume.synthetic_data import load_dataset_from_yaml
+from lib.config import get_config
 
 
 @dataclass
@@ -92,21 +96,39 @@ async def run_simulation(
     poll_interval_minutes: int = 5,
     print_events: bool = True,
 ) -> SimulationResult:
-    """Step through the dataset, evaluating rules each cycle. Prints to stdout."""
+    """Step through the dataset, evaluating rules each cycle. Prints to stdout.
+
+    AlertEngine is constructed against the real merged config
+    (default.yaml + local.yaml) — same `zone_anomaly` knobs and
+    `zone_thresholds` that the production collector uses. Simulating is
+    therefore also an end-to-end test of the user's config shape.
+    """
+    cfg = get_config()
+    za_cfg = cfg.rachio_flume.alerts.zone_anomaly
+    all_thresholds = load_zone_thresholds_from_config()
+    # Synthetic scenarios reference controllers by zone_number. Pick the first
+    # controller's baselines if one is configured; otherwise empty (anomaly
+    # path silent, which is fine — sustained-flow rules still exercise).
+    controllers = [d for d in cfg.rachio.devices if d.type == "controller"]
+    primary_label = controllers[0].label if controllers else ""
+    controller_thresholds = get_controller_zone_thresholds(all_thresholds, primary_label)
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
     db = WaterTrackingDB(db_path)
     fake_flume = _FakeFlume(dataset)
     fake_rachio = _FakeRachio(dataset)
     fake_pushover = _CapturingPushover()
-    engine_overrides = getattr(dataset, "engine_overrides", None) or {}
     engine = AlertEngine(
         flume_client=fake_flume,  # type: ignore[arg-type]
         rachio_client=fake_rachio,  # type: ignore[arg-type]
         pushover=fake_pushover,  # type: ignore[arg-type]
         db=db,
         rules=rules,
-        **engine_overrides,
+        zone_thresholds=controller_thresholds,
+        absolute_gpm=za_cfg.absolute_gpm,
+        percent_above=za_cfg.percent_above,
+        min_runtime_minutes=za_cfg.min_runtime_minutes,
     )
 
     result = SimulationResult(dataset=dataset, rules=rules)
@@ -226,21 +248,6 @@ def _print_summary(result: SimulationResult) -> None:
     print("=" * 72)
 
 
-def run_simulation_from_yaml(
-    yaml_path: str | Path,
-    *,
-    poll_interval_minutes: int = 5,
-) -> SimulationResult:
-    """Convenience entry-point used by the CLI."""
-    dataset = load_dataset_from_yaml(yaml_path)
-    rules = load_rules_from_config()
-    return asyncio.run(
-        run_simulation(
-            dataset, rules, poll_interval_minutes=poll_interval_minutes, print_events=True
-        )
-    )
-
-
 class DBReplayDataset:
     """Replay dataset backed by the production SQLite DB (water_readings + watering_events).
 
@@ -332,5 +339,4 @@ __all__ = [
     "SimulationResult",
     "run_replay",
     "run_simulation",
-    "run_simulation_from_yaml",
 ]
