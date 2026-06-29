@@ -73,12 +73,16 @@ class NodeChecker:
                 self.log_message(f">> ERROR: Oops! Node did not reboot: {node.name}")
                 self.reboot_failures.append(node.name)
 
-        # Wait for nodes to come back up
-        self.log_message("Sleep until nodes restart...")
-        time.sleep(60)  # Wait for nodes to stabilize
+        # Wait for nodes to come back up and pass the full (deep) heartbeat.
+        # Ping responds before SSH/services on a fresh Windows boot, so a ping-only
+        # recovery check followed by a deep connectivity check produces a false
+        # "offline" seconds after a successful reboot. Retry the deep heartbeat
+        # (ping + service-level probe) with backoff instead.
+        self.log_message("Waiting for nodes to recover...")
+        time.sleep(60)  # initial stabilization before probing
         all_recovered = True
         for node in self.nodes:
-            if node.check_state(desired_up=True, attempts=180):
+            if self._wait_for_heartbeat(node, attempts=12, delay=15):
                 self.log_message(f"   {self.mode}: {node.name} back online.")
             else:
                 self.log_message(f">> ERROR: {self.mode}: {node.name} failed online.")
@@ -86,6 +90,19 @@ class NodeChecker:
                 all_recovered = False
 
         return all_recovered
+
+    def _wait_for_heartbeat(self, node: GenericNode, attempts: int, delay: int) -> bool:
+        """Retry the deep heartbeat until it passes or attempts are exhausted."""
+        for attempt in range(attempts):
+            if node.heartbeat():
+                return True
+            if attempt < attempts - 1:
+                logger.debug(
+                    f"{node.name} heartbeat attempt {attempt + 1}/{attempts} failed; "
+                    f"retrying in {delay}s"
+                )
+                time.sleep(delay)
+        return False
 
     def generate_report(
         self, is_healthy: bool, always_email: bool = False, was_rebooted: bool = False
@@ -160,14 +177,13 @@ if __name__ == "__main__":
     connectivity_ok = checker.check_connectivity()
     system_healthy = connectivity_ok
 
-    # Reboot if requested
+    # Reboot if requested. reboot_nodes verifies deep recovery (ping + service
+    # probe) with retries, so no separate post-reboot connectivity check is
+    # needed — that earlier check ran the deep probe too soon after boot and
+    # produced false "offline" alerts for a successful reboot.
     if args.reboot:
         reboot_ok = checker.reboot_nodes()
         system_healthy = system_healthy and reboot_ok
-
-        # Re-check health after reboot
-        final_health = checker.check_connectivity()
-        system_healthy = system_healthy and final_health
 
     # Generate final report
     checker.generate_report(
