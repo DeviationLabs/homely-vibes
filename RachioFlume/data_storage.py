@@ -174,6 +174,41 @@ class WaterTrackingDB:
 
             conn.commit()
 
+        # One-shot dedup of legacy per-device rows in water_readings.
+        # Pre-2026-06-28, the Flume collector saved one row per (timestamp,
+        # device), so each minute had two rows: the real meter value and a
+        # 0.0 from the bridge. Dedup by keeping MAX value per timestamp —
+        # since the bridge always read 0, MAX preserves the meter's reading
+        # for every minute that ever had real flow.
+        self._dedup_water_readings()
+
+    def _dedup_water_readings(self) -> None:
+        """Collapse duplicate-per-timestamp rows in water_readings (one-shot)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) - COUNT(DISTINCT timestamp) AS dupes FROM water_readings"
+            )
+            row = cursor.fetchone()
+            dupes = (row["dupes"] if row else 0) or 0
+            if dupes == 0:
+                return
+            self.logger.info(f"Deduping {dupes} legacy duplicate-per-timestamp water_readings rows")
+            cursor.executescript(
+                """
+                CREATE TABLE water_readings_new AS
+                SELECT MIN(id) AS id, timestamp, MAX(value) AS value,
+                       MAX(unit) AS unit, MAX(created_at) AS created_at
+                FROM water_readings
+                GROUP BY timestamp;
+                DROP TABLE water_readings;
+                ALTER TABLE water_readings_new RENAME TO water_readings;
+                CREATE INDEX IF NOT EXISTS idx_water_readings_timestamp
+                    ON water_readings(timestamp);
+                """
+            )
+            conn.commit()
+
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Get database connection with automatic cleanup."""
