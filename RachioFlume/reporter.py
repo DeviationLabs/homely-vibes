@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from pathlib import Path
 
+from RachioFlume.alert_rules import load_zone_thresholds_from_config
 from RachioFlume.data_storage import WaterTrackingDB
 from lib.logger import get_logger
 from lib import Mailer
@@ -136,11 +137,22 @@ class WeeklyReporter:
             if s.get("flow_detected"):
                 slot["flow_detected"] += 1
 
+        # Prefer the compact display name from zone_thresholds config when
+        # the valve is configured (e.g. "Z13" vs. the full API name).
+        try:
+            hose_thresholds = load_zone_thresholds_from_config()
+        except Exception:
+            hose_thresholds = {}
+
+        def _display_valve_name(label: str, raw_name: str) -> str:
+            zt = hose_thresholds.get(label, {}).get(raw_name)
+            return zt.name if zt else raw_name
+
         hose_valves = sorted(
             (
                 HoseValveStats(
                     base_station_label=label,
-                    valve_name=name,
+                    valve_name=_display_valve_name(label, name),
                     sessions=v["sessions"],
                     total_duration_hours=round(v["duration_sec_total"] / 3600.0, 2),
                     average_duration_minutes=round(
