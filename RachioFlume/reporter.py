@@ -106,6 +106,9 @@ class WeeklyReporter:
 
         # Controller thresholds: flatten by str(zone_number). Hose keys (non-digit)
         # skipped; they're merged into the hose section below.
+        # Assumes a single controller per deployment (current setup: Rachio-Eden).
+        # If two controllers ever share a zone number, the later-processed entry
+        # would overwrite. Revisit when multi-controller support lands.
         ctrl_thresh: Dict[str, Any] = {}
         for _label, zones in all_thresholds.items():
             for zone_key, zone_zt in zones.items():
