@@ -80,9 +80,6 @@ def main() -> int:
     )
     report_parser.add_argument("--email", action="store_true", help="Send report via email")
 
-    # Summary command
-    subparsers.add_parser("summary", help="Generate efficiency analysis")
-
     # Raw data command
     raw_parser = subparsers.add_parser("raw", help="Generate raw data report (5-minute intervals)")
     raw_parser.add_argument(
@@ -136,8 +133,6 @@ def main() -> int:
         return list_devices(args)
     elif args.command == "report":
         return generate_report(args)
-    elif args.command == "summary":
-        return generate_summary_report(args)
     elif args.command == "raw":
         return generate_raw_report(args)
     elif args.command == "alerts":
@@ -392,28 +387,6 @@ def generate_report(args: argparse.Namespace) -> int:
         logger.error(f"Error generating report: {e}")
         pushover.send_message(
             f"Error generating report: {e}",
-            title="RachioFlume Report Error",
-            priority=1,
-        )
-        return 1
-
-
-def generate_summary_report(_args: argparse.Namespace) -> int:
-    """Generate efficiency analysis reports."""
-    logger = get_logger(__name__)
-
-    try:
-        reporter = WeeklyReporter(DB_PATH)
-
-        analysis = reporter.get_zone_efficiency_analysis()
-        reporter.print_efficiency_analysis(analysis)
-
-        return 0
-
-    except Exception as e:
-        logger.error(f"Error generating summary report: {e}")
-        pushover.send_message(
-            f"Error generating summary report: {e}",
             title="RachioFlume Report Error",
             priority=1,
         )
