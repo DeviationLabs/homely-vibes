@@ -374,7 +374,8 @@ def main() -> None:
     except BaseException as e:
         # SystemExit / KeyboardInterrupt / asyncio.CancelledError / signals
         # bypass `except Exception`. Log full traceback + notify so silent
-        # exits stop being silent.
+        # exits stop being silent, then reraise so termination semantics
+        # (exit code, signal propagation) are preserved.
         import traceback
 
         tb_str = traceback.format_exc()
@@ -388,6 +389,7 @@ def main() -> None:
                 title="Powerwall Alert",
                 priority=2,
             )
+        raise
 
     finally:
         logger = get_logger(__name__)
