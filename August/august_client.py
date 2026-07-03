@@ -40,6 +40,8 @@ class AugustClient:
         self.authenticator: Optional[AuthenticatorAsync] = None
         self.access_token: Optional[str] = None
         self.locks: Dict[str, Lock] = {}
+        cfg = get_config()
+        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
 
     async def unlock_lock(self, lock_id: str) -> bool:
         """Unlock a specific lock."""
@@ -106,6 +108,11 @@ class AugustClient:
 
             if auth_result is None:
                 self.logger.error("Authentication returned None - check credentials")
+                self.pushover.send_message(
+                    "August auth returned None — check credentials",
+                    title="August Auth Failure",
+                    priority=1,
+                )
                 return False
 
             self.logger.debug(f"Authentication result state: {auth_result.state}")
@@ -117,15 +124,30 @@ class AugustClient:
             elif auth_result.state == AuthenticationState.REQUIRES_VALIDATION:
                 self.logger.error("August authentication requires 2FA validation")
                 self.logger.error("Please complete 2FA in the August app and try again")
+                self.pushover.send_message(
+                    "August requires 2FA — run: uv run python August/validate_2fa.py",
+                    title="August Auth Failure",
+                    priority=1,
+                )
                 return False
             else:
                 self.logger.error(f"August authentication failed: {auth_result.state}")
+                self.pushover.send_message(
+                    f"August auth failed: {auth_result.state}",
+                    title="August Auth Failure",
+                    priority=1,
+                )
                 return False
 
         except Exception as e:
             self.logger.error(f"Error during August authentication: {e}")
             self.logger.error(
                 "Make sure august.email and august.password are correct in config/local.yaml"
+            )
+            self.pushover.send_message(
+                f"August auth error: {e}",
+                title="August Auth Failure",
+                priority=1,
             )
             return False
 
