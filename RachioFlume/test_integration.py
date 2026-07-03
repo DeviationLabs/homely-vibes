@@ -324,7 +324,7 @@ class TestWeeklyReporter:
             report = reporter.generate_period_report_with_dates(period_start, period_end)
 
             assert report.summary.total_watering_sessions == 1
-            assert report.summary.total_duration_hours == 0.5
+            assert report.summary.total_duration_minutes == 30.0
             assert report.summary.total_water_used_gallons == 50.0
             assert len(report.zones) == 1
             assert report.zones[0].zone_name == "Front Yard"
