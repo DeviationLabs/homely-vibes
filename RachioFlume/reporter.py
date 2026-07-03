@@ -8,6 +8,7 @@ from pathlib import Path
 
 from RachioFlume.alert_rules import load_zone_thresholds_from_config
 from RachioFlume.data_storage import WaterTrackingDB
+from lib.config import get_config
 from lib.logger import get_logger
 from lib import Mailer
 
@@ -19,10 +20,12 @@ class ZoneStats:
     zone_number: int
     zone_name: str
     sessions: int
-    total_duration_hours: float
+    total_duration_minutes: float
     average_duration_minutes: float
     total_water_gallons: float
     average_flow_rate_gpm: float
+    threshold_gpm: float
+    alert_sessions: int
 
 
 @dataclass
@@ -30,7 +33,7 @@ class ReportSummary:
     """Summary statistics for the entire report."""
 
     total_watering_sessions: int
-    total_duration_hours: float
+    total_duration_minutes: float
     total_water_used_gallons: float
     zones_watered: int
 
@@ -42,9 +45,11 @@ class HoseValveStats:
     base_station_label: str
     valve_name: str
     sessions: int
-    total_duration_hours: float
+    total_duration_minutes: float
     average_duration_minutes: float
     flow_detected_sessions: int
+    threshold_gpm: float
+    alert_sessions: int
 
 
 @dataclass
@@ -87,7 +92,34 @@ class WeeklyReporter:
             f"Generating period report for {period_start.date()} to {period_end.date()}"
         )
 
-        # Get zone statistics for the period
+        # Load anomaly config once — used to compute per-zone / per-valve
+        # threshold (baseline + slack) and count how many sessions crossed it.
+        cfg = get_config()
+        za_cfg = cfg.rachio_flume.alerts.zone_anomaly
+        abs_gpm = za_cfg.absolute_gpm
+        pct_above = za_cfg.percent_above
+
+        try:
+            all_thresholds = load_zone_thresholds_from_config()
+        except Exception:
+            all_thresholds = {}
+
+        # Controller thresholds: flatten by str(zone_number). Hose keys (non-digit)
+        # skipped; they're merged into the hose section below.
+        ctrl_thresh: Dict[str, Any] = {}
+        for _label, zones in all_thresholds.items():
+            for zone_key, zt in zones.items():
+                if zone_key.isdigit():
+                    ctrl_thresh[zone_key] = zt
+
+        # Per-session alert counts by zone_number and by (label, valve_name).
+        ctrl_alerts: Dict[int, int] = {}
+        for s in self.db.get_zone_sessions(period_start, period_end):
+            zt = ctrl_thresh.get(str(s["zone_number"]))
+            if zt and (s.get("avg_flow_rate") or 0) > zt.compute_threshold(abs_gpm, pct_above):
+                ctrl_alerts[s["zone_number"]] = ctrl_alerts.get(s["zone_number"], 0) + 1
+
+        # Get zone aggregate statistics for the period
         zone_stats = self.db.get_period_zone_stats(period_start, period_end)
 
         # Calculate total statistics
@@ -98,17 +130,21 @@ class WeeklyReporter:
         # Format zone statistics for display
         formatted_zones = []
         for stat in zone_stats:
-            duration_hours = (stat["total_duration_seconds"] or 0) / 3600
-            avg_duration_minutes = (stat["avg_duration_seconds"] or 0) / 60
+            duration_minutes = (stat["total_duration_seconds"] or 0) / 60.0
+            avg_duration_minutes = (stat["avg_duration_seconds"] or 0) / 60.0
+            zt = ctrl_thresh.get(str(stat["zone_number"]))
+            threshold_gpm = round(zt.compute_threshold(abs_gpm, pct_above), 2) if zt else 0.0
 
             zone_stats_obj = ZoneStats(
                 zone_number=stat["zone_number"],
                 zone_name=stat["zone_name"],
                 sessions=stat["session_count"],
-                total_duration_hours=round(duration_hours, 2),
+                total_duration_minutes=round(duration_minutes, 1),
                 average_duration_minutes=round(avg_duration_minutes, 1),
                 total_water_gallons=round(stat["total_water_used"] or 0, 1),
                 average_flow_rate_gpm=round(stat["avg_flow_rate"] or 0, 2),
+                threshold_gpm=threshold_gpm,
+                alert_sessions=ctrl_alerts.get(stat["zone_number"], 0),
             )
             formatted_zones.append(zone_stats_obj)
 
@@ -118,7 +154,7 @@ class WeeklyReporter:
         # Create summary
         summary = ReportSummary(
             total_watering_sessions=total_sessions,
-            total_duration_hours=round(total_duration_seconds / 3600, 2),
+            total_duration_minutes=round(total_duration_seconds / 60.0, 1),
             total_water_used_gallons=round(total_water_used, 1),
             zones_watered=len(zone_stats),
         )
@@ -126,6 +162,7 @@ class WeeklyReporter:
         # Aggregate hose-timer sessions
         hose_sessions = self.db.get_hose_zone_sessions(period_start, period_end)
         hose_agg: Dict[tuple, Dict[str, Any]] = {}
+        hose_alerts: Dict[tuple, int] = {}
         for s in hose_sessions:
             key = (s["base_station_label"], s["valve_name"])
             slot = hose_agg.setdefault(
@@ -133,36 +170,43 @@ class WeeklyReporter:
                 {"sessions": 0, "duration_sec_total": 0, "flow_detected": 0},
             )
             slot["sessions"] += 1
-            slot["duration_sec_total"] += s.get("duration_seconds") or 0
+            duration_sec = s.get("duration_seconds") or 0
+            slot["duration_sec_total"] += duration_sec
             if s.get("flow_detected"):
                 slot["flow_detected"] += 1
+            # Hose anomaly: session avg flow (gallons / minutes) vs. threshold
+            zt = all_thresholds.get(s["base_station_label"], {}).get(s["valve_name"])
+            gal = s.get("total_water_used") or 0
+            if zt and duration_sec > 0:
+                sess_avg = gal / (duration_sec / 60.0)
+                if sess_avg > zt.compute_threshold(abs_gpm, pct_above):
+                    hose_alerts[key] = hose_alerts.get(key, 0) + 1
 
-        # Prefer the compact display name from zone_thresholds config when
-        # the valve is configured (e.g. "Z13" vs. the full API name).
-        try:
-            hose_thresholds = load_zone_thresholds_from_config()
-        except Exception:
-            hose_thresholds = {}
+        def _hose_display_and_threshold(label: str, raw_name: str) -> tuple[str, float]:
+            zt = all_thresholds.get(label, {}).get(raw_name)
+            if not zt:
+                return raw_name, 0.0
+            return zt.name, round(zt.compute_threshold(abs_gpm, pct_above), 2)
 
-        def _display_valve_name(label: str, raw_name: str) -> str:
-            zt = hose_thresholds.get(label, {}).get(raw_name)
-            return zt.name if zt else raw_name
-
-        hose_valves = sorted(
-            (
+        hose_valves_unsorted = []
+        for (label, name), v in hose_agg.items():
+            display_name, threshold_gpm = _hose_display_and_threshold(label, name)
+            hose_valves_unsorted.append(
                 HoseValveStats(
                     base_station_label=label,
-                    valve_name=_display_valve_name(label, name),
+                    valve_name=display_name,
                     sessions=v["sessions"],
-                    total_duration_hours=round(v["duration_sec_total"] / 3600.0, 2),
+                    total_duration_minutes=round(v["duration_sec_total"] / 60.0, 1),
                     average_duration_minutes=round(
                         (v["duration_sec_total"] / max(v["sessions"], 1)) / 60.0, 1
                     ),
                     flow_detected_sessions=v["flow_detected"],
+                    threshold_gpm=threshold_gpm,
+                    alert_sessions=hose_alerts.get((label, name), 0),
                 )
-                for (label, name), v in hose_agg.items()
-            ),
-            key=lambda h: (h.base_station_label, h.valve_name),
+            )
+        hose_valves = sorted(
+            hose_valves_unsorted, key=lambda h: (h.base_station_label, h.valve_name)
         )
 
         # Create and return the report
@@ -205,40 +249,54 @@ class WeeklyReporter:
 
         report_text.append("\nSUMMARY:")
         report_text.append(f"  Total watering sessions: {report.summary.total_watering_sessions}")
-        report_text.append(f"  Total duration: {report.summary.total_duration_hours} hours")
+        report_text.append(f"  Total duration: {report.summary.total_duration_minutes} min")
         report_text.append(f"  Total water used: {report.summary.total_water_used_gallons} gallons")
         report_text.append(f"  Zones watered: {report.summary.zones_watered}")
 
         if report.zones:
             report_text.append("\nZONE DETAILS:")
-            # Use fixed-width formatting for better display
-            header = f"{'Name':<8} {'Runs':<4} {'Hrs':<5} {'Gals':<5} {'GPM':<4}"
+            # Thr = anomaly threshold GPM (blank if zone not configured).
+            # Alrt = # sessions in period where session avg flow > threshold.
+            header = (
+                f"{'Name':<8} {'Runs':<4} {'Min':<6} {'Gals':<6} {'GPM':<5} {'Thr':<5} {'Alrt':<4}"
+            )
             report_text.append(header)
             report_text.append("-" * len(header))
 
             for zone in report.zones:
+                thr = f"{zone.threshold_gpm:.1f}" if zone.threshold_gpm > 0 else "-"
+                alrt = str(zone.alert_sessions) if zone.alert_sessions else "-"
                 zone_line = (
                     f"{zone.zone_name[:8]:<8} "
                     f"{zone.sessions:<4} "
-                    f"{zone.total_duration_hours:<5.1f} "
-                    f"{zone.total_water_gallons:<5.1f} "
-                    f"{zone.average_flow_rate_gpm:<4.1f}"
+                    f"{zone.total_duration_minutes:<6.1f} "
+                    f"{zone.total_water_gallons:<6.1f} "
+                    f"{zone.average_flow_rate_gpm:<5.2f} "
+                    f"{thr:<5} "
+                    f"{alrt:<4}"
                 )
                 report_text.append(zone_line)
 
         if report.hose_valves:
             report_text.append("\nHOSE TIMER VALVES:")
-            header = f"{'Base/Valve':<32} {'Runs':<4} {'Hrs':<5} {'Avg(m)':<6} {'Flow':<4}"
+            header = (
+                f"{'Base/Valve':<32} {'Runs':<4} {'Min':<6} {'Avg(m)':<6} "
+                f"{'Flow':<4} {'Thr':<5} {'Alrt':<4}"
+            )
             report_text.append(header)
             report_text.append("-" * len(header))
             for hv in report.hose_valves:
                 label = f"{hv.base_station_label}/{hv.valve_name}"[:32]
+                thr = f"{hv.threshold_gpm:.1f}" if hv.threshold_gpm > 0 else "-"
+                alrt = str(hv.alert_sessions) if hv.alert_sessions else "-"
                 report_text.append(
                     f"{label:<32} "
                     f"{hv.sessions:<4} "
-                    f"{hv.total_duration_hours:<5.1f} "
+                    f"{hv.total_duration_minutes:<6.1f} "
                     f"{hv.average_duration_minutes:<6.1f} "
-                    f"{hv.flow_detected_sessions:<4}"
+                    f"{hv.flow_detected_sessions:<4} "
+                    f"{thr:<5} "
+                    f"{alrt:<4}"
                 )
 
         report_text.append("\n" + "=" * 35)
@@ -330,117 +388,3 @@ class WeeklyReporter:
             "interval_minutes": 5,
             "data_points": raw_data,
         }
-
-    def get_zone_efficiency_analysis(self, weeks_back: int = 4) -> Dict[str, Any]:
-        """Analyze zone efficiency over multiple weeks.
-
-        Args:
-            weeks_back: Number of weeks to analyze
-
-        Returns:
-            Efficiency analysis by zone
-        """
-        end_date = datetime.now()
-        start_date = end_date - timedelta(weeks=weeks_back)
-
-        # Get all sessions in the period
-        sessions = self.db.get_zone_sessions(start_date, end_date)
-
-        # Group by zone
-        zone_data: Dict[str, Dict[str, Any]] = {}
-        for session in sessions:
-            zone_name = session["zone_name"]
-            if zone_name not in zone_data:
-                zone_data[zone_name] = {
-                    "sessions": [],
-                    "total_water": 0,
-                    "total_duration": 0,
-                }
-
-            zone_data[zone_name]["sessions"].append(session)
-            zone_data[zone_name]["total_water"] += session.get("total_water_used", 0)
-            zone_data[zone_name]["total_duration"] += session.get("duration_seconds", 0)
-
-        # Calculate efficiency metrics
-        efficiency_analysis: Dict[str, Dict[str, Any]] = {}
-        for zone_name, data in zone_data.items():
-            if data["total_duration"] > 0:
-                avg_flow_rate = data["total_water"] / (data["total_duration"] / 60)  # GPM
-                water_per_session = data["total_water"] / len(data["sessions"])
-                duration_per_session = (
-                    data["total_duration"] / len(data["sessions"]) / 60
-                )  # minutes
-
-                efficiency_analysis[zone_name] = {
-                    "total_sessions": len(data["sessions"]),
-                    "average_flow_rate_gpm": round(avg_flow_rate, 2),
-                    "water_per_session_gallons": round(water_per_session, 1),
-                    "duration_per_session_minutes": round(duration_per_session, 1),
-                    "total_water_gallons": round(data["total_water"], 1),
-                    "total_duration_hours": round(data["total_duration"] / 3600, 2),
-                }
-
-        return {
-            "analysis_period": f"{start_date.date()} to {end_date.date()}",
-            "weeks_analyzed": weeks_back,
-            "zones": efficiency_analysis,
-        }
-
-    def format_efficiency_text(self, analysis: Dict[str, Any]) -> str:
-        """Generate formatted text version of efficiency analysis.
-
-        Args:
-            analysis: Efficiency analysis data
-
-        Returns:
-            Formatted analysis as string
-        """
-        report_text = []
-        report_text.append("ZONE EFFICIENCY ANALYSIS")
-        report_text.append(f"Period: {analysis['analysis_period']}")
-        report_text.append("=" * 60)
-
-        if not analysis["zones"]:
-            report_text.append("No zone data available for analysis.")
-            return "\n".join(report_text)
-
-        for zone_name, data in analysis["zones"].items():
-            report_text.append(f"\n{zone_name}:")
-            report_text.append(f"  Sessions: {data['total_sessions']}")
-            report_text.append(f"  Avg flow rate: {data['average_flow_rate_gpm']} GPM")
-            report_text.append(f"  Water per session: {data['water_per_session_gallons']} gallons")
-            report_text.append(
-                f"  Duration per session: {data['duration_per_session_minutes']} minutes"
-            )
-
-        report_text.append("\n" + "=" * 60)
-        return "\n".join(report_text)
-
-    def print_efficiency_analysis(self, analysis: Dict[str, Any]) -> None:
-        """Print efficiency analysis in a readable format."""
-        analysis_text = self.format_efficiency_text(analysis)
-
-        # Log each line separately for proper logger formatting
-        for line in analysis_text.split("\n"):
-            self.logger.info(line)
-
-
-def main() -> None:
-    """Main entry point for generating reports."""
-    import sys
-
-    reporter = WeeklyReporter("water_tracking.db")
-
-    if "--efficiency" in sys.argv:
-        analysis = reporter.get_zone_efficiency_analysis()
-        reporter.print_efficiency_analysis(analysis)
-    else:
-        print("Usage:")
-        print("  python reporter.py --efficiency")
-        print("")
-        print("Options:")
-        print("  --efficiency  Generate zone efficiency analysis")
-
-
-if __name__ == "__main__":
-    main()

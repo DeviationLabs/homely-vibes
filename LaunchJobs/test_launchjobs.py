@@ -86,7 +86,7 @@ def test_notify_builds_title_and_returns_sender_status() -> None:
     assert len(sender.calls) == 1
     call = sender.calls[0]
     assert call["title"] == "[LaunchJobs] whatsapp-summary: ok"
-    assert call["priority"] == 0
+    assert call["priority"] == -1
     assert "Completed at" in str(call["message"])
 
 
