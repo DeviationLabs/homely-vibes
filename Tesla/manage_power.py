@@ -357,6 +357,18 @@ def main() -> None:
                 priority=2,
             )
 
+    except BaseException as e:
+        # SystemExit / KeyboardInterrupt / signals bypass `except Exception`.
+        # Notify explicitly so silent exits still page.
+        logger = get_logger(__name__)
+        logger.error(f"Powerwall monitoring exited via {type(e).__name__}: {e}")
+        if "manager" in locals():
+            manager.pushover.send_message(
+                f"Powerwall monitoring exited: {type(e).__name__}: {e}",
+                title="Powerwall Alert",
+                priority=2,
+            )
+
     finally:
         logger = get_logger(__name__)
         logger.error("Exiting after 1-hour delay to prevent respawn churn")
