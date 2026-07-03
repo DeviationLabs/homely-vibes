@@ -122,17 +122,20 @@ class NodeChecker:
                 pushover.send_message(
                     f"{self.mode.title()} node reboot completed successfully",
                     title=f"{self.mode.title()} Reboot Complete",
+                    priority=-1,
                 )
 
         if self.reboot_failures:
             pushover.send_message(
                 f"{self.mode.title()} nodes failed to reboot: {', '.join(self.reboot_failures)}",
                 title="Node Reboot Failed",
+                priority=1,
             )
         if self.recovery_failures:
             pushover.send_message(
                 f"{self.mode.title()} nodes failed to recover: {', '.join(self.recovery_failures)}",
                 title="Node Recovery Failed",
+                priority=1,
             )
 
         Mailer.sendmail(

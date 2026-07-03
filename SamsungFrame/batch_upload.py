@@ -732,7 +732,7 @@ def send_batch_notification(summary: BatchUploadSummary, interrupted: bool = Fal
         priority = 1  # High priority
         title = "Samsung Batch Upload - Partial Success"
     else:
-        priority = 0
+        priority = -1
         title = "Samsung Batch Upload - Complete"
 
     message = (

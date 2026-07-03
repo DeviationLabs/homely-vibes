@@ -56,7 +56,7 @@ def notify(
     client = sender if sender is not None else _default_sender(job)
     title = f"[LaunchJobs] {job.name}: {status}"
     message = body or f"Completed at {datetime.now():%Y-%m-%d %H:%M:%S}"
-    return client.send_message(message, title=title, priority=0)
+    return client.send_message(message, title=title, priority=-1)
 
 
 def main(argv: list[str] | None = None) -> int:
