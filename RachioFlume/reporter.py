@@ -108,15 +108,17 @@ class WeeklyReporter:
         # skipped; they're merged into the hose section below.
         ctrl_thresh: Dict[str, Any] = {}
         for _label, zones in all_thresholds.items():
-            for zone_key, zt in zones.items():
+            for zone_key, zone_zt in zones.items():
                 if zone_key.isdigit():
-                    ctrl_thresh[zone_key] = zt
+                    ctrl_thresh[zone_key] = zone_zt
 
         # Per-session alert counts by zone_number and by (label, valve_name).
         ctrl_alerts: Dict[int, int] = {}
         for s in self.db.get_zone_sessions(period_start, period_end):
-            zt = ctrl_thresh.get(str(s["zone_number"]))
-            if zt and (s.get("avg_flow_rate") or 0) > zt.compute_threshold(abs_gpm, pct_above):
+            sess_zt = ctrl_thresh.get(str(s["zone_number"]))
+            if sess_zt and (s.get("avg_flow_rate") or 0) > sess_zt.compute_threshold(
+                abs_gpm, pct_above
+            ):
                 ctrl_alerts[s["zone_number"]] = ctrl_alerts.get(s["zone_number"], 0) + 1
 
         # Get zone aggregate statistics for the period
@@ -132,8 +134,10 @@ class WeeklyReporter:
         for stat in zone_stats:
             duration_minutes = (stat["total_duration_seconds"] or 0) / 60.0
             avg_duration_minutes = (stat["avg_duration_seconds"] or 0) / 60.0
-            zt = ctrl_thresh.get(str(stat["zone_number"]))
-            threshold_gpm = round(zt.compute_threshold(abs_gpm, pct_above), 2) if zt else 0.0
+            stat_zt = ctrl_thresh.get(str(stat["zone_number"]))
+            threshold_gpm = (
+                round(stat_zt.compute_threshold(abs_gpm, pct_above), 2) if stat_zt else 0.0
+            )
 
             zone_stats_obj = ZoneStats(
                 zone_number=stat["zone_number"],
@@ -175,11 +179,11 @@ class WeeklyReporter:
             if s.get("flow_detected"):
                 slot["flow_detected"] += 1
             # Hose anomaly: session avg flow (gallons / minutes) vs. threshold
-            zt = all_thresholds.get(s["base_station_label"], {}).get(s["valve_name"])
+            hose_zt = all_thresholds.get(s["base_station_label"], {}).get(s["valve_name"])
             gal = s.get("total_water_used") or 0
-            if zt and duration_sec > 0:
+            if hose_zt and duration_sec > 0:
                 sess_avg = gal / (duration_sec / 60.0)
-                if sess_avg > zt.compute_threshold(abs_gpm, pct_above):
+                if sess_avg > hose_zt.compute_threshold(abs_gpm, pct_above):
                     hose_alerts[key] = hose_alerts.get(key, 0) + 1
 
         def _hose_display_and_threshold(label: str, raw_name: str) -> tuple[str, float]:
