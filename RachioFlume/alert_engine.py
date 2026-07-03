@@ -420,7 +420,7 @@ class AlertEngine:
 
     def _send_clear(self, rule: AlertRule) -> None:
         msg = f"{rule.name}: condition cleared."
-        self.pushover.send_message(msg, title=f"RachioFlume: {rule.name} cleared", priority=0)
+        self.pushover.send_message(msg, title=f"RachioFlume: {rule.name} cleared", priority=-1)
         self.logger.info(f"Clear notification: {rule.name}")
 
     # ------------------------------------------------------------------ #

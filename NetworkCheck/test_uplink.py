@@ -185,7 +185,7 @@ def main() -> None:
         alert=alert,
     )
 
-    pushover.send_message(final_message, title="SpeedTest")
+    pushover.send_message(final_message, title="SpeedTest", priority=-1)
 
     logger.info("Speed test completed")
 

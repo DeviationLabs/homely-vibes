@@ -209,7 +209,7 @@ async def test_evaluate_suppressed_by_active_rachio_zone(
     assert engine._load_state(rule).last_state is None
 
 
-async def test_evaluate_clear_emits_priority_0(engine: AlertEngine, rule: AlertRule) -> None:
+async def test_evaluate_clear_emits_priority_neg1(engine: AlertEngine, rule: AlertRule) -> None:
     # Seed state as if rule was active last cycle
     engine._save_state(
         rule,
@@ -222,7 +222,7 @@ async def test_evaluate_clear_emits_priority_0(engine: AlertEngine, rule: AlertR
     assert results[0]["action"] == AlertAction.FIRE_CLEAR.value
     engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
     _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
-    assert kwargs["priority"] == 0
+    assert kwargs["priority"] == -1
     assert engine._load_state(rule).last_state == "clear"
 
 

@@ -71,7 +71,7 @@ def main() -> None:
         alert=is_error,
     )
 
-    pushover.send_message(ip_address, title=title)
+    pushover.send_message(ip_address, title=title, priority=-1)
 
 
 if __name__ == "__main__":

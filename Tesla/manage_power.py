@@ -199,7 +199,7 @@ class PowerwallManager:
             self.logger.warning(message)
 
             if self.send_notifications or decision_point.always_notify:
-                self.pushover.send_message(message, title="Powerwall Alert", priority=0)
+                self.pushover.send_message(message, title="Powerwall Status", priority=-1)
 
         return changes_made
 
@@ -258,8 +258,8 @@ class PowerwallManager:
         self.logger.info(f"Connected to site: {site_name}")
         self.pushover.send_message(
             f"Powerwall monitoring started for: {site_name}",
-            title="Powerwall Alert",
-            priority=0,
+            title="Powerwall Status",
+            priority=-1,
         )
 
         sleep_time = 0

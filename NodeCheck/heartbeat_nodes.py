@@ -111,7 +111,7 @@ class HeartbeatMonitor:
             if count == 1
             else f"{count} nodes recovered: {node_list}"
         )
-        self.pushover.send_message(message, title=title, priority=0)
+        self.pushover.send_message(message, title=title, priority=-1)
         logger.info(f"Sent recovery notification: {message}")
 
     def run_continuous_monitoring(self, poll_time: int, cooloff_time: int) -> None:

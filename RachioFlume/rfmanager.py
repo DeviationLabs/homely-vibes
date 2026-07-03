@@ -393,7 +393,7 @@ def generate_report(args: argparse.Namespace) -> int:
         pushover.send_message(
             f"Error generating report: {e}",
             title="RachioFlume Report Error",
-            priority=2,
+            priority=1,
         )
         return 1
 
@@ -415,7 +415,7 @@ def generate_summary_report(_args: argparse.Namespace) -> int:
         pushover.send_message(
             f"Error generating summary report: {e}",
             title="RachioFlume Report Error",
-            priority=2,
+            priority=1,
         )
         return 1
 
@@ -437,7 +437,7 @@ def generate_raw_report(args: argparse.Namespace) -> int:
         pushover.send_message(
             f"Error generating raw report: {e}",
             title="RachioFlume Report Error",
-            priority=2,
+            priority=1,
         )
         return 1
 

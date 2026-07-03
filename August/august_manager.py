@@ -23,12 +23,12 @@ async def _test() -> None:
         statuses = await client.get_all_lock_statuses()
         for _, status in statuses.items():
             message += f"{status.lock_name}: {status.battery_level}%\n"
-        pushover.send_message(message, title="August Battery Status", priority=0)
+        pushover.send_message(message, title="August Battery Status", priority=-1)
     except Exception as e:
         pushover.send_message(
             f"Error initializing August client: {e}",
             title="August Battery Status",
-            priority=2,
+            priority=1,
         )
     finally:
         await client.close()
@@ -134,7 +134,7 @@ def main() -> None:
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         if args.command == "test":
-            pushover.send_message(f"August test failed: {e}", title="August Error", priority=2)
+            pushover.send_message(f"August test failed: {e}", title="August Error", priority=1)
         sys.exit(1)
 
 
