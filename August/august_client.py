@@ -318,7 +318,7 @@ class AugustMonitor:
                 self.pushover.send_message(
                     message,
                     title="August Lock Secured",
-                    priority=0,
+                    priority=-1,
                 )
 
                 del self.unlock_start_times[lock_id]
@@ -339,7 +339,7 @@ class AugustMonitor:
                 ajar_duration = current_time - self.ajar_start_times[lock_id]
                 message = f"Door {status.lock_name} closed after {ajar_duration / 60:.1f} minutes"
                 self.logger.info(message)
-                self.pushover.send_message(message, title="August Door Closed", priority=0)
+                self.pushover.send_message(message, title="August Door Closed", priority=-1)
 
                 del self.ajar_start_times[lock_id]
         else:
