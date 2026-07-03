@@ -277,7 +277,12 @@ class PowerwallManager:
             self.logger.info(f"Loop {self.loop_count}")
 
             try:
+                self.logger.debug("→ get_powerwall_data() start")
+                fetch_start = time.time()
                 data = self.get_powerwall_data(product)
+                self.logger.debug(
+                    f"← get_powerwall_data() done in {time.time() - fetch_start:.2f}s"
+                )
 
                 # Sanitize battery percentage
                 data["battery_percent"] = self.sanitize_battery_percentage(
@@ -297,13 +302,22 @@ class PowerwallManager:
 
             except Exception as e:
                 self.fail_count += 1
-                self.logger.warning(f"Attempt {self.fail_count} failed: {e}")
+                self.logger.warning(f"Attempt {self.fail_count} failed: {type(e).__name__}: {e}")
 
                 if self.fail_count > 10:
                     raise RuntimeError(f"Too many consecutive failures: {e}")
 
                 sleep_time = min(poll_time, 30)  # Quick retry
                 continue
+            except BaseException as e:
+                # Catch here too so we log context (loop_count, fail_count) before
+                # the outer handler in main() fires. Reraise so main() still pushes
+                # the P2 notification and finally-sleeps.
+                self.logger.error(
+                    f"BaseException in loop {self.loop_count} "
+                    f"(fail_count={self.fail_count}): {type(e).__name__}: {e}"
+                )
+                raise
 
 
 def main() -> None:
@@ -356,6 +370,26 @@ def main() -> None:
                 title="Powerwall Alert",
                 priority=2,
             )
+
+    except BaseException as e:
+        # SystemExit / KeyboardInterrupt / asyncio.CancelledError / signals
+        # bypass `except Exception`. Log full traceback + notify so silent
+        # exits stop being silent, then reraise so termination semantics
+        # (exit code, signal propagation) are preserved.
+        import traceback
+
+        tb_str = traceback.format_exc()
+        logger = get_logger(__name__)
+        logger.error(
+            f"Powerwall monitoring exited via {type(e).__name__}: {e}\nTraceback:\n{tb_str}"
+        )
+        if "manager" in locals():
+            manager.pushover.send_message(
+                f"Powerwall monitoring exited: {type(e).__name__}: {e}",
+                title="Powerwall Alert",
+                priority=2,
+            )
+        raise
 
     finally:
         logger = get_logger(__name__)
