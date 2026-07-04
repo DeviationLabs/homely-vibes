@@ -76,7 +76,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August", "RingSecurity"]
+packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August", "RingSecurity", "RingBeams"]
 
 [tool.deptry]
 known_first_party = [
@@ -161,7 +161,7 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity"]
+testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 

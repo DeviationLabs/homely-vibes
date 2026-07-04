@@ -47,5 +47,8 @@ sidebar-notes.md
 build/
 config/tokens
 
+# Node dependencies (per-project, e.g. RingBeams/node_modules, VSCodeSidebarNotes/node_modules)
+node_modules/
+
 # Editor
 .vscode/
