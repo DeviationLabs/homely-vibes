@@ -83,10 +83,7 @@ def zone_thresholds() -> dict[int, ZoneThreshold]:
     Built inline rather than loaded from config so the test is hermetic and
     does not depend on local.yaml (which is gitignored and absent in CI).
     """
-    return {
-        n: ZoneThreshold(zone_key=str(n), name=f"Z{n}*", avg_gpm=avg)
-        for n, avg in _FIXTURE_ZONE_AVGS.items()
-    }
+    return {n: ZoneThreshold(zone_key=str(n), avg_gpm=avg) for n, avg in _FIXTURE_ZONE_AVGS.items()}
 
 
 @pytest.fixture
