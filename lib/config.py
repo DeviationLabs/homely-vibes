@@ -197,6 +197,15 @@ class RingConfig:
 
 
 @dataclass
+class RingBeamsConfig:
+    """Ring Beams / Alarm sensor monitoring via Node sidecar"""
+
+    token_file: str
+    battery_threshold_pct: int
+    sidecar_timeout_seconds: int
+
+
+@dataclass
 class SamsungFrameConfig:
     """Samsung Frame TV configuration"""
 
@@ -390,6 +399,7 @@ class Config:
     tesla: TeslaConfig
     august: AugustConfig
     ring: RingConfig
+    ring_beams: RingBeamsConfig
     samsung_frame: SamsungFrameConfig
     rachio: RachioConfig
     flume: FlumeConfig
