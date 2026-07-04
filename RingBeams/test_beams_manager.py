@@ -151,6 +151,27 @@ def test_sidecar_json_error_treated_as_auth(tmp_path: Path, logger: logging.Logg
         run_sidecar(cfg, logger, node_path=str(fake), script_path=str(script))
 
 
+def test_sidecar_generic_error_not_misclassified_as_auth(
+    tmp_path: Path, logger: logging.Logger
+) -> None:
+    """rc=4 (post-auth unhandled) MUST NOT map to BeamsAuthError — otherwise a
+    parsing bug in the sidecar would tell the user to re-auth."""
+    tok = tmp_path / "tok.json"
+    tok.write_text('{"refresh_token": "fake"}')
+    fake = tmp_path / "fake.sh"
+    fake.write_text('#!/bin/sh\necho \'{"error":"unhandled: bad device"}\' >&2\nexit 4\n')
+    fake.chmod(0o755)
+    cfg = RingBeamsConfig(
+        token_file=str(tok),
+        battery_threshold_pct=25,
+        sidecar_timeout_seconds=5,
+    )
+    with pytest.raises(RuntimeError, match="sidecar exit=4") as exc:
+        run_sidecar(cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js"))
+    # Explicitly assert it's NOT the auth subclass.
+    assert not isinstance(exc.value, BeamsAuthError)
+
+
 def test_sidecar_happy_path(tmp_path: Path, logger: logging.Logger) -> None:
     """Fake sidecar prints a valid device list; run_sidecar parses it."""
     tok = tmp_path / "tok.json"

@@ -99,7 +99,11 @@ def run_sidecar(
             msg = err.get("error", proc.stderr)
         except Exception:
             msg = proc.stderr.strip() or "sidecar failed with no stderr"
-        # rc=1 → auth/list-locations, rc=3 → token file read; both auth-class.
+        # Sidecar exit-code contract (see fetch_status.js):
+        #   1  auth/list-locations failure (bad or missing token)
+        #   3  token file unreadable
+        #   4  post-auth unhandled exception (parsing bug, etc.)
+        # 1 and 3 → auth class; 4 is generic (must not misroute to "re-auth").
         if proc.returncode in (1, 3):
             raise BeamsAuthError(msg)
         raise RuntimeError(f"sidecar exit={proc.returncode}: {msg}")

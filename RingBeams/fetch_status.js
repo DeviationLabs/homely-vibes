@@ -90,26 +90,38 @@ async function main() {
             continue;
         }
         for (const d of locDevices) {
-            const x = d.data;
-            devices.push({
-                zid: x.zid,
-                name: x.name,
-                deviceType: x.deviceType,
-                categoryId: x.categoryId,
-                batteryLevel: x.batteryLevel ?? null,
-                batteryStatus: x.batteryStatus ?? null,
-                tamperStatus: x.tamperStatus ?? null,
-                faulted: x.faulted ?? null,
-                locationName: loc.name,
-            });
+            try {
+                const x = d.data;
+                devices.push({
+                    zid: x.zid,
+                    name: x.name,
+                    deviceType: x.deviceType,
+                    categoryId: x.categoryId,
+                    batteryLevel: x.batteryLevel ?? null,
+                    batteryStatus: x.batteryStatus ?? null,
+                    tamperStatus: x.tamperStatus ?? null,
+                    faulted: x.faulted ?? null,
+                    locationName: loc.name,
+                });
+            } catch (e) {
+                // Malformed device — surface via errors, don't crash the whole run.
+                errors.push(`parseDevice(${loc.name}): ${e.message}`);
+            }
         }
     }
 
-    process.stdout.write(JSON.stringify({ devices, errors }) + '\n');
-    process.exit(0);
+    // Drain before exit — process.exit(0) on a pipe can truncate writes
+    // above ~16KB stdout high-water mark; a large installation (50+ devices)
+    // would produce non-JSON on the Python side and mask device state.
+    process.stdout.write(JSON.stringify({ devices, errors }) + '\n', () => {
+        process.exit(0);
+    });
 }
 
 main().catch((err) => {
+    // Exit 4: post-auth unhandled failure (e.g. TypeError iterating a
+    // malformed device). Python maps 1/3 → BeamsAuthError; using 4 avoids a
+    // misleading "Auth Required" P2 when the real problem is a parsing bug.
     console.error(JSON.stringify({ error: `unhandled: ${err && err.message ? err.message : String(err)}` }));
-    process.exit(1);
+    process.exit(4);
 });
