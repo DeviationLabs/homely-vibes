@@ -102,17 +102,20 @@ jobs:
 
           # GLM 5.2 is a reasoning model (Z.ai, industry-leading on SWE-bench
           # Verified 77.8%): it emits chain-of-thought before the actual output.
-          # Keep max_tokens generous and reasoning_effort=low so even verbose
-          # runs have room for the JSON tail, avoiding "unparseable JSON" skips.
+          # The review prompt demands concrete trigger scenarios and confidence
+          # calibration, so run reasoning_effort=medium for real judgment — and
+          # raise max_tokens to 16384 so the longer CoT still leaves room for the
+          # JSON tail, avoiding "unparseable JSON" skips. curl --max-time 300
+          # matches the higher latency budget.
           PAYLOAD=$(jq -n \
             --rawfile diff /tmp/diff.txt \
             --arg sys "$SYSTEM_PROMPT" \
             --argjson schema "$SCHEMA" \
             '{
               model: "accounts/fireworks/models/glm-5p2",
-              max_tokens: 8192,
+              max_tokens: 16384,
               temperature: 0.1,
-              reasoning_effort: "low",
+              reasoning_effort: "medium",
               response_format: {type: "json_object", schema: $schema},
               messages: [
                 {role: "system", content: $sys},
@@ -120,7 +123,7 @@ jobs:
               ]
             }')
 
-          HTTP_RESPONSE=$(curl -sS --max-time 180 -w "\n%{http_code}" https://api.fireworks.ai/inference/v1/chat/completions \
+          HTTP_RESPONSE=$(curl -sS --max-time 300 -w "\n%{http_code}" https://api.fireworks.ai/inference/v1/chat/completions \
             -H "Authorization: Bearer $FIREWORKS_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
