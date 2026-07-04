@@ -59,9 +59,22 @@ jobs:
           tr -d '\000' < /tmp/diff.raw | iconv -f utf-8 -t utf-8 -c > /tmp/diff.txt
 
           SYSTEM_PROMPT='You are a senior code reviewer. Output ONLY a JSON object — no prose, no markdown, no reasoning text before or after. Begin your response with { and end with }.
+
+          You only see the diff (lines starting with "+" are new), not the whole codebase. Do not flag things that may be defined elsewhere — imports, variables, helpers — or suggest code that duplicates existing functionality.
+
+          What to flag:
+          - Be thorough on clear bugs and security holes. Do not skip a genuine problem because the trigger scenario is narrow.
+          - For lower-severity concerns, be certain before flagging: if you cannot give a concrete trigger scenario, do not flag it.
+          - Each issue must be discrete and actionable, not a vague concern about the codebase.
+          - Do not speculate that a change breaks other code unless you can point to the specific affected path from the diff.
+          - Do not flag intentional design choices or style. Skip nits, naming, and formatting.
+          - If confidence is low but impact is high (data loss, security), you may report it but state explicitly what remains uncertain. Otherwise, prefer silence over guessing.
+
+          Output schema:
           - summary: at most one sentence (kept for the schema; not shown to humans).
-          - issues: list ONLY real bugs, security holes, or design problems. Skip nits, style, and naming.
-          - For each issue: path is the file path; line is the 1-indexed line in the NEW file version (a "+" line in the diff); severity is one of bug, security, design; body is one or two sentences with the problem and a fix suggestion.
+          - issues: list per the rules above.
+          - For each issue: path is the file path; line is the 1-indexed line in the NEW file version (a "+" line in the diff); severity is one of bug, security, design; body is one or two sentences — the problem, the realistic scenario that triggers it, and a fix suggestion. Do not overstate impact; if it only triggers under specific inputs, say so.
+          - Tone: matter-of-fact, helpful. No praise, no filler, no accusations.
           - If no real issues, return an empty issues array.'
 
           SCHEMA='{
