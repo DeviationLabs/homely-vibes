@@ -199,6 +199,18 @@ wheels = [
 ]
 
 [[package]]
+name = "asyncclick"
+version = "8.4.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/b2/2c90a32d9b9cf1a4a90ed39cc1177890d146f3f89ae375b061d72110659a/asyncclick-8.4.2.1.tar.gz", hash = "sha256:8f259376ae8d4fcd91961c8ad3e85e9b63c9cf181a122201c7dfed3d7f6024b8", size = 340830, upload-time = "2026-06-30T12:40:33.842Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/44/ee9baab53fe4ff487fa47a1c50b174d3b3fb583cf2e22ff5ee33f61be899/asyncclick-8.4.2.1-py3-none-any.whl", hash = "sha256:dbd533769c4e3ce831c05394027ea1cd606c09688e18abab13dbcfbf7dc5a142", size = 121917, upload-time = "2026-06-30T12:40:32.213Z" },
+]
+
+[[package]]
 name = "attrs"
 version = "25.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -818,6 +830,21 @@ wheels = [
 ]
 
 [[package]]
+name = "firebase-messaging"
+version = "0.4.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "cryptography" },
+    { name = "http-ece" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/a0/20dc16682beff1b382ec10a9fba156f9bd5c33bfbbf227be5af437daff94/firebase_messaging-0.4.5.tar.gz", hash = "sha256:11f19509ea839e53f995d93d25d63a4a1385572a37fc2cff2c1b389534cb80f1", size = 36088, upload-time = "2025-05-10T09:16:26.553Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1d/10/f4e266f9e0aa025d23077c733e5a7f646fc9ced3c8b2711168e93d12742a/firebase_messaging-0.4.5-py3-none-any.whl", hash = "sha256:b566b5dedb15463fa35540d42acfda41040a2ae19c562b33b52f226e90212168", size = 33836, upload-time = "2025-05-10T09:16:24.843Z" },
+]
+
+[[package]]
 name = "flake8"
 version = "7.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1013,6 +1040,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
     { name = "requests-oauthlib" },
+    { name = "ring-doorbell" },
     { name = "samsungtvws" },
     { name = "tenacity" },
     { name = "tesla-fleet-api" },
@@ -1103,6 +1131,7 @@ requires-dist = [
     { name = "pywhispercpp", marker = "extra == 'voice'", specifier = ">=1.2.0" },
     { name = "requests", specifier = ">=2.33.0" },
     { name = "requests-oauthlib", specifier = ">=2.0.0" },
+    { name = "ring-doorbell", specifier = ">=0.9.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.13.0" },
     { name = "rumps", marker = "extra == 'voice'", specifier = ">=0.4.0" },
     { name = "samsungtvws", git = "https://github.com/NickWaterton/samsung-tv-ws-api.git" },
@@ -1141,6 +1170,15 @@ dev = [
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
     { name = "vulture", specifier = ">=2.0.0" },
 ]
+
+[[package]]
+name = "http-ece"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2b/1a/60ccc29fccd4789b7cada188b114185e8a5d63aba0d93262adbbe776cfe5/http_ece-1.1.0.tar.gz", hash = "sha256:932ebc2fa7c216954c320a188ae9c1f04d01e67bec9cdce1bfbc912813b0b4f8", size = 4902, upload-time = "2019-02-11T21:52:37.411Z" }
 
 [[package]]
 name = "httpcore"
@@ -2990,6 +3028,26 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1d/d6/9773d48804d085962c4f522db96f6a9ea9bd2e0480b3959a929176d92f01/rich-13.5.3.tar.gz", hash = "sha256:87b43e0543149efa1253f485cd845bb7ee54df16c9617b8a893650ab84b4acb6", size = 220323, upload-time = "2023-09-17T15:51:18.161Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/d1/23ba6235ed82883bb416f57179d1db2c05f3fb8e5d83c18660f9ab6f09c9/rich-13.5.3-py3-none-any.whl", hash = "sha256:9257b468badc3d347e146a4faa268ff229039d4c2d176ab0cffb4c4fbc73d5d9", size = 239782, upload-time = "2023-09-17T15:51:16.081Z" },
+]
+
+[[package]]
+name = "ring-doorbell"
+version = "0.9.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiofiles" },
+    { name = "aiohttp" },
+    { name = "async-timeout" },
+    { name = "asyncclick" },
+    { name = "firebase-messaging" },
+    { name = "oauthlib" },
+    { name = "pytz" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6c/4e/ee8bc785b04a8d64ffb9fcf4ddfededc94d78ca2a9ed0d13af29413b54f2/ring_doorbell-0.9.14.tar.gz", hash = "sha256:33df67c0cba8d0ece2b89a4dcee6602baf47b44fbfc1b3a085e8a3d54c016917", size = 68089, upload-time = "2026-02-28T14:15:24.367Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/c0/69d6064b6b294ff4ffea85da845e90d99aae8b7515d6d6b0c342a9ea1d60/ring_doorbell-0.9.14-py3-none-any.whl", hash = "sha256:5b3b3ebffcdaa1bc50f137a09062f36da42e3e59a63fe134292e16275142d9ec", size = 50260, upload-time = "2026-02-28T14:15:22.697Z" },
 ]
 
 [[package]]
