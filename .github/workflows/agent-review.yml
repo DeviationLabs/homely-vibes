@@ -1,4 +1,4 @@
-name: Fireworks PR Review
+name: Fireworks PR Review (GLM 5.2)
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate review with Fireworks (DeepSeek V4 Pro)
+      - name: Generate review with Fireworks (GLM 5.2)
         env:
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -38,13 +38,18 @@ jobs:
           set -euo pipefail
 
           # Defensive: BASE_SHA may not exist locally if base branch was force-pushed.
-          git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
+          # Fetch as unshallow so we don't graft a shallow root on top of the
+          # fetch-depth: 0 checkout — a shallow BASE_SHA fetch breaks merge-base
+          # resolution and made `git diff A...B` fatal with "no merge base".
+          git fetch --no-tags origin "$BASE_SHA" 2>/dev/null || true
 
           # Streaming truncation: subshell disables pipefail so git diff's
           # SIGPIPE (when head closes after 400KB) doesn't fail the step.
           # Avoids the old `git diff | head -c N` exit-141 bug while also
           # capping disk use — important for PRs touching vendored dirs.
-          ( set +o pipefail; git diff "$BASE_SHA"..."$HEAD_SHA" | head -c 400000 > /tmp/diff.raw )
+          # Use space-separated SHAs (tree-level diff) instead of three-dot
+          # (symmetric diff, needs merge base) to survive shallow histories.
+          ( set +o pipefail; git diff "$BASE_SHA" "$HEAD_SHA" | head -c 400000 > /tmp/diff.raw )
 
           # `head -c N` cuts on byte boundaries; mid-multibyte cuts produce
           # invalid UTF-8, which `jq --arg` rejects with a fatal error.
@@ -82,18 +87,16 @@ jobs:
             }
           }'
 
-          # DeepSeek V4 Pro is a reasoning model: it emits chain-of-thought
-          # before the actual output. The previous max_tokens=2048 budget
-          # was consumed entirely by CoT on non-trivial diffs, leaving no
-          # room for the JSON body → "Model output was not parseable JSON"
-          # → silent skip. Fix: cut CoT with reasoning_effort=low AND raise
-          # the budget so even verbose runs have room for the JSON tail.
+          # GLM 5.2 is a reasoning model (Z.ai, industry-leading on SWE-bench
+          # Verified 77.8%): it emits chain-of-thought before the actual output.
+          # Keep max_tokens generous and reasoning_effort=low so even verbose
+          # runs have room for the JSON tail, avoiding "unparseable JSON" skips.
           PAYLOAD=$(jq -n \
             --rawfile diff /tmp/diff.txt \
             --arg sys "$SYSTEM_PROMPT" \
             --argjson schema "$SCHEMA" \
             '{
-              model: "accounts/fireworks/models/deepseek-v4-pro",
+              model: "accounts/fireworks/models/glm-5p2",
               max_tokens: 8192,
               temperature: 0.1,
               reasoning_effort: "low",
@@ -129,9 +132,9 @@ jobs:
             exit 0
           fi
 
-          # Extract the JSON object from CONTENT. DeepSeek V4 Pro is a
-          # reasoning model and sometimes emits chain-of-thought around the
-          # JSON. A naive line-based sed extractor breaks on nested objects
+          # Extract the JSON object from CONTENT. GLM 5.2 is a reasoning
+          # model and sometimes emits chain-of-thought around the JSON.
+          # A naive line-based sed extractor breaks on nested objects
           # (matches the first inner `}` as the end). Use Python's JSON
           # parser, which respects string boundaries and nesting.
           printf '%s' "$CONTENT" > /tmp/raw_content.txt
@@ -159,7 +162,7 @@ jobs:
           # Validate: filter out issues referencing files not in the diff.
           # Models sometimes hallucinate file paths (e.g. src/App.tsx in a
           # Python repo). Only keep issues for files actually changed.
-          git diff --name-only "$BASE_SHA"..."$HEAD_SHA" > /tmp/diff_files.txt
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > /tmp/diff_files.txt
           python3 - <<'PY' > /tmp/review_validated.json 2>/tmp/validate_err.log || true
           import json
           with open("/tmp/review.json") as f:
@@ -189,7 +192,7 @@ jobs:
           # this revision. If the generator step bailed (API down, unparseable
           # output), surface that instead of silent skip.
           if [ ! -s /tmp/review.json ]; then
-            printf '**DeepSeek V4 Pro:** review skipped — see workflow logs for details. (commit `%s`)\n' \
+            printf '**GLM 5.2:** review skipped — see workflow logs for details. (commit `%s`)\n' \
               "${HEAD_SHA:0:7}" \
               | gh pr comment "$PR_NUMBER" --body-file -
             exit 0
@@ -199,7 +202,7 @@ jobs:
           SHORT_SHA="${HEAD_SHA:0:7}"
 
           if [ "$ISSUE_COUNT" -eq 0 ]; then
-            printf '**DeepSeek V4 Pro:** no issues found in commit `%s`. ✅\n' "$SHORT_SHA" \
+            printf '**GLM 5.2:** no issues found in commit `%s`. ✅\n' "$SHORT_SHA" \
               | gh pr comment "$PR_NUMBER" --body-file -
             exit 0
           fi
@@ -214,7 +217,7 @@ jobs:
             '{
               commit_id: $sha,
               event: "COMMENT",
-              body: ("**DeepSeek V4 Pro:** \($count) issue(s) flagged inline on commit `\($short)`."),
+              body: ("**GLM 5.2:** \($count) issue(s) flagged inline on commit `\($short)`."),
               comments: ($r[0].issues | map({
                 path: .path,
                 line: .line,
@@ -228,7 +231,7 @@ jobs:
             echo "::warning::Inline review POST failed (often line out of diff range). Falling back to a single comment with the issue list."
             cat /tmp/review_err.log
             {
-              printf '**DeepSeek V4 Pro:** %s issue(s) on commit `%s` — inline placement failed, listing here:\n\n' \
+              printf '**GLM 5.2:** %s issue(s) on commit `%s` — inline placement failed, listing here:\n\n' \
                 "$ISSUE_COUNT" "$SHORT_SHA"
               jq -r '.issues[] | "- **[\(.severity)]** `\(.path):\(.line)` — \(.body)"' /tmp/review.json
             } | gh pr comment "$PR_NUMBER" --body-file -
