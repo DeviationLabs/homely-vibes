@@ -21,6 +21,8 @@ import threading
 from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar
 
 import aiohttp
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+from tesla_fleet_api.exceptions import TeslaFleetError
 from tesla_fleet_api.tesla import EnergySite, TeslaFleetOAuth
 
 from lib.config import get_config
@@ -132,8 +134,24 @@ class TeslaAPIClient:
 
             return result
 
-    def _run(self, fn: Callable[[TeslaFleetOAuth], Awaitable[T]]) -> T:
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(2),
+        retry=retry_if_exception_type(TeslaFleetError),
+        reraise=True,
+    )
+    def _run_once(self, fn: Callable[[TeslaFleetOAuth], Awaitable[T]]) -> T:
         return asyncio.run(self._with_oauth(fn))
+
+    def _run(self, fn: Callable[[TeslaFleetOAuth], Awaitable[T]]) -> T:
+        # tesla_fleet_api's TeslaFleetError subclasses BaseException, not Exception,
+        # so upstream 5xx/etc bypass normal `except Exception` retry blocks. Retry
+        # transient failures up to 3x, then rewrap so callers get a regular
+        # Exception subclass.
+        try:
+            return self._run_once(fn)
+        except TeslaFleetError as e:
+            raise TeslaAPIError(f"{type(e).__name__}: {e}") from e
 
     def get_energy_sites(self) -> List[Dict[str, Any]]:
         async def call(oauth: TeslaFleetOAuth) -> List[Dict[str, Any]]:
