@@ -189,6 +189,8 @@ class HoseTimerProcessor:
                                 "end_time": end_dt,
                                 "duration_seconds": duration_sec,
                                 "flow_detected": flow_detected,
+                                "total_water_used": total_gal,
+                                "average_flow_rate": avg_gpm,
                             }
                         )
                         self.db.set_metadata(
