@@ -146,11 +146,14 @@ class WaterTrackingDB:
                     end_time TIMESTAMP,
                     duration_seconds INTEGER,
                     flow_detected INTEGER,
+                    total_water_used REAL DEFAULT 0.0,
+                    average_flow_rate REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(valve_id, start_time)
                 )
             """
             )
+            self._ensure_hose_session_flow_columns(cursor)
 
             # Create indexes for better query performance
             cursor.execute(
@@ -181,6 +184,19 @@ class WaterTrackingDB:
         # since the bridge always read 0, MAX preserves the meter's reading
         # for every minute that ever had real flow.
         self._dedup_water_readings()
+
+    def _ensure_hose_session_flow_columns(self, cursor: Any) -> None:
+        """Add total_water_used / average_flow_rate to legacy hose_zone_sessions."""
+        cursor.execute("PRAGMA table_info(hose_zone_sessions)")
+        cols = {row["name"] for row in cursor.fetchall()}
+        if "total_water_used" not in cols:
+            cursor.execute(
+                "ALTER TABLE hose_zone_sessions ADD COLUMN total_water_used REAL DEFAULT 0.0"
+            )
+        if "average_flow_rate" not in cols:
+            cursor.execute(
+                "ALTER TABLE hose_zone_sessions ADD COLUMN average_flow_rate REAL DEFAULT 0.0"
+            )
 
     def _dedup_water_readings(self) -> None:
         """Collapse duplicate-per-timestamp rows in water_readings (one-shot).
@@ -593,8 +609,9 @@ class WaterTrackingDB:
                 """
                 INSERT OR IGNORE INTO hose_zone_sessions (
                     valve_id, base_station_id, valve_name, base_station_label,
-                    start_time, end_time, duration_seconds, flow_detected
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    start_time, end_time, duration_seconds, flow_detected,
+                    total_water_used, average_flow_rate
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session["valve_id"],
@@ -607,6 +624,8 @@ class WaterTrackingDB:
                     None
                     if session.get("flow_detected") is None
                     else (1 if session["flow_detected"] else 0),
+                    float(session.get("total_water_used") or 0.0),
+                    float(session.get("average_flow_rate") or 0.0),
                 ),
             )
             conn.commit()
