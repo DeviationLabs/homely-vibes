@@ -91,11 +91,12 @@ async def test_all_healthy_no_alerts(cfg: RingConfig, logger: logging.Logger) ->
 async def test_string_battery_value_coerced(cfg: RingConfig, logger: logging.Logger) -> None:
     devs = [
         FakeDevice("StringLow", battery="15", wifi="good"),  # type: ignore[arg-type]
+        FakeDevice("StringDecimalLow", battery="15.5", wifi="good"),  # type: ignore[arg-type]
         FakeDevice("StringHigh", battery="90", wifi="good"),  # type: ignore[arg-type]
         FakeDevice("Garbage", battery="n/a", wifi="good"),  # type: ignore[arg-type]
     ]
     low, offline = await check_devices(cfg, logger, ring_factory=_factory(devs))
-    assert low == ["StringLow: 15%"]
+    assert low == ["StringLow: 15%", "StringDecimalLow: 15%"]
     assert offline == []
 
 

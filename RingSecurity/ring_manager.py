@@ -113,7 +113,8 @@ async def check_devices(
             # real battery device dies at ~5%, never sustains 0, and the
             # offline check catches truly dead cells anyway.
             try:
-                batt = int(batt_raw) if batt_raw is not None else None
+                # float() first — handles "15.5" strings that int() alone rejects.
+                batt = int(float(batt_raw)) if batt_raw is not None else None
             except (TypeError, ValueError):
                 batt = None
             if batt is not None and 0 < batt < cfg.battery_threshold_pct:
