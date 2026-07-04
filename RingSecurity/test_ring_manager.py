@@ -73,7 +73,8 @@ async def test_low_battery_and_offline_detected(cfg: RingConfig, logger: logging
     devs = [
         FakeDevice("Front Door", battery=15, wifi="good"),
         FakeDevice("Backyard", battery=90, wifi=None),  # offline
-        FakeDevice("Chime", battery=None, wifi="good"),  # wired, ignore
+        FakeDevice("Chime", battery=None, wifi="good"),  # wired (None), ignore
+        FakeDevice("Floodlight", battery=0, wifi="good"),  # wired (0), ignore
     ]
     low, offline = await check_devices(cfg, logger, ring_factory=_factory(devs))
     assert low == ["Front Door: 15%"]

@@ -97,7 +97,11 @@ async def check_devices(
             raise RingAuthError(f"Ring auth rejected: {e}") from e
         for dev in ring.devices().all_devices:
             batt = dev.battery_life
-            if batt is not None and batt < cfg.battery_threshold_pct:
+            # Wired devices report None or 0 (library flattens Ring's null
+            # inconsistently). Filter both — a real battery device dies at
+            # ~5%, never sustains 0, and the offline check catches truly
+            # dead cells anyway.
+            if batt is not None and 0 < batt < cfg.battery_threshold_pct:
                 low.append(f"{dev.name}: {batt}%")
 
             try:
