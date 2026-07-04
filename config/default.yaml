@@ -203,6 +203,15 @@ ring:
   token_file: config/tokens/ring_auth_token.json
   battery_threshold_pct: 25
 
+# === Ring Beams / Alarm sensors (via Node sidecar) ===
+# Reuses the RingSecurity OAuth token. Same Pushover token as RingSecurity
+# ("Ring Security"). Sidecar timeout covers Node startup + socket.io handshake
+# + initial device-state burst.
+ring_beams:
+  token_file: config/tokens/ring_auth_token.json
+  battery_threshold_pct: 25
+  sidecar_timeout_seconds: 45
+
 # === Samsung Frame TV ===
 samsung_frame:
   ip: "192.168.X.Y"
