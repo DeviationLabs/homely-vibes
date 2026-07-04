@@ -40,6 +40,7 @@ dependencies = [
     "pillow-heif>=0.22.0",
     "omegaconf>=2.3.0",
     "tesla-fleet-api>=1.4.7",
+    "ring-doorbell>=0.9.0",
 ]
 
 [project.optional-dependencies]
@@ -75,7 +76,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August"]
+packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August", "RingSecurity"]
 
 [tool.deptry]
 known_first_party = [
@@ -160,7 +161,7 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs"]
+testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 

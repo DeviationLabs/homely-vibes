@@ -35,6 +35,7 @@ pushover:
     NodeCheck: ""
     Powerwall: ""
     RachioFlume: ""
+    Ring Security: ""
     SamsungFrame: ""
     WhatsAppSummary: ""
 
@@ -194,6 +195,13 @@ august:
   password: ""  
   phone: "+1234567890"
   token_file: config/tokens/august_auth_token.json
+
+# === Ring Devices ===
+ring:
+  username: ""
+  password: ""
+  token_file: config/tokens/ring_auth_token.json
+  battery_threshold_pct: 25
 
 # === Samsung Frame TV ===
 samsung_frame:
