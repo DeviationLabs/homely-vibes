@@ -187,6 +187,16 @@ class AugustConfig:
 
 
 @dataclass
+class RingConfig:
+    """Ring devices configuration"""
+
+    username: str
+    password: str
+    token_file: str
+    battery_threshold_pct: int
+
+
+@dataclass
 class SamsungFrameConfig:
     """Samsung Frame TV configuration"""
 
@@ -379,6 +389,7 @@ class Config:
     water_monitor: WaterMonitorConfig
     tesla: TeslaConfig
     august: AugustConfig
+    ring: RingConfig
     samsung_frame: SamsungFrameConfig
     rachio: RachioConfig
     flume: FlumeConfig
