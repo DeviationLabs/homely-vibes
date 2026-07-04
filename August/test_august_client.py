@@ -5,7 +5,13 @@ import pytest
 from typing import Any
 from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from yalexs.lock import LockStatus, LockDoorStatus
-from August.august_client import AugustClient, AugustMonitor, LockState
+from August.august_client import (
+    AugustClient,
+    AugustMonitor,
+    LockState,
+    apply_working_api_key,
+    load_cached_install_id,
+)
 
 
 class TestLockState:
@@ -59,6 +65,7 @@ class TestAugustClient:
             patch("August.august_client.aiohttp.ClientSession") as mock_session,
             patch("August.august_client.ApiAsync") as mock_api,
             patch("August.august_client.AuthenticatorAsync") as mock_auth,
+            patch("August.august_client.load_cached_install_id", return_value="cached-install-id"),
             patch("August.august_client.get_config", return_value=mock_config),
         ):
             mock_session_instance = Mock()
@@ -74,7 +81,10 @@ class TestAugustClient:
             assert mock_api.call_count == 2
             mock_api.assert_any_call(mock_session_instance, brand=Brand.AUGUST)
             mock_api.assert_any_call(mock_session_instance, brand=Brand.YALE_AUGUST)
+            # The cached install_id is fed back through the constructor so
+            # re-auth after token expiry does not force 2FA.
             mock_auth.assert_called_once()
+            assert mock_auth.call_args.kwargs["install_id"] == "cached-install-id"
 
     @pytest.mark.asyncio
     async def test_close_session(self, client: AugustClient) -> None:
@@ -102,12 +112,70 @@ class TestAugustClient:
         ):
             mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
             client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=False)
             client.authenticator.async_authenticate.return_value = mock_auth_result
 
             result = await client.authenticate()
 
             assert result is True
             assert client.access_token == "token123"
+
+    @pytest.mark.asyncio
+    async def test_authenticate_renews_proactively_when_in_renewal_window(
+        self, client: AugustClient
+    ) -> None:
+        """When the token is inside the renewal window, force a re-auth."""
+        mock_auth_result = Mock()
+        mock_auth_result.state = "AUTHENTICATED"
+        mock_auth_result.access_token = "fresh-token"
+
+        with (
+            patch.object(client, "_ensure_session"),
+            patch("August.august_client.AuthenticationState") as mock_auth_state,
+            patch("August.august_client.Authentication") as mock_auth_cls,
+        ):
+            mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
+            mock_auth_state.REQUIRES_AUTHENTICATION = "REQUIRES_AUTHENTICATION"
+            client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=True)
+            client.authenticator._authentication.install_id = "known-install-id"
+            client.authenticator.async_authenticate.return_value = mock_auth_result
+
+            result = await client.authenticate()
+
+            assert result is True
+            assert client.access_token == "fresh-token"
+            # State was reset to REQUIRES_AUTHENTICATION keeping the install_id
+            # so async_authenticate performs a password re-auth instead of
+            # returning the cached (soon-to-expire) token.
+            mock_auth_cls.assert_called_once_with(
+                mock_auth_state.REQUIRES_AUTHENTICATION,
+                install_id="known-install-id",
+            )
+            client.authenticator.async_authenticate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_authenticate_skips_renewal_when_token_fresh(self, client: AugustClient) -> None:
+        """When the token is well outside the renewal window, do not re-auth."""
+        mock_auth_result = Mock()
+        mock_auth_result.state = "AUTHENTICATED"
+        mock_auth_result.access_token = "token123"
+
+        with (
+            patch.object(client, "_ensure_session"),
+            patch("August.august_client.AuthenticationState") as mock_auth_state,
+            patch("August.august_client.Authentication") as mock_auth_cls,
+        ):
+            mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
+            client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=False)
+            client.authenticator.async_authenticate.return_value = mock_auth_result
+
+            result = await client.authenticate()
+
+            assert result is True
+            # No forced state reset.
+            mock_auth_cls.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_authenticate_requires_validation(self, client: AugustClient) -> None:
@@ -122,6 +190,7 @@ class TestAugustClient:
             mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
             mock_auth_state.REQUIRES_VALIDATION = "REQUIRES_VALIDATION"
             client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=False)
             client.authenticator.async_authenticate.return_value = mock_auth_result
 
             result = await client.authenticate()
@@ -471,6 +540,82 @@ class TestAugustMonitor:
             mock_pushover.assert_not_called()
             # Should have started tracking again
             assert lock_id in monitor.unknown_status_start_times
+
+
+class TestLoadCachedInstallId:
+    """Test reading the persisted install_id from the token cache."""
+
+    def test_returns_install_id_when_present(self, tmp_path) -> None:
+        cache = tmp_path / "token.json"
+        cache.write_text('{"install_id": "abc-123", "access_token": "x"}')
+
+        assert load_cached_install_id(str(cache)) == "abc-123"
+
+    def test_returns_none_when_file_missing(self, tmp_path) -> None:
+        assert load_cached_install_id(str(tmp_path / "nope.json")) is None
+
+    def test_returns_none_when_invalid_json(self, tmp_path) -> None:
+        cache = tmp_path / "token.json"
+        cache.write_text("not json")
+
+        assert load_cached_install_id(str(cache)) is None
+
+    def test_returns_none_when_no_install_id_key(self, tmp_path) -> None:
+        cache = tmp_path / "token.json"
+        cache.write_text('{"access_token": "x"}')
+
+        assert load_cached_install_id(str(cache)) is None
+
+
+class TestApplyWorkingApiKey:
+    """Test the August API key fallback helper."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_brand_config(self) -> None:
+        """Restore the real BRAND_CONFIG[Brand.AUGUST].api_key after each test."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        original = BRAND_CONFIG[Brand.AUGUST].api_key
+        yield
+        BRAND_CONFIG[Brand.AUGUST].api_key = original
+
+    def test_applies_fallback_when_revoked_key_present(self) -> None:
+        """When yalexs ships the known-revoked key, fall back to the legacy key."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        # Ensure the global starts at the revoked value (yalexs 9.0.1 ships it).
+        BRAND_CONFIG[Brand.AUGUST].api_key = "d9984f29-07a6-816e-e1c9-44ec9d1be431"
+
+        applied = apply_working_api_key()
+
+        assert applied is True
+        assert BRAND_CONFIG[Brand.AUGUST].api_key == "7cab4bbd-2693-4fc1-b99b-dec0fb20f9d4"
+
+    def test_does_not_clobber_unknown_key(self) -> None:
+        """If yalexs shipped a different (fixed) key, do not override it."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        fixed_key = "11111111-2222-3333-4444-555555555555"
+        BRAND_CONFIG[Brand.AUGUST].api_key = fixed_key
+
+        applied = apply_working_api_key()
+
+        assert applied is False
+        assert BRAND_CONFIG[Brand.AUGUST].api_key == fixed_key
+
+    def test_logs_warning_when_fallback_applied(self) -> None:
+        """A warning is logged when the fallback is applied."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        BRAND_CONFIG[Brand.AUGUST].api_key = "d9984f29-07a6-816e-e1c9-44ec9d1be431"
+        logger = MagicMock()
+
+        apply_working_api_key(logger)
+
+        logger.warning.assert_called_once()
+        args = logger.warning.call_args.args
+        assert "d9984f29-07a6-816e-e1c9-44ec9d1be431" in args[1]
+        assert "7cab4bbd-2693-4fc1-b99b-dec0fb20f9d4" in args[2]
 
 
 if __name__ == "__main__":
