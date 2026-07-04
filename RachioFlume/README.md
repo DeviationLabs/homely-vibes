@@ -15,11 +15,8 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
   - **Cross-source suppression**: Controller-active OR hose-timer-active state suppresses Flume rules for `max_rule_duration + 10min` slack. Symmetric.
   - **Stale-zone monitor** (`stale_zone_checker.py`): P-1 heads-up if any enabled zone hasn't run within `stale_zone_days` (default 7). Daily dedup; hourly evaluation gate.
   - Mute support; P0 "all clear" on active→clear transition for sustained-flow rules.
-- **Synthetic Simulator** (`simulate_alerts.py`): Replay a YAML-defined scenario through the alert engine without hitting real APIs or Pushover — see [TESTABILITY.md](TESTABILITY.md)
-- **Period Reports**: Generate detailed reports with:
-  - Average watering rate by zone
-  - Total duration each zone was watered
-  - Water efficiency analysis
+- **Synthetic Simulator** (`simulate_alerts.py`): Replay scenarios through the alert engine without hitting real APIs or Pushover; wired into `test_alert_simulation.py`. See [TESTABILITY.md](TESTABILITY.md).
+- **HTML Email Report**: Daily fixed-width table (via `<pre>` monospace) covering all zones — controllers and hose valves in one unified table. Per-zone anomaly threshold + alert-session count are surfaced alongside runtime / gallons / GPM.
 - **Continuous Monitoring**: Automated data collection service
 - **SQLite Storage**: Persistent data storage with session tracking
 
@@ -89,7 +86,7 @@ uv run python rfmanager.py collect --interval 120    # Every 2 minutes
 uv run python rfmanager.py collect --interval 600    # Every 10 minutes (default: 300)
 ```
 
-**💡 Pro Tip**: Let the collector run for at least a week to get meaningful reports and efficiency analysis!
+**💡 Pro Tip**: Let the collector run for at least a week before tuning zone thresholds — needs a distribution of runs per zone to be meaningful.
 
 ### 📊 System Status (Check Anytime)
 
@@ -122,13 +119,10 @@ uv run python rfmanager.py report
 # Custom period report with specific end date and lookback days
 uv run python rfmanager.py report --end-date 2023-07-15 --lookback 14
 
-# Send report via email
+# Send report via HTML email
 uv run python rfmanager.py report --email
 
-# Zone efficiency analysis (requires multiple watering sessions)
-uv run python rfmanager.py summary
-
-# Raw data report with 5-minute intervals
+# Raw data report with 5-minute intervals (Flume-only, no Rachio context)
 uv run python rfmanager.py raw --hours 48
 ```
 
@@ -344,9 +338,10 @@ beyond the threshold) the very first `Stale-zone alert sent: ...` message
    - Correlates watering events with usage data
 
 5. **WeeklyReporter** (`reporter.py`)
-   - Generates period-based reports with customizable date ranges
-   - Calculates zone efficiency metrics
-   - Supports email delivery and console output
+   - Generates period reports with customizable date ranges (default 7 days)
+   - Unified `ZoneStats` table covers controller zones and hose valves; hose entries sort after controllers via `HOSE_ZONE_SENTINEL=999`
+   - Per-zone anomaly `threshold_gpm` and `alert_sessions` count surfaced alongside the aggregate stats
+   - Supports HTML email delivery (via `<html><body><pre>` — auto-detected by `lib.Mailer`) and console output
 
 6. **AlertEngine** (`alert_engine.py`) + **AlertRule** (`alert_rules.py`)
    - Runs at the end of each collector cycle
@@ -358,10 +353,10 @@ beyond the threshold) the very first `Stale-zone alert sent: ...` message
    - Per-rule and per-zone reported-today state persisted as JSON in `collection_metadata`
 
 7. **SyntheticDataset** (`synthetic_data.py`) + **Simulator** (`simulate_alerts.py`)
-   - YAML-defined scenarios with household, irrigation, leak, and pipe-break events
+   - In-code scenarios (household, irrigation, leak, pipe-break) built via `SyntheticDataset.add_*` helpers
    - Plays back through `AlertEngine` with fake clients and a capturing Pushover
-   - Used by `test_alert_simulation.py` for regression assertions and by the
-     `simulate` CLI for ad-hoc tuning
+   - Used by `test_alert_simulation.py` for regression assertions
+   - Ad-hoc replay of historical DB uses `rfmanager.py alerts replay` (see § DB Replay)
 
 ### Database Schema
 
@@ -380,26 +375,33 @@ The collector is designed to respect these limits with configurable polling inte
 ## Example Output
 
 ### Period Report
+
+Controllers and hose valves land in the same fixed-width table. `Thr` is the
+per-zone anomaly threshold (blank when unconfigured); `Alrt` is the count of
+sessions in the period whose per-session avg flow exceeded that threshold.
+Emailed variant wraps this body in `<html><body><pre>` so iOS Mail / Gmail
+render the whole table in monospace with no viewport wrap.
+
 ```
-======================================================================
 WATER USAGE REPORT
-Period: 2023-07-10 to 2023-07-17
-======================================================================
+Period: 2026-06-26 to 2026-07-03
+========================================
 
 SUMMARY:
-  Total watering sessions: 12
-  Total duration: 8.5 hours
-  Total water used: 425.3 gallons
-  Zones watered: 4
+  Total watering sessions: 36
+  Total duration: 465.0 min
+  Total water used: 1828 gallons
+  Zones watered: 13
 
 ZONE DETAILS:
-Zone Name                Sessions Duration(h) Water(gal) Rate(gpm)
---------------------------------------------------------------------
-1    Front Lawn          4        2.5         127.5      0.85
-2    Back Yard           3        2.0         98.2       0.82
-3    Side Garden         3        1.8         89.1       0.83
-4    Vegetable Garden    2        2.2         110.5      0.84
-======================================================================
+Name     Min    Gals  GPM   Thr   Alrt
+--------------------------------------
+Z1 FS    40.0   261   6.5   6.6   -
+Z2 FS    39.7   211   5.3   6.0   -
+...
+Z12 FDB  59.5   82    1.4   1.5   -
+Z13 FS   35.0   0     0.0   1.0   -
+========================================
 ```
 
 ### Status Check
@@ -434,8 +436,8 @@ uv run python -m pytest RachioFlume/test_zone_thresholds.py -v
 # Or standalone:
 python RachioFlume/test_zone_thresholds.py
 
-# Visual playback of a scenario (events to screen, no Pushover)
-uv run python -m RachioFlume.rfmanager simulate
+# Replay historical DB through the alert engine (no Pushover)
+uv run python RachioFlume/rfmanager.py alerts replay --hours 168
 ```
 
 ### Zone Threshold Integration Test
@@ -453,22 +455,19 @@ The `test_zone_thresholds.py` integration test validates the zone anomaly detect
 threshold = avg_gpm + max(absolute_gpm, percent_above/100 × avg_gpm)
 ```
 
-| Zone | Avg GPM | Threshold |
-|------|---------|-----------|
-| Z1   | 5.00    | 5.50      |
-| Z2   | 6.50    | 7.15      |
-| Z3   | 2.00    | 2.50      |
-| Z4   | 3.00    | 3.50      |
-| Z5   | 3.50    | 4.00      |
-| Z6   | 4.50    | 5.00      |
-| Z7   | 2.50    | 3.00      |
-| Z8   | 3.00    | 3.50      |
-| Z9   | 1.50    | 2.00      |
-| Z10  | 7.00    | 7.70      |
-| Z11  | 6.00    | 6.60      |
-| Z12  | 0.75    | 1.25      |
+Actual baselines live in `config/local.yaml` under
+`rachio_flume.alerts.zone_anomaly.zone_thresholds` — see the file for
+current per-zone `avg_gpm` values and their tuning notes. **Unknown zones**
+(not in config) default to `avg_gpm=0`, yielding a 0.5 GPM threshold — any
+flow triggers an alert.
 
-**Unknown zones** (not in config) default to `avg_gpm=0`, yielding a 0.5 GPM threshold — any flow triggers an alert.
+**Config key convention**: Controllers key by stringified `zone_number`
+(`"1"`, `"2"`, …) because that's what the Rachio API surfaces per run.
+Hose valves key by their raw API name (e.g. `"Z13 FS - Upper Deck Planters"`)
+for the same reason — the hose API has no zone number. Display strings for
+both come from `compact_zone_label()` (splits on `" - "` and takes the head),
+so `"Z13 FS - Upper Deck Planters"` shows as `"Z13 FS"` in the email and
+Pushover header. No separate `name:` field in config.
 
 **Requirements**: SSH access to prod controller (configured in `config/local.yaml`) must work without password prompt (key-based auth).
 

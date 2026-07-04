@@ -1,7 +1,7 @@
 """Data storage for water tracking integration."""
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Generator
 from contextlib import contextmanager
@@ -412,33 +412,6 @@ class WaterTrackingDB:
             result = cursor.fetchone()
             return result["total"] or 0.0
 
-    def get_weekly_zone_stats(self, start_date: datetime) -> List[Dict[str, Any]]:
-        """Get weekly statistics by zone."""
-        end_date = start_date + timedelta(days=7)
-
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute(
-                """
-                SELECT 
-                    zone_name,
-                    zone_number,
-                    COUNT(*) as session_count,
-                    SUM(duration_seconds) as total_duration_seconds,
-                    AVG(duration_seconds) as avg_duration_seconds,
-                    SUM(total_water_used) as total_water_used,
-                    AVG(average_flow_rate) as avg_flow_rate
-                FROM zone_sessions
-                WHERE start_time >= ? AND start_time < ?
-                GROUP BY zone_name, zone_number
-                ORDER BY zone_number
-            """,
-                (start_date, end_date),
-            )
-
-            return [dict(row) for row in cursor.fetchall()]
-
     def get_period_zone_stats(
         self, start_date: datetime, end_date: datetime
     ) -> List[Dict[str, Any]]:
@@ -484,12 +457,12 @@ class WaterTrackingDB:
                         (strftime('%s', timestamp) / (? * 60)) * (? * 60),
                         'unixepoch'
                     ) as interval_start,
-                    AVG(flow_rate) as avg_flow_rate,
-                    MAX(flow_rate) as max_flow_rate,
-                    MIN(flow_rate) as min_flow_rate,
+                    AVG(value) as avg_flow_rate,
+                    MAX(value) as max_flow_rate,
+                    MIN(value) as min_flow_rate,
                     COUNT(*) as data_points,
-                    AVG(CASE WHEN flow_rate > 0.1 THEN flow_rate END) as avg_active_flow_rate
-                FROM flume_readings
+                    AVG(CASE WHEN value > 0.1 THEN value END) as avg_active_flow_rate
+                FROM water_readings
                 WHERE timestamp >= ? AND timestamp <= ?
                 GROUP BY interval_start
                 ORDER BY interval_start

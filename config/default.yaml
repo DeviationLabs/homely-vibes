@@ -250,7 +250,9 @@ rachio_flume:
       # Outer key = device label (matches rachio.devices[].label).
       # Inner key = zone identifier:
       #   - Controllers: stringified zone_number (e.g. "1")
-      #   - Hose timers: valve name (e.g. "Upper Deck Planters")
+      #   - Hose timers: raw valve name (e.g. "Z13 FS - Upper Deck Planters")
+      # Value: {avg_gpm: <float>}. Display labels derive from the raw key via
+      # compact_zone_label(); no display `name:` field needed.
       zone_thresholds: {}
 
     # === Whole-house sustained-flow rules (Flume only; no Rachio context) ===

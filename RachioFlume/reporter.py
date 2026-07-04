@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from pathlib import Path
 
-from RachioFlume.alert_rules import load_zone_thresholds_from_config
+from RachioFlume.alert_rules import compact_zone_label, load_zone_thresholds_from_config
 from RachioFlume.data_storage import WaterTrackingDB
 from lib.config import get_config
 from lib.logger import get_logger
@@ -162,12 +162,11 @@ class WeeklyReporter:
 
         for (label, name), v in hose_agg.items():
             zt = all_thresholds.get(label, {}).get(name)
-            display_name = zt.name if zt else name
             threshold_gpm = round(zt.compute_threshold(abs_gpm, pct_above), 2) if zt else 0.0
             formatted_zones.append(
                 ZoneStats(
                     zone_number=HOSE_ZONE_SENTINEL,
-                    zone_name=display_name,
+                    zone_name=compact_zone_label(name),
                     sessions=v["sessions"],
                     total_duration_minutes=round(v["duration_sec_total"] / 60.0, 1),
                     average_duration_minutes=round(
@@ -229,7 +228,6 @@ class WeeklyReporter:
 
         lines.append("")
         lines.append("SUMMARY:")
-        lines.append(f"  Total watering sessions: {report.summary.total_watering_sessions}")
         lines.append(f"  Total duration: {report.summary.total_duration_minutes} min")
         lines.append(
             f"  Total water used: {int(round(report.summary.total_water_used_gallons))} gallons"
@@ -239,9 +237,11 @@ class WeeklyReporter:
         if report.zones:
             lines.append("")
             lines.append("ZONE DETAILS:")
+            # Numeric columns are right-aligned so decimals and thousands align
+            # visually down the column. Name stays left-aligned.
             # Thr = anomaly threshold GPM (blank if zone not configured).
             # Alrt = # sessions in period where session avg flow > threshold.
-            header = f"{'Name':<8} {'Min':<6} {'Gals':<5} {'GPM':<5} {'Thr':<5} {'Alrt':<4}"
+            header = f"{'Name':<8} {'Min':>6} {'Gals':>5} {'GPM':>5} {'Thr':>5} {'Alrt':>4}"
             lines.append(header)
             lines.append("-" * len(header))
 
@@ -250,11 +250,11 @@ class WeeklyReporter:
                 alrt = str(zone.alert_sessions) if zone.alert_sessions else "-"
                 lines.append(
                     f"{zone.zone_name[:8]:<8} "
-                    f"{zone.total_duration_minutes:<6.1f} "
-                    f"{int(round(zone.total_water_gallons)):<5d} "
-                    f"{zone.average_flow_rate_gpm:<5.1f} "
-                    f"{thr:<5} "
-                    f"{alrt:<4}"
+                    f"{zone.total_duration_minutes:>6.1f} "
+                    f"{int(round(zone.total_water_gallons)):>5d} "
+                    f"{zone.average_flow_rate_gpm:>5.1f} "
+                    f"{thr:>5} "
+                    f"{alrt:>4}"
                 )
 
         lines.append("")

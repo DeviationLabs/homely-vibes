@@ -41,9 +41,9 @@ def engine(db: WaterTrackingDB, rule: AlertRule) -> AlertEngine:
     pushover.send_message.return_value = True
     # Provide zone thresholds high enough that test flow rates don't trigger anomalies
     zone_thresholds = {
-        1: ZoneThreshold(zone_key="1", name="Z1*", avg_gpm=10.0),
-        2: ZoneThreshold(zone_key="2", name="Z2*", avg_gpm=10.0),
-        3: ZoneThreshold(zone_key="3", name="Z3*", avg_gpm=10.0),
+        1: ZoneThreshold(zone_key="1", avg_gpm=10.0),
+        2: ZoneThreshold(zone_key="2", avg_gpm=10.0),
+        3: ZoneThreshold(zone_key="3", avg_gpm=10.0),
     }
     return AlertEngine(
         flume_client=flume,
