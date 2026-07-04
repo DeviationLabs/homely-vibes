@@ -142,19 +142,22 @@ class WeeklyReporter:
         # Aggregate hose-timer sessions and append as rows in the same table.
         # Hose valves are treated identically to controller zones: they count
         # toward zones_watered, contribute to total sessions / total duration,
-        # and share the same column layout. Gallons + GPM stay 0 because
-        # hose_zone_sessions does not track water volume today.
+        # and share the same column layout. Volume + rate come from the Flume
+        # window aggregate captured by hose_timer_processor at run end.
         hose_sessions = self.db.get_hose_zone_sessions(period_start, period_end)
         hose_agg: Dict[tuple, Dict[str, Any]] = {}
         hose_alerts: Dict[tuple, int] = {}
         for s in hose_sessions:
             key = (s["base_station_label"], s["valve_name"])
-            slot = hose_agg.setdefault(key, {"sessions": 0, "duration_sec_total": 0})
+            slot = hose_agg.setdefault(
+                key, {"sessions": 0, "duration_sec_total": 0, "gal_total": 0.0}
+            )
             slot["sessions"] += 1
             duration_sec = s.get("duration_seconds") or 0
             slot["duration_sec_total"] += duration_sec
+            gal = float(s.get("total_water_used") or 0.0)
+            slot["gal_total"] += gal
             hose_zt = all_thresholds.get(s["base_station_label"], {}).get(s["valve_name"])
-            gal = s.get("total_water_used") or 0
             if hose_zt and duration_sec > 0:
                 sess_avg = gal / (duration_sec / 60.0)
                 if sess_avg > hose_zt.compute_threshold(abs_gpm, pct_above):
@@ -163,17 +166,19 @@ class WeeklyReporter:
         for (label, name), v in hose_agg.items():
             zt = all_thresholds.get(label, {}).get(name)
             threshold_gpm = round(zt.compute_threshold(abs_gpm, pct_above), 2) if zt else 0.0
+            dur_min = v["duration_sec_total"] / 60.0
+            avg_gpm = v["gal_total"] / dur_min if dur_min > 0 else 0.0
             formatted_zones.append(
                 ZoneStats(
                     zone_number=HOSE_ZONE_SENTINEL,
                     zone_name=compact_zone_label(name),
                     sessions=v["sessions"],
-                    total_duration_minutes=round(v["duration_sec_total"] / 60.0, 1),
+                    total_duration_minutes=round(dur_min, 1),
                     average_duration_minutes=round(
                         (v["duration_sec_total"] / max(v["sessions"], 1)) / 60.0, 1
                     ),
-                    total_water_gallons=0.0,
-                    average_flow_rate_gpm=0.0,
+                    total_water_gallons=round(v["gal_total"], 1),
+                    average_flow_rate_gpm=round(avg_gpm, 1),
                     threshold_gpm=threshold_gpm,
                     alert_sessions=hose_alerts.get((label, name), 0),
                 )
