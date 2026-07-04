@@ -65,8 +65,12 @@ def run_sidecar(
     *,
     node_path: Optional[str] = None,
     script_path: Optional[str] = None,
-) -> list[DeviceRecord]:
-    """Invoke fetch_status.js, parse its JSON output into DeviceRecords."""
+) -> tuple[list[DeviceRecord], list[str]]:
+    """Invoke fetch_status.js. Returns (devices, per-location errors).
+
+    Per-location errors are surfaced (not raised) so a partial failure never
+    masks itself as "all healthy" — the caller pushes them to Pushover at P1.
+    """
     node = node_path or _resolve_node()
     script = script_path or str(Path(__file__).resolve().parent / "fetch_status.js")
     token_file = cfg.token_file
@@ -117,7 +121,8 @@ def run_sidecar(
                 tamper=d.get("tamperStatus"),
             )
         )
-    return out
+    errors = list(payload.get("errors", []) or [])
+    return out, errors
 
 
 def classify(devices: list[DeviceRecord], threshold_pct: int) -> tuple[list[str], list[str]]:
@@ -149,6 +154,7 @@ def notify(
     pushover: Pushover,
     low: list[str],
     tamper: list[str],
+    errors: list[str],
     logger: logging.Logger,
 ) -> None:
     if low:
@@ -159,7 +165,12 @@ def notify(
         body = "\n".join(tamper)
         logger.info(f"Tamper alert: {body}")
         pushover.send_message(body, title="Ring Beams/Alarm: Tamper", priority=0)
-    if not low and not tamper:
+    if errors:
+        # Partial-location failure — coverage was incomplete, mustn't look healthy.
+        body = "\n".join(errors)
+        logger.error(f"Sidecar partial failure: {body}")
+        pushover.send_message(body, title="Ring Beams/Alarm: Partial Sidecar Failure", priority=1)
+    if not low and not tamper and not errors:
         logger.info("All Ring Beams/Alarm sensors healthy.")
 
 
@@ -175,10 +186,10 @@ def main() -> None:
     cfg = get_config()
     pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens[PUSHOVER_KEY])
     try:
-        devices = run_sidecar(cfg.ring_beams, logger)
-        logger.info(f"Fetched {len(devices)} devices from sidecar")
+        devices, errors = run_sidecar(cfg.ring_beams, logger)
+        logger.info(f"Fetched {len(devices)} devices from sidecar ({len(errors)} location errors)")
         low, tamper = classify(devices, cfg.ring_beams.battery_threshold_pct)
-        notify(pushover, low, tamper, logger)
+        notify(pushover, low, tamper, errors, logger)
     except BeamsAuthError as e:
         logger.error(f"Ring Beams auth failure: {e}")
         pushover.send_message(str(e), title="Ring Beams: Auth Required", priority=0)

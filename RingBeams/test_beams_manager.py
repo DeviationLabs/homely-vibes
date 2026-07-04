@@ -97,7 +97,7 @@ def test_tamper_detected() -> None:
 
 def test_notify_priorities(logger: logging.Logger) -> None:
     p = RecordingPushover()
-    notify(p, ["A: 10%"], ["B (tampered)"], logger)
+    notify(p, ["A: 10%"], ["B (tampered)"], [], logger)
     assert len(p.calls) == 2
     battery = next(c for c in p.calls if "Battery" in (c["title"] or ""))
     tamper = next(c for c in p.calls if "Tamper" in (c["title"] or ""))
@@ -105,9 +105,21 @@ def test_notify_priorities(logger: logging.Logger) -> None:
     assert tamper["priority"] == 0
 
 
+def test_notify_partial_failure_alerts_p1(logger: logging.Logger) -> None:
+    """Sidecar partial-location failure MUST alert even when devices returned
+    look healthy — otherwise the user sees false 'all healthy' with missing
+    devices."""
+    p = RecordingPushover()
+    notify(p, [], [], ["getDevices(Home): connection reset"], logger)
+    assert len(p.calls) == 1
+    assert "Partial" in (p.calls[0]["title"] or "")
+    assert p.calls[0]["priority"] == 1
+    assert "connection reset" in p.calls[0]["message"]
+
+
 def test_notify_no_alerts_silent(logger: logging.Logger) -> None:
     p = RecordingPushover()
-    notify(p, [], [], logger)
+    notify(p, [], [], [], logger)
     assert p.calls == []
 
 
@@ -156,8 +168,31 @@ def test_sidecar_happy_path(tmp_path: Path, logger: logging.Logger) -> None:
         battery_threshold_pct=25,
         sidecar_timeout_seconds=5,
     )
-    devs = run_sidecar(cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js"))
+    devs, errs = run_sidecar(cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js"))
     assert len(devs) == 1
     assert devs[0].name == "Mailbox"
     assert devs[0].battery == 12
     assert devs[0].battery_status == "warn"
+    assert errs == []
+
+
+def test_sidecar_surfaces_partial_errors(tmp_path: Path, logger: logging.Logger) -> None:
+    """Sidecar returned devices AND per-location errors — both surface."""
+    tok = tmp_path / "tok.json"
+    tok.write_text('{"refresh_token": "fake"}')
+    fake = tmp_path / "fake.sh"
+    fake.write_text(
+        "#!/bin/sh\ncat <<EOF\n"
+        '{"devices":[{"name":"Mailbox","batteryLevel":90,"batteryStatus":"ok",'
+        '"tamperStatus":"ok"}],'
+        '"errors":["getDevices(Second Home): oops"]}\nEOF\n'
+    )
+    fake.chmod(0o755)
+    cfg = RingBeamsConfig(
+        token_file=str(tok),
+        battery_threshold_pct=25,
+        sidecar_timeout_seconds=5,
+    )
+    devs, errs = run_sidecar(cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js"))
+    assert len(devs) == 1
+    assert errs == ["getDevices(Second Home): oops"]

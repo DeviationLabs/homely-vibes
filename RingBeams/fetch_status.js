@@ -78,12 +78,15 @@ async function main() {
     }
 
     const devices = [];
+    const errors = [];
     for (const loc of locations) {
         let locDevices;
         try {
             locDevices = await loc.getDevices();
         } catch (e) {
-            console.error(JSON.stringify({ error: `getDevices(${loc.name}): ${e.message}` }));
+            // Include in payload — Python surfaces to Pushover so a partial failure
+            // is never masked as "all healthy" (exit=0 with missing devices).
+            errors.push(`getDevices(${loc.name}): ${e.message}`);
             continue;
         }
         for (const d of locDevices) {
@@ -102,7 +105,7 @@ async function main() {
         }
     }
 
-    process.stdout.write(JSON.stringify({ devices }) + '\n');
+    process.stdout.write(JSON.stringify({ devices, errors }) + '\n');
     process.exit(0);
 }
 
