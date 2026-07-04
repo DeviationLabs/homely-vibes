@@ -15,7 +15,7 @@ import pytest
 
 from lib.config import RingConfig
 from lib.MyPushover import Pushover
-from RingSecurity.ring_manager import RingAuthError, check_devices, notify
+from RingSecurity.ring_manager import RingAuthError, _save_token, check_devices, notify
 
 
 class FakeDevice:
@@ -88,6 +88,17 @@ async def test_all_healthy_no_alerts(cfg: RingConfig, logger: logging.Logger) ->
     assert offline == []
 
 
+async def test_string_battery_value_coerced(cfg: RingConfig, logger: logging.Logger) -> None:
+    devs = [
+        FakeDevice("StringLow", battery="15", wifi="good"),  # type: ignore[arg-type]
+        FakeDevice("StringHigh", battery="90", wifi="good"),  # type: ignore[arg-type]
+        FakeDevice("Garbage", battery="n/a", wifi="good"),  # type: ignore[arg-type]
+    ]
+    low, offline = await check_devices(cfg, logger, ring_factory=_factory(devs))
+    assert low == ["StringLow: 15%"]
+    assert offline == []
+
+
 async def test_health_call_exception_treated_as_offline(
     cfg: RingConfig, logger: logging.Logger
 ) -> None:
@@ -120,3 +131,10 @@ def test_notify_no_alerts_no_pushover(logger: logging.Logger) -> None:
     p = RecordingPushover()
     notify(p, [], [], logger)
     assert p.calls == []
+
+
+def test_save_token_chmods_0600(tmp_path: Path) -> None:
+    path = tmp_path / "tok.json"
+    _save_token(str(path), {"access_token": "secret"})
+    mode = path.stat().st_mode & 0o777
+    assert mode == 0o600, f"token file must be 0600, got {oct(mode)}"

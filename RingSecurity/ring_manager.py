@@ -13,6 +13,7 @@ import asyncio
 import getpass
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -43,6 +44,7 @@ def _save_token(path: str, token: dict[str, Any]) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(token))
+    os.chmod(p, 0o600)
 
 
 async def _auth_flow(username: str, password: str, token_file: str) -> None:
@@ -96,11 +98,16 @@ async def check_devices(
         except AuthenticationError as e:
             raise RingAuthError(f"Ring auth rejected: {e}") from e
         for dev in ring.devices().all_devices:
-            batt = dev.battery_life
-            # Wired devices report None or 0 (library flattens Ring's null
-            # inconsistently). Filter both — a real battery device dies at
-            # ~5%, never sustains 0, and the offline check catches truly
-            # dead cells anyway.
+            batt_raw = dev.battery_life
+            # Ring occasionally returns battery_life as a string on certain
+            # device types; coerce defensively. Wired devices report None or 0
+            # (library flattens Ring's null inconsistently) — filter both. A
+            # real battery device dies at ~5%, never sustains 0, and the
+            # offline check catches truly dead cells anyway.
+            try:
+                batt = int(batt_raw) if batt_raw is not None else None
+            except (TypeError, ValueError):
+                batt = None
             if batt is not None and 0 < batt < cfg.battery_threshold_pct:
                 low.append(f"{dev.name}: {batt}%")
 
