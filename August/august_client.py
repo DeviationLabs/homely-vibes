@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 import json
 from dataclasses import dataclass
 import aiohttp
@@ -64,8 +64,9 @@ def load_cached_install_id(cache_file: str) -> Optional[str]:
     """
     try:
         with open(cache_file, "r") as f:
-            data = json.load(f)
-        return data.get("install_id")
+            data: dict[str, Any] = json.load(f)
+        install_id = data.get("install_id")
+        return install_id if isinstance(install_id, str) else None
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
 

@@ -2,7 +2,8 @@
 """Tests for August smart lock client module."""
 
 import pytest
-from typing import Any
+from pathlib import Path
+from typing import Any, Generator
 from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from yalexs.lock import LockStatus, LockDoorStatus
 from August.august_client import (
@@ -545,22 +546,22 @@ class TestAugustMonitor:
 class TestLoadCachedInstallId:
     """Test reading the persisted install_id from the token cache."""
 
-    def test_returns_install_id_when_present(self, tmp_path) -> None:
+    def test_returns_install_id_when_present(self, tmp_path: Path) -> None:
         cache = tmp_path / "token.json"
         cache.write_text('{"install_id": "abc-123", "access_token": "x"}')
 
         assert load_cached_install_id(str(cache)) == "abc-123"
 
-    def test_returns_none_when_file_missing(self, tmp_path) -> None:
+    def test_returns_none_when_file_missing(self, tmp_path: Path) -> None:
         assert load_cached_install_id(str(tmp_path / "nope.json")) is None
 
-    def test_returns_none_when_invalid_json(self, tmp_path) -> None:
+    def test_returns_none_when_invalid_json(self, tmp_path: Path) -> None:
         cache = tmp_path / "token.json"
         cache.write_text("not json")
 
         assert load_cached_install_id(str(cache)) is None
 
-    def test_returns_none_when_no_install_id_key(self, tmp_path) -> None:
+    def test_returns_none_when_no_install_id_key(self, tmp_path: Path) -> None:
         cache = tmp_path / "token.json"
         cache.write_text('{"access_token": "x"}')
 
@@ -571,7 +572,7 @@ class TestApplyWorkingApiKey:
     """Test the August API key fallback helper."""
 
     @pytest.fixture(autouse=True)
-    def _restore_brand_config(self) -> None:
+    def _restore_brand_config(self) -> Generator[None, None, None]:
         """Restore the real BRAND_CONFIG[Brand.AUGUST].api_key after each test."""
         from yalexs.const import BRAND_CONFIG, Brand
 
