@@ -41,9 +41,17 @@ def _load_token(path: str) -> Optional[dict[str, Any]]:
 
 
 def _save_token(path: str, token: dict[str, Any]) -> None:
+    # Atomic 0600 create: avoids TOCTOU where a chmod-after-write leaves the
+    # token briefly world-readable under a typical 0o022 umask.
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(token))
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, json.dumps(token).encode())
+    finally:
+        os.close(fd)
+    # If the file pre-existed with looser perms, os.open above preserves the
+    # existing mode. Force-chmod as a safety net.
     os.chmod(p, 0o600)
 
 

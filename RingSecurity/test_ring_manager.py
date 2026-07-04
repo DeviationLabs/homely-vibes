@@ -138,3 +138,12 @@ def test_save_token_chmods_0600(tmp_path: Path) -> None:
     _save_token(str(path), {"access_token": "secret"})
     mode = path.stat().st_mode & 0o777
     assert mode == 0o600, f"token file must be 0600, got {oct(mode)}"
+
+
+def test_save_token_overwrites_loose_perms(tmp_path: Path) -> None:
+    path = tmp_path / "tok.json"
+    path.write_text("stale")
+    path.chmod(0o644)
+    _save_token(str(path), {"access_token": "secret"})
+    mode = path.stat().st_mode & 0o777
+    assert mode == 0o600, f"loose-perms overwrite must end 0600, got {oct(mode)}"
