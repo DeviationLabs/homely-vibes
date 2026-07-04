@@ -11,7 +11,11 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional
 
-from RachioFlume.alert_rules import ZoneThreshold
+from RachioFlume.alert_rules import (
+    ZoneThreshold,
+    compact_zone_label,
+    send_zone_outcome_pushover,
+)
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient
 from RachioFlume.rachio_hose_client import HoseValve, RachioHoseClient
@@ -237,64 +241,33 @@ class HoseTimerProcessor:
         total_gal: float,
         flow_detected: Optional[bool],
     ) -> None:
-        """Emit at most one Pushover per valve run.
-
-        Short runs (≤ min_runtime_minutes, default 5) are silenced entirely —
-        same gate as the controller path so test/quick-run pulses don't flood
-        the feed. Above the threshold, routes to Zone Anomaly (P2) when flow
-        exceeds the configured baseline's anomaly threshold; otherwise sends
-        Zone Report (P-1). The trimmed first line clusters visually with
-        controller zone entries in the Pushover feed.
+        """Hose valve zone-end notification. Delegates to the shared helper
+        in alert_rules so the format stays in lockstep with the controller
+        path. The trimmed header clusters visually with controller Pushover
+        entries.
         """
-        runtime_min = duration_sec / 60.0
-        if runtime_min <= self.min_runtime_minutes:
-            self.logger.info(
-                f"Skipping hose zone outcome for "
-                f"'{valve.base_station_label}/{valve.name}': "
-                f"runtime {runtime_min:.0f}min ≤ min_runtime_minutes "
-                f"{self.min_runtime_minutes}min"
-            )
-            return
-
         zt = self.thresholds.get(valve.name)
         baseline = zt.avg_gpm if zt else 0.0
         threshold = (
             zt.compute_threshold(self.absolute_gpm, self.percent_above) if zt else self.absolute_gpm
         )
-        is_anomaly = baseline > 0 and avg_gpm > threshold
 
-        header = f"'{valve.name}' @ {valve.base_station_label}"
-        flow_line = (
-            f"Avg flow: {avg_gpm:.2f} GPM (thresh {threshold:.2f})"
-            if baseline > 0
-            else f"Avg flow: {avg_gpm:.2f} GPM"
-        )
         sensor_line = (
             "Flow sensor: detected"
             if flow_detected
             else ("Flow sensor: NOT detected" if flow_detected is False else "")
         )
-        lines = [
-            header,
-            f"Runtime: {runtime_min:.0f} min",
-            flow_line,
-            f"Total: {total_gal:.1f} gal",
-        ]
-        if is_anomaly:
-            deviation = avg_gpm - baseline
-            deviation_pct = (deviation / baseline * 100) if baseline > 0 else 0
-            lines.append(f"Deviation: +{deviation:.2f} GPM ({deviation_pct:.0f}%)")
-        if sensor_line:
-            lines.append(sensor_line)
 
-        if is_anomaly:
-            title, priority = "RachioFlume: Zone Anomaly", 2
-        else:
-            title, priority = "RachioFlume: Zone Report", -1
-
-        self.pushover.send_message("\n".join(lines), title=title, priority=priority)
-        self.logger.info(
-            f"Hose zone outcome sent for '{valve.base_station_label}/{valve.name}': "
-            f"{runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal, "
-            f"anomaly={is_anomaly}, flow_detected={flow_detected}"
+        send_zone_outcome_pushover(
+            pushover=self.pushover,
+            logger=self.logger,
+            log_label=f"'{valve.base_station_label}/{valve.name}'",
+            header=f"'{compact_zone_label(valve.name)}' @ {valve.base_station_label}",
+            runtime_min=duration_sec / 60.0,
+            avg_gpm=avg_gpm,
+            total_gal=total_gal,
+            baseline=baseline,
+            threshold=threshold,
+            min_runtime_minutes=self.min_runtime_minutes,
+            extra_lines=[sensor_line] if sensor_line else None,
         )

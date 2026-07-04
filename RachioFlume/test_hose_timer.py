@@ -50,11 +50,7 @@ def _make_processor(
     client.label = "Hose Drip Jasmine"
     client.list_valves.return_value = [valve]
     pushover = MagicMock()
-    thresholds = {
-        "Upper Deck Planters": ZoneThreshold(
-            zone_key="Upper Deck Planters", name="UDP", avg_gpm=0.5
-        )
-    }
+    thresholds = {"Upper Deck Planters": ZoneThreshold(zone_key="Upper Deck Planters", avg_gpm=0.5)}
     proc = HoseTimerProcessor(client=client, pushover=pushover, db=tmp_db, thresholds=thresholds)
     return proc, pushover
 

@@ -21,7 +21,7 @@ from typing import Optional
 
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
-from RachioFlume.alert_rules import AlertRule, ZoneThreshold
+from RachioFlume.alert_rules import AlertRule, ZoneThreshold, send_zone_outcome_pushover
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient, WaterReading
 from RachioFlume.rachio_client import RachioClient
@@ -228,52 +228,24 @@ class AlertEngine:
         total_gal: float,
         cycle: int,
     ) -> None:
-        """Emit at most one Pushover per zone end.
-
-        Short runs (≤ min_runtime_minutes, default 5) are silenced entirely —
-        they're test cycles, brief manual triggers, or noise, and emitting a
-        Pushover for each one floods the feed. Above the threshold, picks
-        (title, priority) based on whether the anomaly threshold is exceeded;
-        otherwise sends the routine Zone Report. The displayed `(thresh X.XX)`
-        is always the anomaly trigger value, and Total is included on both
-        paths.
+        """Controller zone-end notification. Delegates to the shared helper
+        in alert_rules so the format stays in lockstep with the hose path.
         """
-        if runtime_min <= self.min_runtime_minutes:
-            self.logger.info(
-                f"Skipping zone outcome for '{zone_name}' (cycle {cycle}): "
-                f"runtime {runtime_min:.0f}min ≤ min_runtime_minutes "
-                f"{self.min_runtime_minutes}min"
-            )
-            return
-
         threshold, baseline = self._get_zone_threshold(zone_number)
-        is_anomaly = baseline > 0 and avg_gpm > threshold
-
         cycle_label = f" (Cycle {cycle})" if cycle > 1 else ""
         header = f"'{zone_name}'{cycle_label}"
-        flow_line = (
-            f"Avg flow: {avg_gpm:.2f} GPM (thresh {threshold:.2f})"
-            if baseline > 0
-            else f"Avg flow: {avg_gpm:.2f} GPM"
-        )
-        lines = [
-            header,
-            f"Runtime: {runtime_min:.0f} min",
-            flow_line,
-            f"Total: {total_gal:.1f} gal",
-        ]
-        if is_anomaly:
-            deviation = avg_gpm - baseline
-            deviation_pct = (deviation / baseline * 100) if baseline > 0 else 0
-            lines.append(f"Deviation: +{deviation:.2f} GPM ({deviation_pct:.0f}%)")
-            title, priority = "RachioFlume: Zone Anomaly", 2
-        else:
-            title, priority = "RachioFlume: Zone Report", -1
 
-        self.pushover.send_message("\n".join(lines), title=title, priority=priority)
-        self.logger.info(
-            f"Zone outcome sent for '{zone_name}'{cycle_label}: "
-            f"{runtime_min:.0f} min, {avg_gpm:.2f} GPM, {total_gal:.1f} gal, anomaly={is_anomaly}"
+        send_zone_outcome_pushover(
+            pushover=self.pushover,
+            logger=self.logger,
+            log_label=header,
+            header=header,
+            runtime_min=runtime_min,
+            avg_gpm=avg_gpm,
+            total_gal=total_gal,
+            baseline=baseline,
+            threshold=threshold,
+            min_runtime_minutes=self.min_runtime_minutes,
         )
 
     def _check_zone_end_report(
