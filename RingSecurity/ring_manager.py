@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
 import aiohttp
-from ring_doorbell import Auth, Requires2FAError, Ring
+from ring_doorbell import AuthenticationError, Auth, Requires2FAError, Ring
 
 from lib.config import RingConfig, get_config
 from lib.logger import get_logger
@@ -26,6 +26,10 @@ from lib.MyPushover import Pushover
 
 USER_AGENT = "homely-vibes-ring/1.0"
 PUSHOVER_KEY = "Ring Security"
+
+
+class RingAuthError(RuntimeError):
+    """Missing / expired / rejected Ring credentials — needs re-auth, not urgent."""
 
 
 def _load_token(path: str) -> Optional[dict[str, Any]]:
@@ -78,7 +82,7 @@ async def check_devices(
     """Return (low_battery_lines, offline_names)."""
     token = _load_token(cfg.token_file)
     if not token:
-        raise RuntimeError(
+        raise RingAuthError(
             f"No Ring token at {cfg.token_file}. "
             "Run: uv run python RingSecurity/ring_manager.py auth"
         )
@@ -87,7 +91,10 @@ async def check_devices(
     offline: list[str] = []
 
     async with aiohttp.ClientSession() as session:
-        ring = await ring_factory(session, token, cfg.token_file)
+        try:
+            ring = await ring_factory(session, token, cfg.token_file)
+        except AuthenticationError as e:
+            raise RingAuthError(f"Ring auth rejected: {e}") from e
         for dev in ring.devices().all_devices:
             batt = dev.battery_life
             if batt is not None and batt < cfg.battery_threshold_pct:
@@ -139,6 +146,10 @@ def main() -> None:
     try:
         low, offline = asyncio.run(check_devices(cfg.ring, logger))
         notify(pushover, low, offline, logger)
+    except RingAuthError as e:
+        logger.error(f"Ring auth failure: {e}")
+        pushover.send_message(str(e), title="Ring: Auth Required", priority=0)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Ring check failed: {e}")
         pushover.send_message(str(e), title="Ring Check Error", priority=1)

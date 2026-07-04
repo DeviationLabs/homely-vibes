@@ -15,7 +15,7 @@ import pytest
 
 from lib.config import RingConfig
 from lib.MyPushover import Pushover
-from RingSecurity.ring_manager import check_devices, notify
+from RingSecurity.ring_manager import RingAuthError, check_devices, notify
 
 
 class FakeDevice:
@@ -101,7 +101,7 @@ async def test_health_call_exception_treated_as_offline(
 
 async def test_missing_token_raises(tmp_path: Path, logger: logging.Logger) -> None:
     cfg = RingConfig("u", "p", str(tmp_path / "missing.json"), 25)
-    with pytest.raises(RuntimeError, match="No Ring token"):
+    with pytest.raises(RingAuthError, match="No Ring token"):
         await check_devices(cfg, logger, ring_factory=_factory([]))
 
 
