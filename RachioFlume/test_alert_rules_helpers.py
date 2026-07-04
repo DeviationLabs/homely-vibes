@@ -40,9 +40,9 @@ class TestCompactZoneLabel:
 class TestSendZoneOutcomePushover:
     """The shared helper the controller and hose paths delegate to."""
 
-    def _kwargs(self, **overrides):
+    def _kwargs(self, **overrides: object) -> dict:
         """Base kwargs matching a typical controller zone-end fire."""
-        base = dict(
+        base: dict = dict(
             pushover=MagicMock(),
             logger=logging.getLogger("test"),
             log_label="'Z1 FS'",
