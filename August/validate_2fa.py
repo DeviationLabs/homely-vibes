@@ -7,6 +7,7 @@ import aiohttp
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
 from yalexs.api_async import ApiAsync
 from lib.config import get_config
+from August.august_client import apply_working_api_key, load_cached_install_id
 
 
 async def complete_2fa() -> bool:
@@ -16,11 +17,15 @@ async def complete_2fa() -> bool:
         api = ApiAsync(session)
         cache_file = cfg.august.token_file
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        # August revoked the current yalexs API key; fall back to the legacy key
+        # before authenticating.
+        apply_working_api_key()
         auth = AuthenticatorAsync(
             api,
             "email",
             cfg.august.email,
             cfg.august.password,
+            install_id=load_cached_install_id(cache_file),
             access_token_cache_file=cache_file,
         )
         await auth.async_setup_authentication()

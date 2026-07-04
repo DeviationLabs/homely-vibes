@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 import asyncio
+import logging
 import os
 import time
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 import json
 from dataclasses import dataclass
 import aiohttp
@@ -11,11 +12,63 @@ from datetime import datetime
 
 from yalexs.api_async import ApiAsync
 from yalexs.authenticator_async import AuthenticatorAsync, AuthenticationState
+from yalexs.authenticator_common import Authentication
 from yalexs.lock import Lock, LockStatus, LockDoorStatus
 
 from lib.config import get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+
+# August revoked the API key yalexs ships for Brand.AUGUST (d9984f29...): the
+# session/password-auth endpoint returns 403 {"code":"Forbidden","message":
+# "API key is not valid"}. The legacy key yalexs also ships (7cab4bbd...) still
+# works. We override the global BrandConfig so AuthenticatorAsync/ApiAsync send
+# the working key. Only override when the current key is the known-revoked
+# value so a future yalexs fix is not clobbered.
+_REVOKED_AUGUST_API_KEY = "d9984f29-07a6-816e-e1c9-44ec9d1be431"
+_WORKING_AUGUST_API_KEY = "7cab4bbd-2693-4fc1-b99b-dec0fb20f9d4"
+
+
+def apply_working_api_key(logger: Optional[logging.Logger] = None) -> bool:
+    """Fall back to the legacy August API key if yalexs's current key is revoked.
+
+    Mutates the yalexs global BRAND_CONFIG[Brand.AUGUST].api_key in place so
+    that AuthenticatorAsync/ApiAsync send a key August still accepts. Returns
+    True if a fallback was applied, False if the shipped key is not the known
+    revoked value (e.g. yalexs shipped a fix).
+    """
+    from yalexs.const import BRAND_CONFIG, Brand
+
+    brand_config = BRAND_CONFIG[Brand.AUGUST]
+    if brand_config.api_key != _REVOKED_AUGUST_API_KEY:
+        return False
+    brand_config.api_key = _WORKING_AUGUST_API_KEY
+    if logger is not None:
+        logger.warning(
+            "August revoked yalexs API key %s; falling back to legacy key %s.",
+            _REVOKED_AUGUST_API_KEY,
+            _WORKING_AUGUST_API_KEY,
+        )
+    return True
+
+
+def load_cached_install_id(cache_file: str) -> Optional[str]:
+    """Return the install_id persisted in the August token cache, if any.
+
+    yalexs discards the cached install_id when the access token expires
+    (authenticator_async._read_access_token_file resets to self._install_id,
+    which is the constructor arg, not the cached value). That makes August see
+    a fresh device on every re-auth after expiry and forces 2FA. We feed the
+    cached install_id back through the AuthenticatorAsync constructor so the
+    validated device identity survives token expiry.
+    """
+    try:
+        with open(cache_file, "r") as f:
+            data: dict[str, Any] = json.load(f)
+        install_id = data.get("install_id")
+        return install_id if isinstance(install_id, str) else None
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
 
 
 @dataclass
@@ -74,17 +127,24 @@ class AugustClient:
             self.session = aiohttp.ClientSession()
             from yalexs.const import Brand
 
+            # August revoked the current yalexs API key for Brand.AUGUST; fall
+            # back to the legacy key before any auth/session call uses it.
+            apply_working_api_key(self.logger)
             # Auth uses AUGUST brand, but API endpoints moved to YALE_AUGUST
             self.api_auth = ApiAsync(self.session, brand=Brand.AUGUST)
             self.api = ApiAsync(self.session, brand=Brand.YALE_AUGUST)
             # Use token caching to persist authentication across restarts
             cache_file = cfg.august.token_file
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            # Re-feed the cached install_id so re-auth after token expiry does
+            # not look like a new device to August (which would force 2FA).
+            install_id = load_cached_install_id(cache_file)
             self.authenticator = AuthenticatorAsync(
                 self.api_auth,
                 "email",
                 self.email,
                 self.password,
+                install_id=install_id,
                 access_token_cache_file=cache_file,
             )
             # Setup authentication - this initializes the _authentication property
@@ -104,6 +164,18 @@ class AugustClient:
         try:
             assert self.authenticator is not None
             self.logger.debug("Attempting August authentication...")
+            # Proactively renew before expiry: yalexs only re-auths once the
+            # token is fully expired, which leaves a gap until the next cron
+            # run. When we are inside the renewal window (last 7 days) force a
+            # password re-auth so August issues a fresh 30-day token now. The
+            # cached install_id (fed via the constructor) is preserved so this
+            # does not trigger 2FA.
+            if self.authenticator.should_refresh():
+                self.logger.info("August token inside renewal window; renewing now")
+                self.authenticator._authentication = Authentication(
+                    AuthenticationState.REQUIRES_AUTHENTICATION,
+                    install_id=self.authenticator._authentication.install_id,
+                )
             auth_result = await self.authenticator.async_authenticate()
 
             if auth_result is None:
