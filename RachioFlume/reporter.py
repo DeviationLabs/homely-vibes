@@ -1,7 +1,7 @@
 """Weekly reporting system for water tracking data."""
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from pathlib import Path
@@ -15,9 +15,9 @@ from lib import Mailer
 
 @dataclass
 class ZoneStats:
-    """Statistics for a single zone."""
+    """Statistics for a single zone (controller zone or hose-timer valve)."""
 
-    zone_number: int
+    zone_number: int  # controller zone number; hose valves use HOSE_ZONE_SENTINEL
     zone_name: str
     sessions: int
     total_duration_minutes: float
@@ -26,6 +26,10 @@ class ZoneStats:
     average_flow_rate_gpm: float
     threshold_gpm: float
     alert_sessions: int
+
+
+# Hose valves have no controller zone number; sort them after real zones.
+HOSE_ZONE_SENTINEL = 999
 
 
 @dataclass
@@ -39,20 +43,6 @@ class ReportSummary:
 
 
 @dataclass
-class HoseValveStats:
-    """Statistics for a single hose-timer valve in a reporting period."""
-
-    base_station_label: str
-    valve_name: str
-    sessions: int
-    total_duration_minutes: float
-    average_duration_minutes: float
-    flow_detected_sessions: int
-    threshold_gpm: float
-    alert_sessions: int
-
-
-@dataclass
 class WaterUsageReport:
     """Complete water usage report."""
 
@@ -61,7 +51,6 @@ class WaterUsageReport:
     period_end: datetime
     summary: ReportSummary
     zones: List[ZoneStats]
-    hose_valves: List[HoseValveStats] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for compatibility."""
@@ -127,11 +116,6 @@ class WeeklyReporter:
         # Get zone aggregate statistics for the period
         zone_stats = self.db.get_period_zone_stats(period_start, period_end)
 
-        # Calculate total statistics
-        total_sessions = sum(stat["session_count"] for stat in zone_stats)
-        total_duration_seconds = sum(stat["total_duration_seconds"] or 0 for stat in zone_stats)
-        total_water_used = sum(stat["total_water_used"] or 0 for stat in zone_stats)
-
         # Format zone statistics for display
         formatted_zones = []
         for stat in zone_stats:
@@ -155,33 +139,20 @@ class WeeklyReporter:
             )
             formatted_zones.append(zone_stats_obj)
 
-        # Sort by zone number
-        formatted_zones.sort(key=lambda x: x.zone_number)
-
-        # Create summary
-        summary = ReportSummary(
-            total_watering_sessions=total_sessions,
-            total_duration_minutes=round(total_duration_seconds / 60.0, 1),
-            total_water_used_gallons=round(total_water_used, 1),
-            zones_watered=len(zone_stats),
-        )
-
-        # Aggregate hose-timer sessions
+        # Aggregate hose-timer sessions and append as rows in the same table.
+        # Hose valves are treated identically to controller zones: they count
+        # toward zones_watered, contribute to total sessions / total duration,
+        # and share the same column layout. Gallons + GPM stay 0 because
+        # hose_zone_sessions does not track water volume today.
         hose_sessions = self.db.get_hose_zone_sessions(period_start, period_end)
         hose_agg: Dict[tuple, Dict[str, Any]] = {}
         hose_alerts: Dict[tuple, int] = {}
         for s in hose_sessions:
             key = (s["base_station_label"], s["valve_name"])
-            slot = hose_agg.setdefault(
-                key,
-                {"sessions": 0, "duration_sec_total": 0, "flow_detected": 0},
-            )
+            slot = hose_agg.setdefault(key, {"sessions": 0, "duration_sec_total": 0})
             slot["sessions"] += 1
             duration_sec = s.get("duration_seconds") or 0
             slot["duration_sec_total"] += duration_sec
-            if s.get("flow_detected"):
-                slot["flow_detected"] += 1
-            # Hose anomaly: session avg flow (gallons / minutes) vs. threshold
             hose_zt = all_thresholds.get(s["base_station_label"], {}).get(s["valve_name"])
             gal = s.get("total_water_used") or 0
             if hose_zt and duration_sec > 0:
@@ -189,41 +160,44 @@ class WeeklyReporter:
                 if sess_avg > hose_zt.compute_threshold(abs_gpm, pct_above):
                     hose_alerts[key] = hose_alerts.get(key, 0) + 1
 
-        def _hose_display_and_threshold(label: str, raw_name: str) -> tuple[str, float]:
-            zt = all_thresholds.get(label, {}).get(raw_name)
-            if not zt:
-                return raw_name, 0.0
-            return zt.name, round(zt.compute_threshold(abs_gpm, pct_above), 2)
-
-        hose_valves_unsorted = []
         for (label, name), v in hose_agg.items():
-            display_name, threshold_gpm = _hose_display_and_threshold(label, name)
-            hose_valves_unsorted.append(
-                HoseValveStats(
-                    base_station_label=label,
-                    valve_name=display_name,
+            zt = all_thresholds.get(label, {}).get(name)
+            display_name = zt.name if zt else name
+            threshold_gpm = round(zt.compute_threshold(abs_gpm, pct_above), 2) if zt else 0.0
+            formatted_zones.append(
+                ZoneStats(
+                    zone_number=HOSE_ZONE_SENTINEL,
+                    zone_name=display_name,
                     sessions=v["sessions"],
                     total_duration_minutes=round(v["duration_sec_total"] / 60.0, 1),
                     average_duration_minutes=round(
                         (v["duration_sec_total"] / max(v["sessions"], 1)) / 60.0, 1
                     ),
-                    flow_detected_sessions=v["flow_detected"],
+                    total_water_gallons=0.0,
+                    average_flow_rate_gpm=0.0,
                     threshold_gpm=threshold_gpm,
                     alert_sessions=hose_alerts.get((label, name), 0),
                 )
             )
-        hose_valves = sorted(
-            hose_valves_unsorted, key=lambda h: (h.base_station_label, h.valve_name)
+
+        # Sort: controller zones by number, hose valves alphabetical after them
+        formatted_zones.sort(key=lambda x: (x.zone_number, x.zone_name))
+
+        # Summary aggregates over the merged list so zones_watered / totals
+        # include hose valves.
+        summary = ReportSummary(
+            total_watering_sessions=sum(z.sessions for z in formatted_zones),
+            total_duration_minutes=round(sum(z.total_duration_minutes for z in formatted_zones), 1),
+            total_water_used_gallons=round(sum(z.total_water_gallons for z in formatted_zones), 1),
+            zones_watered=len(formatted_zones),
         )
 
-        # Create and return the report
         return WaterUsageReport(
             report_generated=datetime.now(),
             period_start=period_start,
             period_end=period_end,
             summary=summary,
             zones=formatted_zones,
-            hose_valves=hose_valves,
         )
 
     def save_report_to_file(self, report: WaterUsageReport, filename: str) -> None:
@@ -240,74 +214,63 @@ class WeeklyReporter:
             json.dump(report.to_dict(), f, indent=2, default=str)
 
     def format_report_text(self, report: WaterUsageReport) -> str:
-        """Generate formatted text version of the report.
+        """Generate the fixed-width plaintext body of the report.
 
-        Args:
-            report: Report data
-
-        Returns:
-            Formatted report as string
+        Wrapped in `<html><body><pre>...</pre></body></html>` by
+        `format_report_html` for email delivery — Mailer auto-detects the
+        `<html>` prefix and sends HTML. Kept as a separate step so
+        `print_report` and tests can inspect the raw text.
         """
-        report_text = []
+        lines: List[str] = []
 
-        report_text.append("WATER USAGE REPORT")
-        report_text.append(f"Period: {report.period_start.date()} to {report.period_end.date()}")
-        report_text.append("=" * 35)
+        lines.append("WATER USAGE REPORT")
+        lines.append(f"Period: {report.period_start.date()} to {report.period_end.date()}")
+        lines.append("=" * 40)
 
-        report_text.append("\nSUMMARY:")
-        report_text.append(f"  Total watering sessions: {report.summary.total_watering_sessions}")
-        report_text.append(f"  Total duration: {report.summary.total_duration_minutes} min")
-        report_text.append(f"  Total water used: {report.summary.total_water_used_gallons} gallons")
-        report_text.append(f"  Zones watered: {report.summary.zones_watered}")
+        lines.append("")
+        lines.append("SUMMARY:")
+        lines.append(f"  Total watering sessions: {report.summary.total_watering_sessions}")
+        lines.append(f"  Total duration: {report.summary.total_duration_minutes} min")
+        lines.append(
+            f"  Total water used: {int(round(report.summary.total_water_used_gallons))} gallons"
+        )
+        lines.append(f"  Zones watered: {report.summary.zones_watered}")
 
         if report.zones:
-            report_text.append("\nZONE DETAILS:")
+            lines.append("")
+            lines.append("ZONE DETAILS:")
             # Thr = anomaly threshold GPM (blank if zone not configured).
             # Alrt = # sessions in period where session avg flow > threshold.
-            header = (
-                f"{'Name':<8} {'Runs':<4} {'Min':<6} {'Gals':<6} {'GPM':<5} {'Thr':<5} {'Alrt':<4}"
-            )
-            report_text.append(header)
-            report_text.append("-" * len(header))
+            header = f"{'Name':<8} {'Min':<6} {'Gals':<5} {'GPM':<5} {'Thr':<5} {'Alrt':<4}"
+            lines.append(header)
+            lines.append("-" * len(header))
 
             for zone in report.zones:
                 thr = f"{zone.threshold_gpm:.1f}" if zone.threshold_gpm > 0 else "-"
                 alrt = str(zone.alert_sessions) if zone.alert_sessions else "-"
-                zone_line = (
+                lines.append(
                     f"{zone.zone_name[:8]:<8} "
-                    f"{zone.sessions:<4} "
                     f"{zone.total_duration_minutes:<6.1f} "
-                    f"{zone.total_water_gallons:<6.1f} "
-                    f"{zone.average_flow_rate_gpm:<5.2f} "
-                    f"{thr:<5} "
-                    f"{alrt:<4}"
-                )
-                report_text.append(zone_line)
-
-        if report.hose_valves:
-            report_text.append("\nHOSE TIMER VALVES:")
-            header = (
-                f"{'Base/Valve':<32} {'Runs':<4} {'Min':<6} {'Avg(m)':<6} "
-                f"{'Flow':<4} {'Thr':<5} {'Alrt':<4}"
-            )
-            report_text.append(header)
-            report_text.append("-" * len(header))
-            for hv in report.hose_valves:
-                label = f"{hv.base_station_label}/{hv.valve_name}"[:32]
-                thr = f"{hv.threshold_gpm:.1f}" if hv.threshold_gpm > 0 else "-"
-                alrt = str(hv.alert_sessions) if hv.alert_sessions else "-"
-                report_text.append(
-                    f"{label:<32} "
-                    f"{hv.sessions:<4} "
-                    f"{hv.total_duration_minutes:<6.1f} "
-                    f"{hv.average_duration_minutes:<6.1f} "
-                    f"{hv.flow_detected_sessions:<4} "
+                    f"{int(round(zone.total_water_gallons)):<5d} "
+                    f"{zone.average_flow_rate_gpm:<5.1f} "
                     f"{thr:<5} "
                     f"{alrt:<4}"
                 )
 
-        report_text.append("\n" + "=" * 35)
-        return "\n".join(report_text)
+        lines.append("")
+        lines.append("=" * 40)
+        return "\n".join(lines)
+
+    def format_report_html(self, report: WaterUsageReport) -> str:
+        """HTML wrapper so iOS Mail / Gmail render fixed-width without wrap."""
+        body = self.format_report_text(report)
+        return (
+            "<html><body>"
+            "<pre style=\"font-family: 'SF Mono', Menlo, Consolas, monospace; "
+            'font-size: 13px; line-height: 1.3;">'
+            f"{body}"
+            "</pre></body></html>"
+        )
 
     def print_report(self, report: WaterUsageReport) -> None:
         """Print report in a readable format."""
@@ -357,7 +320,9 @@ class WeeklyReporter:
             report: Report data
             alert: Whether to mark as alert email
         """
-        report_text = self.format_report_text(report)
+        # HTML wrapper — Mailer auto-detects the `<html>` prefix and sends
+        # multipart/HTML. Renders fixed-width in iOS Mail / Gmail without wrap.
+        report_html = self.format_report_html(report)
 
         start_date = report.period_start.date()
         subject_prefix = "Period"
@@ -365,7 +330,7 @@ class WeeklyReporter:
         Mailer.sendmail(
             topic=f"[Water Report] {subject_prefix} {start_date}",
             alert=alert,
-            message=report_text,
+            message=report_html,
             always_email=True,
         )
 
