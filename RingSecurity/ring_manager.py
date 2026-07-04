@@ -24,7 +24,7 @@ from lib.config import RingConfig, get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
-USER_AGENT = "homely-vibes-ring/1.0"
+USER_AGENT = "android:com.ringapp"
 PUSHOVER_KEY = "Ring Security"
 
 
