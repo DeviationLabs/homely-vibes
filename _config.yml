@@ -60,6 +60,7 @@ exclude:
 - Tesla/
 - VoiceNotes/
 - VSCodeSidebarNotes/
+- backups/  # gitignored on disk; keep here as belt-and-suspenders vs. any accidental commit
 - Makefile
 - pyproject.toml
 - uv.lock
