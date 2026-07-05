@@ -348,7 +348,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiooui" },
     { name = "bleak" },
-    { name = "dbus-fast", marker = "sys_platform == 'linux'" },
+    { name = "dbus-fast" },
     { name = "uart-devices" },
     { name = "usb-devices" },
 ]
@@ -1037,6 +1037,7 @@ dependencies = [
     { name = "pillow" },
     { name = "pillow-heif" },
     { name = "pydantic" },
+    { name = "pyeconet" },
     { name = "requests" },
     { name = "requests-oauthlib" },
     { name = "ring-doorbell" },
@@ -1120,6 +1121,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pillow-heif", specifier = ">=0.22.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyeconet", specifier = ">=0.2.2" },
     { name = "pynput", marker = "extra == 'voice'", specifier = ">=1.7.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
@@ -2107,6 +2109,15 @@ wheels = [
 ]
 
 [[package]]
+name = "paho-mqtt"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/39/15/0a6214e76d4d32e7f663b109cf71fb22561c2be0f701d67f93950cd40542/paho_mqtt-2.1.0.tar.gz", hash = "sha256:12d6e7511d4137555a3f6ea167ae846af2c7357b10bc6fa4f7c3968fc1723834", size = 148848, upload-time = "2024-04-29T19:52:55.591Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/cb/00451c3cf31790287768bb12c6bec834f5d292eaf3022afc88e14b8afc94/paho_mqtt-2.1.0-py3-none-any.whl", hash = "sha256:6db9ba9b34ed5bc6b6e3812718c7e06e2fd7444540df2455d2c51bd58808feee", size = 67219, upload-time = "2024-04-29T19:52:48.345Z" },
+]
+
+[[package]]
 name = "pandas"
 version = "2.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2501,6 +2512,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a1/ca/40e14e196864a0f61a92abb14d09b3d3da98f94ccb03b49cf51688140dab/pydeck-0.9.1.tar.gz", hash = "sha256:f74475ae637951d63f2ee58326757f8d4f9cd9f2a457cf42950715003e2cb605", size = 3832240, upload-time = "2024-05-10T15:36:21.153Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/4c/b888e6cf58bd9db9c93f40d1c6be8283ff49d88919231afe93a6bcf61626/pydeck-0.9.1-py2.py3-none-any.whl", hash = "sha256:b3f75ba0d273fc917094fa61224f3f6076ca8752b93d46faf3bcfd9f9d59b038", size = 6900403, upload-time = "2024-05-10T15:36:17.36Z" },
+]
+
+[[package]]
+name = "pyeconet"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "paho-mqtt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8e/44/52c3b41e312dd4f5cb3e44fbd0e974d0e34fdb54c1e0bc575ffb0f25320d/pyeconet-0.2.2.tar.gz", hash = "sha256:0c07c942a809fc17d638eee3d37c1e8ab4fc2778935f6786861be1a6b88ff84f", size = 14222, upload-time = "2026-03-05T12:04:51.033Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/3d/ca462f225fd403412912ddb2f903947eb7bc396f68f315276ca8afd5d86d/pyeconet-0.2.2-py3-none-any.whl", hash = "sha256:06e5382fd191bb895826921015c70f8cd82192fb0e57785d795c2ff43c4e4ff0", size = 15326, upload-time = "2026-03-05T12:04:49.889Z" },
 ]
 
 [[package]]

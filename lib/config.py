@@ -182,6 +182,18 @@ class AugustConfig:
 
 
 @dataclass
+class RheemConfig:
+    """Rheem EcoNet water heater configuration"""
+
+    email: str
+    password: str
+    poll_seconds: int
+    # Discrete tank levels: 0/33/66/100. Alert at/below low, clear at/above mid.
+    low_threshold: int
+    mid_threshold: int
+
+
+@dataclass
 class RingConfig:
     """Ring devices configuration"""
 
@@ -376,6 +388,7 @@ class Config:
     water_monitor: WaterMonitorConfig
     tesla: TeslaConfig
     august: AugustConfig
+    rheem: RheemConfig
     ring: RingConfig
     ring_beams: RingBeamsConfig
     samsung_frame: SamsungFrameConfig

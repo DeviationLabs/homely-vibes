@@ -32,6 +32,7 @@ pushover:
     RachioFlume: ""
     Ring Security: ""
     SamsungFrame: ""
+    Rheem: ""
     WhatsAppSummary: ""
 
 # === Node Monitoring ===
@@ -190,6 +191,15 @@ august:
   password: ""  
   phone: "+1234567890"
   token_file: config/tokens/august_auth_token.json
+
+# === Rheem EcoNet Water Heater ===
+rheem:
+  email: ""
+  password: ""
+  poll_seconds: 300
+  # Discrete tank levels reported by EcoNet: 0/33/66/100.
+  low_threshold: 33   # 1/3rd full or empty -> fire P1 alert
+  mid_threshold: 66   # 2/3rd full -> send P-1 clear, reset alert state
 
 # === Ring Devices ===
 ring:
