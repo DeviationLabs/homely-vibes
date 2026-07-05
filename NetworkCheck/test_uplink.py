@@ -117,6 +117,12 @@ def run_speedtest() -> Tuple[Optional[SpeedTestResult], str]:
 
         return result, message
 
+    except subprocess.CalledProcessError as e:
+        # Preserve stderr (captured into e.output via stderr=STDOUT); str(e) drops it.
+        stderr_tail = (e.output or "").strip().splitlines()[-5:]
+        error_msg = f"Speedtest failed (exit {e.returncode}): {' | '.join(stderr_tail)}"
+        logger.error(error_msg)
+        return None, error_msg
     except Exception as e:
         error_msg = f"Speedtest failed: {e}"
         logger.error(error_msg)
@@ -148,12 +154,14 @@ def main() -> None:
     alert = True
     attempt = 0
     all_messages = []
+    last_result: Optional[SpeedTestResult] = None
 
     while alert and attempt < args.max_retries:
         attempt += 1
         logger.info(f"Speed test attempt {attempt}/{args.max_retries}")
 
         result, message = run_speedtest()
+        last_result = result
 
         print(message)
         logger.info(message)
@@ -185,7 +193,14 @@ def main() -> None:
         alert=alert,
     )
 
-    pushover.send_message(final_message, title="SpeedTest", priority=-1)
+    # Priority: good → -1 (silent), degraded → 0 (normal), failed/no-result → 1 (P1).
+    if last_result and last_result.is_good:
+        priority = -1
+    elif last_result and last_result.is_degraded:
+        priority = 0
+    else:
+        priority = 1
+    pushover.send_message(final_message, title="SpeedTest", priority=priority)
 
     logger.info("Speed test completed")
 
