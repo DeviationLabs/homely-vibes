@@ -393,3 +393,28 @@ def test_load_state_recovers_from_corrupt_file(tmp_path: Path) -> None:
     )
     # Loaded fresh (empty), then re-alerts because it's low.
     assert monitor.alerted == {}
+
+
+def test_mid_threshold_gate_blocks_premature_clear(tmp_path: Path) -> None:
+    """Recovery must reach mid_threshold, not merely exceed low_threshold.
+
+    Regression for the dead-`mid_threshold` bug: with mid_threshold=100, a
+    tank at 66 (above low but below mid) must hold the alert, not clear it.
+    """
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=33)]
+    monitor, pushover = _monitor_with(heaters, state, mid_threshold=100)
+    asyncio.run(monitor.check_once())  # P1 fired
+    assert monitor.alerted["S1"] == "p1"
+    # Recover to 66 — above low_threshold (33) but below mid_threshold (100).
+    heaters[0].availability = 66
+    asyncio.run(monitor.check_once())
+    # No clear fired; alert still active.
+    assert len(pushover.sent) == 1
+    assert "S1" in monitor.alerted
+    # Now reach mid_threshold -> clear.
+    heaters[0].availability = 100
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 2
+    assert pushover.sent[1][2] == -1
+    assert "S1" not in monitor.alerted

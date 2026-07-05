@@ -141,19 +141,23 @@ class RheemMonitor:
             self.logger.debug("%s does not report availability; skipping", status.name)
             return
 
-        current_tier = self._tier_for(avail)
         active_tier = self.alerted.get(status.serial_number)
 
-        if current_tier is None and active_tier is not None:
-            # Recovered to >= mid_threshold: clear.
+        # Clear only on explicit recovery to >= mid_threshold (not merely
+        # "above low" — that would let a level between low and mid prematurely
+        # clear an active alert). mid_threshold is the configured recovery gate.
+        if active_tier is not None and avail >= self.mid_threshold:
             msg = f"Hot water recovered: {status.name} at {_label(avail)} ({avail}%)"
             self.pushover.send_message(msg, title="Rheem Hot Water Recovered", priority=-1)
             del self.alerted[status.serial_number]
             self.logger.info("Cleared hot-water alert: %s", msg)
             return
 
+        current_tier = self._tier_for(avail)
         if current_tier is None:
-            return  # healthy, no active alert
+            # In the dead zone (low_threshold < avail < mid_threshold): hold
+            # any active alert without re-firing; no-op if not alerted.
+            return
 
         # In a low zone (empty or 1/3rd). Decide whether to fire/escalate.
         if active_tier is None:
