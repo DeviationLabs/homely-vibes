@@ -90,7 +90,6 @@ See `config/default.yaml` for the full structure and `config/local.yaml.example`
 | 🌐 **NetworkCheck** | Network uplink speedtest with outcome-driven Pushover priority and external IP reporter. | [📖 README](NetworkCheck/README.md) |
 | 🖥️ **NodeCheck** | System node monitoring with continuous heartbeat tracking and automated device management. | [📖 README](NodeCheck/README.md) |
 | 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 README](NoShorts/README.md) |
-| 🔧 **OpenAIAdmin** | OpenAI project management and administration tools for API governance and usage tracking. | [📖 README](OpenAIAdmin/README_openai_projects.md) |
 | 📅 **PersonalCalSync** | Google Apps Script that syncs personal calendar events to enterprise calendar as private busy-blockers, preserving real event titles visible only to you. | [📖 README](PersonalCalSync/README.md) |
 | 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 README](RachioFlume/README.md) |
 | 🚨 **RingBeams** | Ring Beams motion sensors + Ring Alarm contact/motion sensors, via Node.js sidecar over socket.io (ring-client-api). P1 battery, P0 tamper. | [📖 README](RingBeams/README.md) |
