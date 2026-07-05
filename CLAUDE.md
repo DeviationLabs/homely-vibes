@@ -206,7 +206,54 @@ uv run pytest NodeCheck
 ### Shared Library (`lib/`)
 - **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
 - **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
+- **Secret I/O**: `lib/secure_io.py` — `write_secret_atomic(path, content)` for tokens we own (0o600 from birth), `ensure_secret_perms(path)` after third-party library writes (yalexs, SamsungTVWS). **All token/credential writes must go through these.**
 - **TeslaPy Submodule**: External dependency managed as Git submodule
+
+## Best Practices
+
+Non-obvious rules that repeat across modules. Adhere to these in new code and PR reviews.
+
+### Secrets on disk
+- **Never `open(path, "w")` for a secret**, and never `write_text()` + `chmod`. Both leave a TOCTOU window at 0o644 under a 0o022 umask. Use `lib.secure_io.write_secret_atomic()` — it opens with `O_CREAT|O_TRUNC|0o600` so the file is world-unreadable from birth.
+- If a **third-party library** writes the token (yalexs, SamsungTVWS, ring-client-api Node), immediately call `ensure_secret_perms(path)` after the call returns.
+- Config files themselves live in `config/local.yaml` (gitignored). Tokens live under `config/tokens/` (symlinked to `~/bin/Common-configs/tokens/`, also gitignored on the code side).
+
+### Alert priority discipline (Pushover)
+- **P1 (`priority=1`)** — actionable, needs a human within hours. Low battery, service unreachable, hardware failure.
+- **P2 (`priority=0`)** — informational, "act when convenient." Auth re-required, tamper detected, offline device.
+- **Emergency (`priority=2`)** — retries until acked. Reserve for water leaks, break-ins — things where seconds matter. Don't cry wolf.
+- **Auth failures always P2, not P1.** Re-auth is a chore, not an emergency.
+
+### Testing
+- **Never `patch()` production code.** If a test needs to mock a subprocess/HTTP call, refactor the production code to accept the dependency as a parameter (factory or client). RingBeams's `run_sidecar(ring_factory=...)` is the reference pattern.
+- **Fake sidecars via `sh` scripts** for subprocess boundaries. `.chmod(0o755)` + write a shebang + parametrize exit codes and stdout. Zero mocking, real subprocess semantics. See `RingBeams/test_beams_manager.py`.
+- **Separate deterministic assertions** (exact values, structural matches) from anything that depends on wall-clock time or network state. Freeze time via fixtures if needed.
+- **NodeCheck runs in isolation** — pytest-forked to avoid subprocess state leak into other suites.
+
+### Sidecars & polyglot integration
+- Node sidecars live inside the Python module (e.g., `RingBeams/fetch_status.js` alongside `beams_manager.py`).
+- `node_modules/` is gitignored per-module; commit only `package.json` + `package-lock.json`.
+- Sidecar exit-code contract must be explicit and documented at the top of the sidecar file. Python maps codes to Python exception classes; overloading `exit 1` for both auth failure and generic errors is the classic misclassification bug.
+- Drain stdout before `process.exit(0)` — pass the exit callback to `process.stdout.write(payload, () => process.exit(0))`. On stdout-as-pipe, writes above ~16KB are buffered.
+- Surface partial failures (per-location, per-device) in the JSON payload, not just stderr. Python only reads stderr on non-zero exit, so a silent partial with `exit 0` becomes a false "all healthy" report.
+
+### Cron & deployment
+- **Aibo (Linux prod) hosts homely_vibes at `~/Code`** — NOT `~/Documents/homely_vibes` as on the Mac. All aibo cron entries `cd ~/Code`.
+- Cron entries redirect stdout+stderr to a file: `>> ~/logs/<script>.log 2>&1`. Never `> /dev/null` — you'd lose pre-logger crashes (import errors, `uv` failures, missing binaries).
+- `lib.logger.get_logger()` sets up dual handlers (stdout + per-script log file under `cfg.paths.logging_dir`). Cron file redirection is the safety net for anything that happens before the logger initializes.
+- Cron env needs `PATH` set for non-standard binaries (`node`, `uv`). Prepend `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin` at the top of the crontab, or use absolute paths in commands.
+
+### Config changes
+- Add a dataclass to `lib/config.py` for any new module's config, then register it in the root `Config` dataclass. Never `cfg_dict.get("your_key")` — the config system exists to give you type-checked access.
+- `config/default.yaml` holds safe placeholders committed to git. `config/local.yaml` overrides with secrets and per-host values (gitignored, symlinked to `~/bin/Common-configs/Code_config_local.yaml`).
+- If your module has multiple credentials, put them under a single top-level key (`ring:`, `august:`) so config diff reviews stay coherent.
+
+### Git & PR flow
+- Feature branches: `<gh-username>/feature-name`. Never work on `main`.
+- Always `git fetch origin && git pull origin main` before creating a branch. Merging stale local `main` is the most common source of avoidable conflicts.
+- Commit messages: conventional prefix (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`) enforced by pre-commit hook.
+- **Never bypass pre-commit hooks** (`--no-verify`) unless the hook itself is broken (rare) — investigate the underlying failure. If hooks conflict with staged changes on ruff auto-fix, run `uv run ruff format` manually first, then re-stage.
+- **PR review comment threads**: read → fix → push → reply *inside each thread* → resolve thread. `gh pr comment` alone is not the right tool — reviewers won't see the reply attached to their concern.
 
 ## Development Workflow
 

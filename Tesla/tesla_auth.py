@@ -11,7 +11,6 @@ port to catch Tesla's redirect, then persists the resulting tokens.
 
 import argparse
 import asyncio
-import json
 import os
 import sys
 import time
@@ -26,6 +25,7 @@ from tesla_fleet_api.tesla import TeslaFleetOAuth
 
 from lib.config import get_config
 from lib.logger import get_logger
+from lib.secure_io import write_secret_atomic
 
 logger = get_logger(__name__)
 
@@ -54,9 +54,7 @@ def _save_tokens(oauth: TeslaFleetOAuth, token_file: str) -> None:
         "token_type": "Bearer",
         "created_at": int(time.time()),
     }
-    with open(token_file, "w") as f:
-        json.dump(data, f, indent=2)
-    os.chmod(token_file, 0o600)
+    write_secret_atomic(token_file, data)
     logger.info(f"Tokens saved to {token_file}")
 
 
