@@ -164,16 +164,16 @@ def notify(
     if low:
         body = "\n".join(low)
         logger.info(f"Low battery alert: {body}")
-        pushover.send_message(body, title="Ring Beams/Alarm: Low Battery", priority=1)
+        pushover.send_message(body, title="Ring: Low Battery", priority=1)
     if tamper:
         body = "\n".join(tamper)
         logger.info(f"Tamper alert: {body}")
-        pushover.send_message(body, title="Ring Beams/Alarm: Tamper", priority=0)
+        pushover.send_message(body, title="Ring: Tamper", priority=0)
     if errors:
         # Partial-location failure — coverage was incomplete, mustn't look healthy.
         body = "\n".join(errors)
         logger.error(f"Sidecar partial failure: {body}")
-        pushover.send_message(body, title="Ring Beams/Alarm: Partial Sidecar Failure", priority=1)
+        pushover.send_message(body, title="Ring: Partial Sidecar Failure", priority=1)
     if not low and not tamper and not errors:
         logger.info("All Ring Beams/Alarm sensors healthy.")
 
@@ -196,11 +196,11 @@ def main() -> None:
         notify(pushover, low, tamper, errors, logger)
     except BeamsAuthError as e:
         logger.error(f"Ring Beams auth failure: {e}")
-        pushover.send_message(str(e), title="Ring Beams: Auth Required", priority=0)
+        pushover.send_message(str(e), title="Ring: Auth Required", priority=0)
         sys.exit(1)
     except Exception as e:
         logger.error(f"Ring Beams check failed: {e}")
-        pushover.send_message(str(e), title="Ring Beams: Error", priority=1)
+        pushover.send_message(str(e), title="Ring: Error", priority=1)
         sys.exit(1)
 
 
