@@ -160,7 +160,7 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "RachioFlume", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib"]
+testpaths = ["Tesla", "RachioFlume", "August", "SamsungFrame", "VoiceNotes", "RingSecurity", "RingBeams", "lib"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 

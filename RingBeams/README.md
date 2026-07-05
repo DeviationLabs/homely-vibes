@@ -55,14 +55,14 @@ uv run python RingBeams/beams_manager.py check 2>&1 | tee /tmp/ring_beams.log
 ## Cron
 
 ```
-0 9 * * * cd ~/Documents/homely_vibes && uv run python RingBeams/beams_manager.py check >> ~/logs/ring_beams.log 2>&1
+0 9 * * * cd $HOMELY_VIBES && uv run python RingBeams/beams_manager.py check >> ~/logs/ring_beams.log 2>&1
 ```
 
 Node must be on `PATH` inside the cron env. If cron can't find `node`, add to the top of your crontab:
 ```
 PATH=/opt/homebrew/bin:/usr/bin:/bin
 ```
-(Adjust for Linux/aibo — usually `/usr/local/bin` or `/usr/bin`.)
+(Adjust for Linux — usually `/usr/local/bin` or `/usr/bin`.)
 
 ## Tests
 
