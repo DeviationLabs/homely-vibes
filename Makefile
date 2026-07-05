@@ -52,12 +52,10 @@ colima: ## Start colima if not already running
 
 test: ## Run the tests
 	@echo "🧪 Running the tests"
-	@echo "📦 Running main test suite..."
-	@uv run pytest
+	@echo "📦 Running main test suite (all testpaths except NodeCheck)..."
+	@uv run pytest --ignore=NodeCheck
 	@echo "🔧 Running NodeCheck tests in isolation..."
 	@uv run pytest NodeCheck
-	@echo "🚗 Running Tesla tests in isolation (Tesla clobbers sys.modules['lib.*'])..."
-	@uv run pytest Tesla
 	@echo "${GREEN}All tests completed successfully.${RESET}"
 
 coverage: ## Run the tests with coverage

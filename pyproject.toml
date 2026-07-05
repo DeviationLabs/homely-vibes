@@ -160,13 +160,7 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
-## Tesla is excluded here and run in its own pytest invocation via `make test`.
-## Tesla/test_manage_power.py:13 clobbers sys.modules["lib.*"] with MagicMock at
-## import time (pre-existing CLAUDE.md "no patch()" violation). Reordering
-## within a single process is not enough — on Linux, pytest's plugin discovery
-## revisits already-collected modules and trips on the MagicMock. Same isolation
-## pattern as NodeCheck (pytest-forked).
-testpaths = ["RachioFlume", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib"]
+testpaths = ["Tesla", "RachioFlume", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 
