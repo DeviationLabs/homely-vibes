@@ -56,10 +56,11 @@ uv run python SamsungFrame/manage_samsung.py status
 ### Module Organization
 This is a **modular IoT home automation system** with independent components that share common utilities:
 
-- **`lib/`**: Shared utilities (networking, notifications, logging, constants)
-- **Component modules**: Tesla, RachioFlume, NetworkCheck, NodeCheck, BrowserAlert, August, SamsungFrame, etc.
-- **AI/ML modules**: BimpopAI (RAG system), GarageCheck (computer vision)
-- **Data processing**: WaterParser, WaterLogging
+- **`lib/`**: Shared utilities (config, networking, notifications, logging, secret I/O, file lock)
+- **Home / IoT modules**: August, NetworkCheck, NodeCheck, RachioFlume, RingBeams, RingSecurity, SamsungFrame, Tesla
+- **AI / ML modules**: BimpopAI (RAG system), GarageCheck (computer vision), VoiceNotes (local STT)
+- **Ops modules**: LaunchJobs (macOS launchd), PersonalCalSync (Google Apps Script), OpenAIAdmin, LambdaEmailFwder
+- **Client / adjacent**: NoShorts (iOS app), VSCodeSidebarNotes (VS Code / Cursor extension), BrowserAlert, GPXParser
 
 ### Key Architectural Patterns
 
@@ -219,10 +220,13 @@ Non-obvious rules that repeat across modules. Adhere to these in new code and PR
 - Config files themselves live in `config/local.yaml` (gitignored). Tokens live under `config/tokens/` (symlinked to `~/bin/Common-configs/tokens/`, also gitignored on the code side).
 
 ### Alert priority discipline (Pushover)
-- **P1 (`priority=1`)** — actionable, needs a human within hours. Low battery, service unreachable, hardware failure.
-- **P2 (`priority=0`)** — informational, "act when convenient." Auth re-required, tamper detected, offline device.
-- **Emergency (`priority=2`)** — retries until acked. Reserve for water leaks, break-ins — things where seconds matter. Don't cry wolf.
-- **Auth failures always P2, not P1.** Re-auth is a chore, not an emergency.
+Convention: `P{N}` maps 1:1 to Pushover `priority=N`. Every module README uses this scheme — the number IS the priority value, not a semantic tier.
+
+- **P-1 (`priority=-1`)** — silent (no sound/vibration). Zone-end reports, informational clears, "act when convenient." Default for anything that doesn't need to interrupt.
+- **P0 (`priority=0`)** — normal (default sound). Recovery/"cleared" transitions after a fire, non-urgent status change.
+- **P1 (`priority=1`)** — high (bypasses quiet hours). Actionable within hours: low battery, service unreachable, hardware failure, partial sidecar failure, degraded network link.
+- **P2 (`priority=2`)** — emergency (retries until acked). Reserve for water leaks, break-ins, sustained-flow rules firing — things where seconds matter. Don't cry wolf.
+- **Auth failures land at P0**, not P1 or P2. Re-auth is a chore, not an emergency, but shouldn't be silent.
 
 ### Testing
 - **Never `patch()` production code.** If a test needs to mock a subprocess/HTTP call, refactor the production code to accept the dependency as a parameter (factory or client). RingBeams's `run_sidecar(ring_factory=...)` is the reference pattern.
