@@ -15,7 +15,7 @@ NodeCheck provides monitoring and management for Foscam cameras, Windows machine
 
 ```bash
 uv run NodeCheck/heartbeat_nodes.py --poll 3600 --cooloff 600
-uv run NodeCheck/heartbeat_nodes.py --poll 300 --cooloff 300 --nodes "omega" --nodes "flume"
+uv run NodeCheck/heartbeat_nodes.py --poll 300 --cooloff 300 --nodes "Server1" --nodes "WinBox1"
 uv run NodeCheck/heartbeat_nodes.py --poll 60 --cooloff 60 --nodes "fake" --debug
 ```
 
@@ -31,7 +31,7 @@ uv run NodeCheck/manage_nodes.py --type foscam --always_email
 
 ```bash
 uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200
-uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200 --user abutala --port 22
+uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200 --user <ssh-user> --port 22
 ```
 
 SSHes into the host and prints model, SoC, CPU, memory, storage, network
@@ -77,17 +77,17 @@ node_check:
     username: your_username
     password: your_password
   node_configs:
-    "Deck Stairs":
+    "Camera1":
       ip: "192.168.1.51"
       node_type: foscam
       username: your_username
       password: your_password
-    "Beta":
+    "WinBox1":
       ip: "192.168.1.100"
       node_type: windows
       username: your_username
       password: your_password
-    "Omega":
+    "Server1":
       ip: "192.168.1.101"
       node_type: generic
 ```
@@ -135,7 +135,7 @@ node_check:
 ```bash
 uv run NodeCheck/heartbeat_nodes.py \
   --poll 600 --cooloff 1800 \
-  --nodes "Deck Stairs" --nodes "Beta" --nodes "Omega"
+  --nodes "Camera1" --nodes "WinBox1" --nodes "Server1"
 ```
 
 ### Weekly Maintenance  

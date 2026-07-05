@@ -62,7 +62,7 @@ Node must be on `PATH` inside the cron env. If cron can't find `node`, add to th
 ```
 PATH=/opt/homebrew/bin:/usr/bin:/bin
 ```
-(Adjust for Linux/aibo — usually `/usr/local/bin` or `/usr/bin`.)
+(Adjust for Linux — usually `/usr/local/bin` or `/usr/bin`.)
 
 ## Tests
 

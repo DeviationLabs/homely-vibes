@@ -209,9 +209,9 @@ Two patterns:
 uv run python RachioFlume/rfmanager.py alerts replay --hours 168   # 7 days
 
 # 2. Replay against a COPY of the prod DB (safest — no risk of writes to prod)
-scp abutala@aibo:/home/abutala/logs/water_tracking.db /tmp/aibo_water_tracking.db
+scp <user>@<prod-host>:~/logs/water_tracking.db /tmp/prod_water_tracking.db
 uv run python RachioFlume/rfmanager.py alerts replay \
-    --hours 168 --db /tmp/aibo_water_tracking.db
+    --hours 168 --db /tmp/prod_water_tracking.db
 ```
 
 Output is tab-aligned and shows the new label set: `REPORT` (P-1), `FIRE` (P2),
@@ -222,7 +222,7 @@ A clean 7-day replay against current prod data should produce ~24 `Zone Report`
 entries (12 active zones × 2 cycles/week) and zero false `Pipe Break` / `Leak`
 fires while irrigation is active.
 
-### 🌐 Remote test loop on omega
+### 🌐 Remote test loop on the test host
 
 Build locally, test remotely — without touching the running prod collector.
 
@@ -233,10 +233,10 @@ Build locally, test remotely — without touching the running prod collector.
 ./RachioFlume/scripts/remote-test.sh --hot                             # restart prod collector after tests
 ```
 
-One-time setup on omega (uses `~/Code-test` so prod `~/Code` is safe):
+One-time setup on the test host (uses `~/Code-test` so prod `~/Code` is safe):
 ```bash
-ssh omega "git clone https://github.com/DeviationLabs/homely-vibes ~/Code-test && cd ~/Code-test && uv sync --quiet"
-ssh omega "ln -sf ~/Code/config/local.yaml ~/Code-test/config/local.yaml"
+ssh <test-host> "git clone https://github.com/DeviationLabs/homely-vibes ~/Code-test && cd ~/Code-test && uv sync --quiet"
+ssh <test-host> "ln -sf ~/Code/config/local.yaml ~/Code-test/config/local.yaml"
 ```
 
 ### 🧪 Synthetic Scenarios (unit tests only)
@@ -264,33 +264,33 @@ kill <process_id>
 # Or if running in foreground, just use Ctrl+C
 ```
 
-### 🚀 Deployment runbook (aibo)
+### 🚀 Deployment runbook (Linux prod host)
 
-Production lives on `aibo`. The collector runs from cron's `@reboot` wrapped in
+Production lives on the Linux prod host. The collector runs from cron's `@reboot` wrapped in
 `run-one-constantly` (auto-restarts on exit), so deploying new code is a
 3-step ritual.
 
 Before any production deploy that changes the `rachio_flume.alerts` schema,
-**migrate aibo's `local.yaml` first**. The new structured-config loader is
+**migrate the prod host's `local.yaml` first**. The new structured-config loader is
 strict — an outdated schema crashes on startup.
 
 ```bash
-# 1) Backup aibo's local.yaml (gitignored, host-specific)
-ssh abutala@aibo 'cp ~/bin/Common-configs/Code_config_local.yaml \
+# 1) Backup the prod host's local.yaml (gitignored, host-specific)
+ssh <user>@<prod-host> 'cp ~/bin/Common-configs/Code_config_local.yaml \
     ~/bin/Common-configs/Code_config_local.yaml.bak-$(date +%Y%m%d-%H%M%S)'
 
 # 2) Migrate the rachio_flume block to the new shape — easiest is:
 #    a. scp it down, edit locally, scp back
 #    b. or edit in place via ssh + python script
-scp abutala@aibo:/home/abutala/bin/Common-configs/Code_config_local.yaml /tmp/aibo_local.yaml
-# (edit /tmp/aibo_local.yaml to match new schema — keep host-specific blocks like node_check, prod_controller unchanged)
-scp /tmp/aibo_local.yaml abutala@aibo:/home/abutala/bin/Common-configs/Code_config_local.yaml
+scp <user>@<prod-host>:~/bin/Common-configs/Code_config_local.yaml /tmp/prod_local.yaml
+# (edit /tmp/prod_local.yaml to match new schema — keep host-specific blocks like node_check, prod_controller unchanged)
+scp /tmp/prod_local.yaml <user>@<prod-host>:~/bin/Common-configs/Code_config_local.yaml
 
-# 3) Pull new code on aibo
-ssh abutala@aibo 'cd ~/Code && git fetch origin && git pull origin main'
+# 3) Pull new code on the prod host
+ssh <user>@<prod-host> 'cd ~/Code && git fetch origin && git pull origin main'
 
 # 4) Verify new config loads cleanly before restart
-ssh abutala@aibo 'cd ~/Code && uv run python -c "
+ssh <user>@<prod-host> 'cd ~/Code && uv run python -c "
 from lib.config import reset_config, get_config; reset_config()
 cfg = get_config()
 print(\"zone_anomaly:\", cfg.rachio_flume.alerts.zone_anomaly.absolute_gpm)
@@ -299,12 +299,12 @@ print(\"stale days:\", cfg.rachio_flume.alerts.stale_zone_days)
 "'
 
 # 5) Kill the python collector process; run-one-constantly auto-restarts with new code
-ssh abutala@aibo 'pkill -f ".venv/bin/python3 RachioFlume/rfmanager.py"'
+ssh <user>@<prod-host> 'pkill -f ".venv/bin/python3 RachioFlume/rfmanager.py"'
 sleep 12
-ssh abutala@aibo 'ps auxf | grep ".venv/bin/python3 RachioFlume/rfmanager.py" | grep -v grep'
+ssh <user>@<prod-host> 'ps auxf | grep ".venv/bin/python3 RachioFlume/rfmanager.py" | grep -v grep'
 
 # 6) Tail logs to confirm a clean cycle
-ssh abutala@aibo 'tail -25 ~/logs/rfmanager.py.log'
+ssh <user>@<prod-host> 'tail -25 ~/logs/rfmanager.py.log'
 ```
 
 The first post-restart cycle should show: zones saved, Flume readings

@@ -31,7 +31,7 @@ This system monitors web browsing activity by analyzing Chrome browser history a
 
 #### System Configuration
 - Disabled power saving when plugged in
-- Created monitoring user: "abutala"
+- Created monitoring user (dedicated account for this tool)
 - Enabled remote SSH access
 
 #### SSH Configuration
@@ -39,7 +39,7 @@ Reference: [Apple Remote Access Guide](https://support.apple.com/guide/mac-help/
 
 **Sudoers Configuration** (`/private/etc/sudoers.d/`):
 ```bash
-abutala ALL=(ALL) NOPASSWD:ALL
+<monitor-user> ALL=(ALL) NOPASSWD:ALL
 ```
 
 **SSH Daemon Configuration** (`/etc/ssh/sshd_config`):
@@ -73,7 +73,7 @@ defaults write com.google.Chrome BrowserAddPersonEnabled -bool false
 
 **Database Location**:
 ```
-/Users/rianbutala/Library/Application Support/Google/Chrome/Default/History
+/Users/<monitored-user>/Library/Application Support/Google/Chrome/Default/History
 ```
 
 **Query Recent History**:
@@ -91,8 +91,8 @@ LIMIT 10;
 Once SSH is configured, you can remotely access the device and pull browser history for analysis:
 
 ```bash
-ssh abutala@192.168.1.24
-sqlite3 "/Users/rianbutala/Library/Application Support/Google/Chrome/Default/History" < query.sql
+ssh <monitor-user>@<device-ip>
+sqlite3 "/Users/<monitored-user>/Library/Application Support/Google/Chrome/Default/History" < query.sql
 ```
 
 ## Implementation Notes

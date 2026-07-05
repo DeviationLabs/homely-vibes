@@ -105,9 +105,9 @@ the same `AlertEngine.evaluate` loop. No Flume/Rachio calls, no Pushover.
 uv run python RachioFlume/rfmanager.py alerts replay --hours 168     # 7 days
 
 # B. Against a COPY of the prod DB (safest — no risk of writes to prod)
-scp abutala@aibo:/home/abutala/logs/water_tracking.db /tmp/aibo_water_tracking.db
+scp <user>@<prod-host>:~/logs/water_tracking.db /tmp/prod_water_tracking.db
 uv run python RachioFlume/rfmanager.py alerts replay \
-    --hours 168 --db /tmp/aibo_water_tracking.db
+    --hours 168 --db /tmp/prod_water_tracking.db
 ```
 
 Output is tab-aligned and uses the same label set as the synthetic
@@ -180,9 +180,9 @@ uv run python -m pytest RachioFlume/test_alert_simulation.py -v 2>&1 | tee /tmp/
 uv run python -m pytest RachioFlume/ -v 2>&1 | tee /tmp/rf_full.log
 
 # DB replay against a SCP'd prod copy
-scp abutala@aibo:/home/abutala/logs/water_tracking.db /tmp/aibo_water_tracking.db
+scp <user>@<prod-host>:~/logs/water_tracking.db /tmp/prod_water_tracking.db
 uv run python RachioFlume/rfmanager.py alerts replay \
-    --hours 168 --db /tmp/aibo_water_tracking.db 2>&1 | tee /tmp/rf_replay.log
+    --hours 168 --db /tmp/prod_water_tracking.db 2>&1 | tee /tmp/rf_replay.log
 
 # Live dry-run against real APIs (no Pushover)
 uv run python RachioFlume/rfmanager.py alerts test 2>&1 | tee /tmp/rf_live.log

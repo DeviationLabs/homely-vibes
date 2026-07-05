@@ -153,7 +153,7 @@ def test_sidecar_auth_failure_exit5_treated_as_auth(tmp_path: Path, logger: logg
 
 def test_sidecar_exit1_node_crash_not_auth(tmp_path: Path, logger: logging.Logger) -> None:
     """Node crash-at-load (exit=1 with raw stack, no JSON envelope) MUST route
-    to RuntimeError, not BeamsAuthError. This is the aibo 2026-07-04 case:
+    to RuntimeError, not BeamsAuthError. This is the prod-host 2026-07-04 case:
     undici + Node 18 ReferenceError got misclassified as "Auth Required"."""
     tok = tmp_path / "tok.json"
     tok.write_text('{"refresh_token": "fake"}')
