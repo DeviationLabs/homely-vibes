@@ -114,13 +114,14 @@ def test_get_water_heaters_api_error() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# RheemMonitor tests
+# RheemMonitor tests — three-tier (P2 empty / P1 low / clear at mid)
 # --------------------------------------------------------------------------- #
 
 
 def _monitor_with(
     heaters: list[FakeWaterHeater],
     state_file: str,
+    empty_threshold: int = 0,
     low_threshold: int = 33,
     mid_threshold: int = 66,
 ) -> tuple[RheemMonitor, FakePushover]:
@@ -132,6 +133,7 @@ def _monitor_with(
         pushover=pushover,
         logger=logger,
         state_file=state_file,
+        empty_threshold=empty_threshold,
         low_threshold=low_threshold,
         mid_threshold=mid_threshold,
     )
@@ -149,18 +151,20 @@ def test_low_availability_fires_p1_alert(tmp_path: Path) -> None:
     assert title == "Rheem Low Hot Water"
     assert priority == 1
     assert "Garage" in msg
-    assert monitor.alerted["S1"] is True
+    assert monitor.alerted["S1"] == "p1"
 
 
-def test_empty_tank_fires_p1_alert(tmp_path: Path) -> None:
+def test_empty_tank_fires_p2_alert(tmp_path: Path) -> None:
     state = str(tmp_path / "state.json")
     monitor, pushover = _monitor_with(
         [FakeWaterHeater(serial_number="S1", name="Garage", availability=0)], state
     )
     asyncio.run(monitor.check_once())
     assert len(pushover.sent) == 1
-    assert pushover.sent[0][2] == 1
-    assert monitor.alerted["S1"] is True
+    msg, title, priority = pushover.sent[0]
+    assert title == "Rheem Hot Water Empty"
+    assert priority == 2
+    assert monitor.alerted["S1"] == "p2"
 
 
 def test_already_alerted_no_duplicate(tmp_path: Path) -> None:
@@ -171,7 +175,36 @@ def test_already_alerted_no_duplicate(tmp_path: Path) -> None:
     # Still low -> no second alert.
     asyncio.run(monitor.check_once())
     assert len(pushover.sent) == 1
-    assert monitor.alerted["S1"] is True
+    assert monitor.alerted["S1"] == "p1"
+
+
+def test_escalation_low_to_empty_fires_p2(tmp_path: Path) -> None:
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=33)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # P1
+    assert monitor.alerted["S1"] == "p1"
+    # Drops to empty -> escalate to P2.
+    heaters[0].availability = 0
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 2
+    msg, title, priority = pushover.sent[1]
+    assert title == "Rheem Hot Water Empty"
+    assert priority == 2
+    assert monitor.alerted["S1"] == "p2"
+
+
+def test_de_escalation_empty_to_low_no_realert(tmp_path: Path) -> None:
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=0)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # P2
+    assert monitor.alerted["S1"] == "p2"
+    # Recovers to 1/3rd (still in low zone) -> no re-alert, tier stays p2.
+    heaters[0].availability = 33
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p2"
 
 
 def test_recovery_to_mid_clears_alert(tmp_path: Path) -> None:
@@ -179,7 +212,7 @@ def test_recovery_to_mid_clears_alert(tmp_path: Path) -> None:
     heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=33)]
     monitor, pushover = _monitor_with(heaters, state)
     asyncio.run(monitor.check_once())
-    assert monitor.alerted["S1"] is True
+    assert monitor.alerted["S1"] == "p1"
     # Recover to mid.
     heaters[0].availability = 66
     asyncio.run(monitor.check_once())
@@ -187,7 +220,20 @@ def test_recovery_to_mid_clears_alert(tmp_path: Path) -> None:
     msg, title, priority = pushover.sent[1]
     assert title == "Rheem Hot Water Recovered"
     assert priority == -1
-    assert monitor.alerted["S1"] is False
+    assert "S1" not in monitor.alerted
+
+
+def test_recovery_from_empty_clears_alert(tmp_path: Path) -> None:
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=0)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # P2
+    # Jump straight to full -> clear.
+    heaters[0].availability = 100
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 2
+    assert pushover.sent[1][2] == -1
+    assert "S1" not in monitor.alerted
 
 
 def test_full_tank_no_alert(tmp_path: Path) -> None:
@@ -226,10 +272,10 @@ def test_state_persisted_across_instances(tmp_path: Path) -> None:
     heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=33)]
     monitor, _ = _monitor_with(heaters, state)
     asyncio.run(monitor.check_once())
-    assert monitor.alerted["S1"] is True
+    assert monitor.alerted["S1"] == "p1"
     # New monitor instance loads persisted state.
     monitor2, pushover2 = _monitor_with(heaters, state)
-    assert monitor2.alerted["S1"] is True
+    assert monitor2.alerted["S1"] == "p1"
     # Still low -> no re-alert (state was loaded).
     asyncio.run(monitor2.check_once())
     assert len(pushover2.sent) == 0
@@ -251,10 +297,12 @@ def test_multiple_heaters_independent(tmp_path: Path) -> None:
     state = str(tmp_path / "state.json")
     heaters = [
         FakeWaterHeater(serial_number="S1", name="Garage", availability=33),
-        FakeWaterHeater(serial_number="S2", name="Basement", availability=100),
+        FakeWaterHeater(serial_number="S2", name="Basement", availability=0),
     ]
     monitor, pushover = _monitor_with(heaters, state)
     asyncio.run(monitor.check_once())
-    assert monitor.alerted["S1"] is True
-    assert monitor.alerted.get("S2", False) is False
-    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p1"
+    assert monitor.alerted["S2"] == "p2"
+    # One P1 + one P2.
+    priorities = sorted(p for _, _, p in pushover.sent)
+    assert priorities == [1, 2]

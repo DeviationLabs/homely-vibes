@@ -8,13 +8,13 @@ The tank reports hot water availability as discrete levels via the unofficial Ec
 
 | Level | Meaning          | Action                          |
 |-------|------------------|---------------------------------|
-| 0     | empty            | 🔴 fire **P1** alert             |
+| 0     | empty            | 🚨 fire **P2** alert (emergency) |
 | 33    | "1/3rd full"     | 🔴 fire **P1** alert             |
 | 66    | "2/3rd full"     | 🟢 send **P-1** clear, reset     |
 | 100   | full             | no-op (already cleared at 66)   |
 | None  | not supported    | skip silently                    |
 
-Hysteresis with persisted state (`{logging_dir}/rheem_monitor_state.json`) prevents re-alerting every poll and flapping between adjacent levels. State is keyed by heater serial number, so multiple heaters are tracked independently.
+Hysteresis with persisted state (`{logging_dir}/rheem_monitor_state.json`) prevents re-alerting every poll and flapping between adjacent levels. State is keyed by heater serial number, so multiple heaters are tracked independently. A tank that drops from 1/3rd (P1) to empty (P2) **escalates** — a second, higher-priority alert fires. Recovering from empty back to 1/3rd does NOT re-alert (still in the low zone); only recovery to ≥ mid clears the alert.
 
 ## Setup
 
@@ -29,8 +29,9 @@ rheem:
   email: your_econet_email@example.com
   password: your_econet_password
   poll_seconds: 300          # check interval (monitor command)
-  low_threshold: 33          # alert at/below this level
-  mid_threshold: 66          # clear at/above this level
+  empty_threshold: 0         # <= this -> P2 emergency (retries until acked)
+  low_threshold: 33          # <= this -> P1 high (bypasses quiet hours)
+  mid_threshold: 66          # >= this -> P-1 clear, reset alert state
 ```
 
 Add a Pushover app token:
@@ -60,7 +61,8 @@ uv run python Rheem/rheem_manager.py monitor --poll-secs 120
 
 Per the repo convention (`P{N}` = Pushover `priority=N`):
 
-- **P1** — low hot water (empty or 1/3rd full). Actionable within hours.
+- **P2** — empty tank (emergency, retries until acked). Seconds matter — no hot water at all.
+- **P1** — low hot water (1/3rd full). Actionable within hours.
 - **P-1** — recovery clear (silent, informational).
 - **P0** — auth/comms failure (a chore, not an emergency).
 

@@ -188,7 +188,9 @@ class RheemConfig:
     email: str
     password: str
     poll_seconds: int
-    # Discrete tank levels: 0/33/66/100. Alert at/below low, clear at/above mid.
+    # Discrete tank levels: 0/33/66/100. Empty (<=empty) -> P2, low
+    # (<=low) -> P1, clear at >= mid.
+    empty_threshold: int
     low_threshold: int
     mid_threshold: int
 

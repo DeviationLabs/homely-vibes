@@ -198,8 +198,9 @@ rheem:
   password: ""
   poll_seconds: 300
   # Discrete tank levels reported by EcoNet: 0/33/66/100.
-  low_threshold: 33   # 1/3rd full or empty -> fire P1 alert
-  mid_threshold: 66   # 2/3rd full -> send P-1 clear, reset alert state
+  empty_threshold: 0    # empty -> P2 emergency (retries until acked)
+  low_threshold: 33     # 1/3rd full -> P1 high (bypasses quiet hours)
+  mid_threshold: 66     # 2/3rd full -> P-1 clear, reset alert state
 
 # === Ring Devices ===
 ring:

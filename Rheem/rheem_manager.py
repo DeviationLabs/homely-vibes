@@ -50,6 +50,7 @@ class RheemMonitor:
         pushover: Notifier,
         logger: logging.Logger,
         state_file: str,
+        empty_threshold: int = 0,
         low_threshold: int = 33,
         mid_threshold: int = 66,
     ) -> None:
@@ -57,9 +58,12 @@ class RheemMonitor:
         self.pushover = pushover
         self.logger = logger
         self.state_file = state_file
+        self.empty_threshold = empty_threshold
         self.low_threshold = low_threshold
         self.mid_threshold = mid_threshold
-        self.alerted: dict[str, bool] = {}
+        # Per-device current alert tier: "p1" (low) or "p2" (empty).
+        # Absent key = not alerted. Cleared only on recovery to >= mid_threshold.
+        self.alerted: dict[str, str] = {}
         self._load_state()
 
     def _load_state(self) -> None:
@@ -113,29 +117,49 @@ class RheemMonitor:
         if not status.connected:
             self.logger.debug("%s disconnected; skipping", status.name)
             return
-        if status.availability is None:
+        avail = status.availability
+        if avail is None:
             self.logger.debug("%s does not report availability; skipping", status.name)
             return
 
-        is_alerted = self.alerted.get(status.serial_number, False)
+        current_tier = self._tier_for(avail)
+        active_tier = self.alerted.get(status.serial_number)
 
-        if status.availability <= self.low_threshold and not is_alerted:
-            msg = (
-                f"Hot water low: {status.name} at {_label(status.availability)} "
-                f"({status.availability}%)"
-            )
-            self.pushover.send_message(msg, title="Rheem Low Hot Water", priority=1)
-            self.alerted[status.serial_number] = True
-            self.logger.warning("Fired low-hot-water alert: %s", msg)
-
-        elif status.availability >= self.mid_threshold and is_alerted:
-            msg = (
-                f"Hot water recovered: {status.name} at {_label(status.availability)} "
-                f"({status.availability}%)"
-            )
+        if current_tier is None and active_tier is not None:
+            # Recovered to >= mid_threshold: clear.
+            msg = f"Hot water recovered: {status.name} at {_label(avail)} ({avail}%)"
             self.pushover.send_message(msg, title="Rheem Hot Water Recovered", priority=-1)
-            self.alerted[status.serial_number] = False
-            self.logger.info("Cleared low-hot-water alert: %s", msg)
+            del self.alerted[status.serial_number]
+            self.logger.info("Cleared hot-water alert: %s", msg)
+            return
+
+        if current_tier is None:
+            return  # healthy, no active alert
+
+        # In a low zone (empty or 1/3rd). Decide whether to fire/escalate.
+        if active_tier is None:
+            self._fire(status, avail, current_tier)
+        elif current_tier == "p2" and active_tier == "p1":
+            # Escalate low -> empty.
+            self._fire(status, avail, current_tier)
+        # Same tier, or recovering empty->low: no re-alert (clear at mid resets).
+
+    def _tier_for(self, availability: int) -> str | None:
+        """Return the alert tier for an availability level, or None if healthy."""
+        if availability <= self.empty_threshold:
+            return "p2"
+        if availability <= self.low_threshold:
+            return "p1"
+        return None
+
+    def _fire(self, status: WaterHeaterStatus, avail: int, tier: str) -> None:
+        priority = 2 if tier == "p2" else 1
+        label = "empty" if tier == "p2" else "low"
+        msg = f"Hot water {label}: {status.name} at {_label(avail)} ({avail}%)"
+        title = "Rheem Hot Water Empty" if tier == "p2" else "Rheem Low Hot Water"
+        self.pushover.send_message(msg, title=title, priority=priority)
+        self.alerted[status.serial_number] = tier
+        self.logger.warning("Fired %s hot-water alert: %s", tier.upper(), msg)
 
     async def run_continuous(self, poll_seconds: int) -> None:
         self.logger.info("Starting continuous Rheem monitoring (interval: %ds)", poll_seconds)
@@ -153,6 +177,7 @@ def _build_monitor(cfg: Config, logger: logging.Logger) -> RheemMonitor:
         pushover=pushover,
         logger=logger,
         state_file=state_file,
+        empty_threshold=cfg.rheem.empty_threshold,
         low_threshold=cfg.rheem.low_threshold,
         mid_threshold=cfg.rheem.mid_threshold,
     )
