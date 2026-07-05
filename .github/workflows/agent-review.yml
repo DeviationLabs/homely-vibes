@@ -123,10 +123,17 @@ jobs:
               ]
             }')
 
+          # Write payload to a file and POST with --data @file instead of
+          # -d "$PAYLOAD" so we don't blow past ARG_MAX / MAX_ARG_STRLEN
+          # (128KB per-arg on Linux) on large diffs. JSON-encoding a 400KB
+          # diff produces a single arg well over that cap; curl then fails
+          # with "Argument list too long" (exit 126) and the required check
+          # reds out regardless of PR content.
+          printf '%s' "$PAYLOAD" > /tmp/payload.json
           HTTP_RESPONSE=$(curl -sS --max-time 300 -w "\n%{http_code}" https://api.fireworks.ai/inference/v1/chat/completions \
             -H "Authorization: Bearer $FIREWORKS_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            --data @/tmp/payload.json)
 
           HTTP_STATUS=$(printf '%s' "$HTTP_RESPONSE" | tail -n1)
           BODY=$(printf '%s' "$HTTP_RESPONSE" | sed '$d')
