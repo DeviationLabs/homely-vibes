@@ -30,7 +30,6 @@ dependencies = [
     "yalexs>=8.0.0",
     "aiohttp>=3.14.1",
     "gpxpy>=1.5.0",
-    "click>=8.0.0",
     "paramiko>=5.0.0",
     "libpyfoscam>=1.2.2",
     "requests-oauthlib>=2.0.0",
@@ -76,7 +75,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["lib", "Tesla", "WaterParser", "BimpopAI", "August", "RingSecurity", "RingBeams"]
+packages = ["lib", "Tesla", "BimpopAI", "August", "RingSecurity", "RingBeams"]
 
 [tool.deptry]
 known_first_party = [
@@ -161,7 +160,13 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
-testpaths = ["Tesla", "RachioFlume", "NodeCheck", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib"]
+## Tesla is excluded here and run in its own pytest invocation via `make test`.
+## Tesla/test_manage_power.py:13 clobbers sys.modules["lib.*"] with MagicMock at
+## import time (pre-existing CLAUDE.md "no patch()" violation). Reordering
+## within a single process is not enough — on Linux, pytest's plugin discovery
+## revisits already-collected modules and trips on the MagicMock. Same isolation
+## pattern as NodeCheck (pytest-forked).
+testpaths = ["RachioFlume", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 
@@ -237,10 +242,7 @@ ignore_missing_imports = true
 module = [
     "VoiceNotes.*",
     "lib.*",
-    "WaterParser.*", 
-    "JWTs.*",
     "GPXParser.*",
-    "WaterLogging.*",
     "OpenAIAdmin.*",
     # Modules with remaining complex type issues (clean baseline)
     "BimpopAI.aiy_hat.aiy_runner",

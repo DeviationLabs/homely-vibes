@@ -16,7 +16,7 @@ repos:
         stages: [pre-commit]
       - id: secrets-scan
         name: Secrets Scan
-        entry: scripts/secret-scan.sh
+        entry: .github/scripts/secret-scan.sh
         language: script
         require_serial: true
         stages: [pre-commit]

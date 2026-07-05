@@ -3,7 +3,9 @@
 Daily health check for Ring devices (doorbells, cameras, chimes).
 
 - **P1 alert** — any device battery below `battery_threshold_pct` (default 25%)
-- **P2 alert** — any device offline / unreachable
+- **P0 alert** — any device offline / unreachable
+- **P0 alert** — Ring auth rejected / re-auth needed
+- **P1 alert** — Ring check failed (unexpected error)
 
 One-shot invocation designed for a daily cron. No polling loop, no state file.
 
@@ -31,7 +33,7 @@ One-shot invocation designed for a daily cron. No polling loop, no state file.
 uv run python RingSecurity/ring_manager.py check 2>&1 | tee /tmp/ring_check.log
 ```
 
-Schedule via cron/launchd once per day. Exit code is non-zero only on Ring-check failure (which itself pushes a P1 alert).
+Schedule via cron/launchd once per day. Exit code is non-zero on auth failure or generic Ring-check failure (which push P0 and P1 alerts respectively).
 
 ## Tests
 

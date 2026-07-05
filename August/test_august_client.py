@@ -41,8 +41,20 @@ class TestAugustClient:
     """Test AugustClient functionality"""
 
     @pytest.fixture
-    def client(self) -> AugustClient:
-        return AugustClient("test@example.com", "password123", "+1234567890")
+    def client(self) -> Generator[AugustClient, None, None]:
+        # AugustClient.__init__ builds a real Pushover from real config unless we
+        # stub it here. Tests that mock authenticate() to REQUIRES_VALIDATION /
+        # error paths would otherwise send a real Pushover message to Amit's
+        # phone via the production August token. Mirror TestAugustMonitor's
+        # fixture-level patching.
+        mock_config = MagicMock()
+        mock_config.pushover.user = "user123"
+        mock_config.pushover.tokens = {"August": "token123"}
+        with (
+            patch("August.august_client.Pushover"),
+            patch("August.august_client.get_config", return_value=mock_config),
+        ):
+            yield AugustClient("test@example.com", "password123", "+1234567890")
 
     def test_init(self, client: AugustClient) -> None:
         """Test AugustClient initialization"""

@@ -79,25 +79,23 @@ See `config/default.yaml` for the full structure and `config/local.yaml.example`
 
 | Component | Description | Documentation |
 |:----------|:------------|:-------------:|
-| 🔐 **August** | August Smart Lock monitoring with automated unlock alerts and pushover notifications for home security. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/August/README.md) |
-| 📸 **RingSecurity** | Ring cameras + doorbells daily health check via REST — P1 low-battery, P2 offline. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RingSecurity/README.md) |
-| 🚨 **RingBeams** | Ring Beams motion sensors + Ring Alarm contact/motion sensors, via Node.js sidecar over socket.io (dgreif/ring-client-api). P1 battery, P2 tamper. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RingBeams/README.md) |
-| 🤖 **Bimpop.ai** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/BimpopAI/README.md) |
-| 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/BrowserAlert/README.md) |
-| 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | - |
-| 🗺️ **GpxParser** | GPX track analysis and processing tools for GPS data visualization and route analysis. | - |
-| 🔑 **JWTs** | JWT token extraction and analysis utilities for HAR files and authentication workflows. | - |
-| 📧 **LambdaEmailFwder** | AWS Lambda function for automated email forwarding and intelligent message processing. | - |
-| 🌐 **NetworkCheck** | Network uplink testing and connectivity monitoring utilities for reliable internet connections. | - |
-| 🖥️ **NodeCheck** | System node monitoring with continuous heartbeat tracking and automated device management. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/NodeCheck/README.md) |
-| 🔧 **OpenAIAdmin** | OpenAI project management and administration tools for API governance and usage tracking. | - |
-| 📅 **PersonalCalSync** | Google Apps Script that syncs personal calendar events to enterprise calendar as private busy-blockers, preserving real event titles visible only to you. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/PersonalCalSync/README.md) |
-| 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RachioFlume/README.md) |
-| 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/SamsungFrame/README.md) |
-| 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/NoShorts/README.md) |
-| ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/Tesla/README.md) |
-| 🎙️ **VoiceNotes** | Wispr Flow-style local push-to-talk voice transcription on macOS. Hold ⌥-right, speak, release — text streams to Markdown via whisper.cpp + Metal. No cloud. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/VoiceNotes/README.md) |
-| 🗒️ **VSCodeSidebarNotes** | VS Code / Cursor extension: markdown sidebar that persists across restarts and is writable by Claude for live session summaries. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/VSCodeSidebarNotes/README.md) |
-| 📊 **WaterLogging** | Comprehensive data collection scripts for Rachio, Flume, and Tuya smart water devices. | - |
-| 📈 **WaterParser** | Advanced water usage data processing, statistical analysis, and interactive HTML report generation. | - |
-| 🛠️ **lib** | Shared utilities library for email, push notifications, networking, and essential system helpers. | - |
+| 🔐 **August** | August Smart Lock monitoring with automated unlock alerts and pushover notifications for home security. | [📖 README](August/README.md) |
+| 🤖 **BimpopAI** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 README](BimpopAI/README.md) |
+| 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 README](BrowserAlert/README.md) |
+| 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | [📖 README](GarageCheck/README.md) |
+| 🗺️ **GPXParser** | GPX track analysis and processing tools for GPS data visualization and route analysis. | [📖 README](GPXParser/README.md) |
+| 📧 **LambdaEmailFwder** | AWS Lambda function for automated email forwarding and intelligent message processing. | [📖 README](LambdaEmailFwder/README.md) |
+| ⏰ **LaunchJobs** | One CLI for every homely_vibes-owned macOS `launchd` job. Render plists, bootstrap them, tail logs. First job: WhatsApp daily summary. | [📖 README](LaunchJobs/README.md) |
+| 🛠️ **lib** | Shared utilities: OmegaConf config, Pushover / Mailer / Twilio, atomic secret I/O, POSIX file lock. Used by every module. | - |
+| 🌐 **NetworkCheck** | Network uplink speedtest with outcome-driven Pushover priority and external IP reporter. | [📖 README](NetworkCheck/README.md) |
+| 🖥️ **NodeCheck** | System node monitoring with continuous heartbeat tracking and automated device management. | [📖 README](NodeCheck/README.md) |
+| 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 README](NoShorts/README.md) |
+| 🔧 **OpenAIAdmin** | OpenAI project management and administration tools for API governance and usage tracking. | [📖 README](OpenAIAdmin/README_openai_projects.md) |
+| 📅 **PersonalCalSync** | Google Apps Script that syncs personal calendar events to enterprise calendar as private busy-blockers, preserving real event titles visible only to you. | [📖 README](PersonalCalSync/README.md) |
+| 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 README](RachioFlume/README.md) |
+| 🚨 **RingBeams** | Ring Beams motion sensors + Ring Alarm contact/motion sensors, via Node.js sidecar over socket.io (ring-client-api). P1 battery, P0 tamper. | [📖 README](RingBeams/README.md) |
+| 📸 **RingSecurity** | Ring cameras + doorbells daily health check via REST — P1 low-battery, P0 offline. | [📖 README](RingSecurity/README.md) |
+| 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 README](SamsungFrame/README.md) |
+| ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | [📖 README](Tesla/README.md) |
+| 🎙️ **VoiceNotes** | Wispr Flow-style local push-to-talk voice transcription on macOS. Hold ⌥-right, speak, release — text streams to Markdown via whisper.cpp + Metal. No cloud. | [📖 README](VoiceNotes/README.md) |
+| 🗒️ **VSCodeSidebarNotes** | VS Code / Cursor extension: markdown sidebar that persists across restarts and is writable by Claude for live session summaries. | [📖 README](VSCodeSidebarNotes/README.md) |
