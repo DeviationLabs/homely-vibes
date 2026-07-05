@@ -17,8 +17,10 @@ State is persisted to {logging_dir}/rheem_monitor_state.json as
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
+import os
 import sys
 from typing import Protocol
 
@@ -76,12 +78,19 @@ class RheemMonitor:
             self.logger.debug("No existing Rheem state file; starting fresh")
 
     def _save_state(self) -> None:
+        # Atomic write via tmp + os.replace so an interrupt mid-write can't
+        # truncate the state file (which would silently reset all alert state
+        # and re-fire P1/P2 alerts on the next cycle).
+        tmp_path = self.state_file + ".tmp"
         try:
-            with open(self.state_file, "w") as f:
+            with open(tmp_path, "w") as f:
                 json.dump({"alerted": self.alerted}, f)
+            os.replace(tmp_path, self.state_file)
             self.logger.debug("Saved Rheem monitor state to %s", self.state_file)
         except OSError as e:
             self.logger.error("Error saving Rheem state: %s", e)
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
 
     async def check_once(self) -> list[WaterHeaterStatus]:
         """Run one polling cycle. Returns the statuses observed this cycle."""
@@ -102,6 +111,12 @@ class RheemMonitor:
                 priority=0,
             )
             self.logger.error("Rheem API error: %s", e)
+            return []
+        except Exception as e:
+            # pyeconet only wraps PyeconetError subclasses; transient network
+            # errors (aiohttp.ClientError, asyncio.TimeoutError, OSError) are
+            # re-raised raw. Don't let them kill the run_continuous loop.
+            self.logger.error("Transient error during Rheem check: %s", e)
             return []
 
         current_serials = {h.serial_number for h in heaters}
@@ -164,7 +179,12 @@ class RheemMonitor:
     async def run_continuous(self, poll_seconds: int) -> None:
         self.logger.info("Starting continuous Rheem monitoring (interval: %ds)", poll_seconds)
         while True:
-            await self.check_once()
+            try:
+                await self.check_once()
+            except Exception as e:
+                # Safety net: check_once handles known/transient errors, but a
+                # bug in _process/_save_state must not kill the monitor either.
+                self.logger.error("Unexpected error in Rheem poll cycle: %s", e)
             await asyncio.sleep(poll_seconds)
 
 

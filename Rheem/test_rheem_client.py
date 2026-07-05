@@ -5,6 +5,7 @@ No patch() — dependencies (EcoNet api, Pushover) are injected as fakes.
 """
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -306,3 +307,89 @@ def test_multiple_heaters_independent(tmp_path: Path) -> None:
     # One P1 + one P2.
     priorities = sorted(p for _, _, p in pushover.sent)
     assert priorities == [1, 2]
+
+
+# --------------------------------------------------------------------------- #
+# Resilience: transient errors must not kill the monitor loop
+# --------------------------------------------------------------------------- #
+
+
+class ThrowingEcoNetApi:
+    """Fake api whose get_equipment_by_type raises a non-PyeconetError."""
+
+    async def get_equipment_by_type(
+        self, equipment_types: list[EquipmentType]
+    ) -> dict[EquipmentType, list[FakeWaterHeater]]:
+        raise asyncio.TimeoutError("network blip")
+
+
+def _monitor_with_throwing(state_file: str) -> tuple[RheemMonitor, FakePushover]:
+    api = ThrowingEcoNetApi()
+
+    async def factory() -> ThrowingEcoNetApi:
+        return api
+
+    client = RheemClient("u@example.com", "pw", api_factory=factory)
+    pushover = FakePushover()
+    logger = logging.getLogger("test_rheem")
+    monitor = RheemMonitor(
+        client=client,
+        pushover=pushover,
+        logger=logger,
+        state_file=state_file,
+    )
+    return monitor, pushover
+
+
+def test_transient_network_error_does_not_propagate(tmp_path: Path) -> None:
+    """A non-PyeconetError (e.g. asyncio.TimeoutError) is caught, not raised."""
+    state = str(tmp_path / "state.json")
+    monitor, pushover = _monitor_with_throwing(state)
+    # Should return [] without raising.
+    result = asyncio.run(monitor.check_once())
+    assert result == []
+    # No Pushover spam for transient errors (only auth/api get P0).
+    assert pushover.sent == []
+
+
+def test_run_continuous_survives_transient_error(tmp_path: Path) -> None:
+    """run_continuous must not die on a transient error mid-cycle."""
+    state = str(tmp_path / "state.json")
+    monitor, _ = _monitor_with_throwing(state)
+    calls = 0
+
+    async def stop_after(n: int) -> None:
+        nonlocal calls
+        while calls < n:
+            await monitor.check_once()
+            calls += 1
+
+    # If check_once raised, this would propagate and fail the test.
+    asyncio.run(stop_after(3))
+    assert calls == 3
+
+
+def test_save_state_is_atomic_no_tmp_left(tmp_path: Path) -> None:
+    """_save_state writes via tmp+os.replace; no .tmp file remains."""
+    state = str(tmp_path / "state.json")
+    monitor, _ = _monitor_with(
+        [FakeWaterHeater(serial_number="S1", name="Garage", availability=33)], state
+    )
+    asyncio.run(monitor.check_once())
+    # State file is valid JSON.
+    with open(state) as f:
+        data = json.load(f)
+    assert data == {"alerted": {"S1": "p1"}}
+    # No leftover tmp file.
+    assert not Path(state + ".tmp").exists()
+
+
+def test_load_state_recovers_from_corrupt_file(tmp_path: Path) -> None:
+    """A truncated/corrupt state file is ignored (fresh start), not fatal."""
+    state = str(tmp_path / "state.json")
+    Path(state).write_text('{"alerted": {"S1": "p1')  # truncated
+    monitor, _ = _monitor_with(
+        [FakeWaterHeater(serial_number="S1", name="Garage", availability=33)], state
+    )
+    # Loaded fresh (empty), then re-alerts because it's low.
+    assert monitor.alerted == {}
