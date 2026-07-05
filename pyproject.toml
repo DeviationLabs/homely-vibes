@@ -237,7 +237,6 @@ module = [
     "VoiceNotes.*",
     "lib.*",
     "GPXParser.*",
-    "OpenAIAdmin.*",
     # Modules with remaining complex type issues (clean baseline)
     "BimpopAI.aiy_hat.aiy_runner",
     "BimpopAI.aiy_hat.auth_helpers", 

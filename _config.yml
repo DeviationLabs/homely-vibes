@@ -51,7 +51,6 @@ exclude:
 - NetworkCheck/
 - NodeCheck/
 - NoShorts/
-- OpenAIAdmin/
 - PersonalCalSync/
 - RachioFlume/
 - RingBeams/
