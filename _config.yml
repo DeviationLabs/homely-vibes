@@ -36,23 +36,32 @@ kramdown:
   input: GFM
   hard_wrap: false
 
-# Exclude directories that contain application code, not website content
+# Exclude directories that contain application code, not website content.
+# Kept in sync with tracked top-level module dirs — every code dir belongs here.
 exclude:
-- WaterParser/
-- Tesla/
-- RachioFlume/
-- Bimpop.ai/
+- August/
+- BimpopAI/
 - BrowserAlert/
+- config/
 - GarageCheck/
+- GPXParser/
 - LambdaEmailFwder/
+- LaunchJobs/
+- lib/
 - NetworkCheck/
 - NodeCheck/
+- NoShorts/
 - OpenAIAdmin/
-- WaterLogging/
-- lib/
-- scripts/
-- backups/
-- uv.lock
-- pyproject.toml
+- PersonalCalSync/
+- RachioFlume/
+- RingBeams/
+- RingSecurity/
+- SamsungFrame/
+- Tesla/
+- VoiceNotes/
+- VSCodeSidebarNotes/
+- backups/  # gitignored on disk; keep here as belt-and-suspenders vs. any accidental commit
 - Makefile
+- pyproject.toml
+- uv.lock
 - .python-version

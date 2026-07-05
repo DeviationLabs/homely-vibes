@@ -44,11 +44,6 @@ class PathsConfig:
 
     home: str
     logging_dir: str
-    tuya_log_base: str
-    json_summary_file: str
-    json_summary_patch_file: str
-    json_pumprates_file: str
-    rachio_events_cmd: str
 
 
 @dataclass

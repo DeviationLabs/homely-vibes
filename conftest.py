@@ -18,4 +18,9 @@ sys.path.insert(0, str(project_root))
 # Importing them here caches the real modules before any test clobbers "lib".
 import lib  # noqa: F401, E402
 import lib.config  # noqa: F401, E402
+import lib.file_lock  # noqa: F401, E402
+import lib.Mailer  # noqa: F401, E402
+import lib.MyPushover  # noqa: F401, E402
+import lib.NetHelpers  # noqa: F401, E402
+import lib.logger  # noqa: F401, E402
 import lib.secure_io  # noqa: F401, E402

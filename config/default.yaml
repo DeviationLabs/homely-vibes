@@ -5,11 +5,6 @@
 paths:
   home: ${oc.env:HOME}
   logging_dir: ${paths.home}/logs
-  tuya_log_base: ${paths.home}/tuya_logs/tuya_logs.csv
-  json_summary_file: ${paths.home}/tuya_logs/summary.json
-  json_summary_patch_file: ${paths.home}/tuya_logs/summary.json
-  json_pumprates_file: ${paths.home}/tuya_logs/pump_rates.json
-  rachio_events_cmd: ${paths.home}/bin/WaterLogging/get_rachio_events.js
 
 # === Email Configuration ===
 email:
