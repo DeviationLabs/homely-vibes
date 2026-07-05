@@ -10,7 +10,7 @@ Design notes:
 
 - ``fcntl.flock`` (POSIX BSD flock, LOCK_EX) is auto-released on process exit
   including crash — no staleness detection or PID sentinels needed. Works on
-  both dev macOS and aibo Linux.
+  both dev macOS and prod Linux.
 - Locks a sibling ``<path>.lock`` file, NOT the resource itself. The resource
   gets rewritten via tmp+rename (secure_io); an fd on the pre-rename inode
   would point to a deleted file and the lock would silently dangle. The
