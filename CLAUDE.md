@@ -254,7 +254,7 @@ Convention: `P{N}` maps 1:1 to Pushover `priority=N`. Every module README uses t
 
 ### Scheduling & deployment
 - **macOS scheduled jobs live in Claude Code routines**, not in this repo. The former `LaunchJobs/` module (macOS `launchd` plist generator, incl. WhatsApp daily summary) was removed — routines replace it. Don't reintroduce a launchd module here; if you need a new scheduled Mac job, add a Claude Code routine.
-- **Aibo (Linux prod) hosts homely_vibes at `~/Code`** — NOT `~/Documents/deviation-labs/homely_vibes` as on the Mac. All aibo cron entries `cd ~/Code`.
+- **Aibo (Linux prod) hosts homely_vibes at `~/Code`** — not the Mac checkout path. All aibo cron entries `cd ~/Code`.
 - Cron entries redirect stdout+stderr to a file: `>> ~/logs/<script>.log 2>&1`. Never `> /dev/null` — you'd lose pre-logger crashes (import errors, `uv` failures, missing binaries).
 - `lib.logger.get_logger()` sets up dual handlers (stdout + per-script log file under `cfg.paths.logging_dir`). Cron file redirection is the safety net for anything that happens before the logger initializes.
 - Cron env needs `PATH` set for non-standard binaries (`node`, `uv`). Prepend `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin` at the top of the crontab, or use absolute paths in commands.
