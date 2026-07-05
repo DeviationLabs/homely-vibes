@@ -91,6 +91,7 @@ See `config/default.yaml` for the full structure and `config/local.yaml.example`
 | 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 README](NoShorts/README.md) |
 | 📅 **PersonalCalSync** | Google Apps Script that syncs personal calendar events to enterprise calendar as private busy-blockers, preserving real event titles visible only to you. | [📖 README](PersonalCalSync/README.md) |
 | 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 README](RachioFlume/README.md) |
+| 🚿 **Rheem** | Rheem/EcoNet water heater monitor — P2 when the tank is empty, P1 at 1/3rd full, silent clear at 2/3rds. Cron run-once via the unofficial pyeconet (ClearBlade) API. | [📖 README](Rheem/README.md) |
 | 🚨 **RingBeams** | Ring Beams motion sensors + Ring Alarm contact/motion sensors, via Node.js sidecar over socket.io (ring-client-api). P1 battery, P0 tamper. | [📖 README](RingBeams/README.md) |
 | 📸 **RingSecurity** | Ring cameras + doorbells daily health check via REST — P1 low-battery, P0 offline. | [📖 README](RingSecurity/README.md) |
 | 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 README](SamsungFrame/README.md) |
