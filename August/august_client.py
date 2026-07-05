@@ -18,6 +18,7 @@ from yalexs.lock import Lock, LockStatus, LockDoorStatus
 from lib.config import get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.secure_io import ensure_secret_perms
 
 # August revoked the API key yalexs ships for Brand.AUGUST (d9984f29...): the
 # session/password-auth endpoint returns 403 {"code":"Forbidden","message":
@@ -149,6 +150,8 @@ class AugustClient:
             )
             # Setup authentication - this initializes the _authentication property
             await self.authenticator.async_setup_authentication()
+            # yalexs owns the token cache write; tighten perms after.
+            ensure_secret_perms(cache_file)
 
     async def close(self) -> None:
         """Close the aiohttp session."""
@@ -177,6 +180,8 @@ class AugustClient:
                     install_id=self.authenticator._authentication.install_id,
                 )
             auth_result = await self.authenticator.async_authenticate()
+            # yalexs may have (re)written the token cache; tighten perms.
+            ensure_secret_perms(get_config().august.token_file)
 
             if auth_result is None:
                 self.logger.error("Authentication returned None - check credentials")

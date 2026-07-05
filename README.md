@@ -80,6 +80,8 @@ See `config/default.yaml` for the full structure and `config/local.yaml.example`
 | Component | Description | Documentation |
 |:----------|:------------|:-------------:|
 | 🔐 **August** | August Smart Lock monitoring with automated unlock alerts and pushover notifications for home security. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/August/README.md) |
+| 📸 **RingSecurity** | Ring cameras + doorbells daily health check via REST — P1 low-battery, P2 offline. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RingSecurity/README.md) |
+| 🚨 **RingBeams** | Ring Beams motion sensors + Ring Alarm contact/motion sensors, via Node.js sidecar over socket.io (dgreif/ring-client-api). P1 battery, P2 tamper. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/RingBeams/README.md) |
 | 🤖 **Bimpop.ai** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/BimpopAI/README.md) |
 | 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 Read More](https://github.com/DeviationLabs/homely-vibes/blob/main/BrowserAlert/README.md) |
 | 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | - |

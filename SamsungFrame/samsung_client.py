@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from lib.config import get_config
 from lib.logger import get_logger
+from lib.secure_io import ensure_secret_perms
 
 cfg = get_config()
 
@@ -112,8 +113,8 @@ class SamsungFrameClient:
                 self.tv.art().supported()
                 self.logger.info(f"Connected to Samsung Frame TV at {self.host}")
 
-                if os.path.exists(self.token_file):
-                    os.chmod(self.token_file, 0o600)
+                # SamsungTVWS owns the token write; tighten perms after.
+                ensure_secret_perms(self.token_file)
 
                 return True
 
