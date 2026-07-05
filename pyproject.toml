@@ -30,7 +30,6 @@ dependencies = [
     "yalexs>=8.0.0",
     "aiohttp>=3.14.1",
     "gpxpy>=1.5.0",
-    "click>=8.0.0",
     "paramiko>=5.0.0",
     "libpyfoscam>=1.2.2",
     "requests-oauthlib>=2.0.0",
@@ -161,10 +160,13 @@ DEP002 = [
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
 [tool.pytest.ini_options]
-## Tesla must run LAST: Tesla/test_manage_power.py:13 clobbers sys.modules["lib.MyPushover"]
-## with a MagicMock at collection time (pre-existing CLAUDE.md "no patch()" violation).
-## Any test collecting `from lib.MyPushover import Pushover` after Tesla gets MagicMock.
-testpaths = ["RachioFlume", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib", "Tesla"]
+## Tesla is excluded here and run in its own pytest invocation via `make test`.
+## Tesla/test_manage_power.py:13 clobbers sys.modules["lib.*"] with MagicMock at
+## import time (pre-existing CLAUDE.md "no patch()" violation). Reordering
+## within a single process is not enough — on Linux, pytest's plugin discovery
+## revisits already-collected modules and trips on the MagicMock. Same isolation
+## pattern as NodeCheck (pytest-forked).
+testpaths = ["RachioFlume", "August", "SamsungFrame", "VoiceNotes", "LaunchJobs", "RingSecurity", "RingBeams", "lib"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 
