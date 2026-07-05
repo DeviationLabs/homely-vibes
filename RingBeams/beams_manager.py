@@ -100,13 +100,23 @@ def run_sidecar(
         except Exception:
             msg = proc.stderr.strip() or "sidecar failed with no stderr"
         # Sidecar exit-code contract (see fetch_status.js):
-        #   1  auth/list-locations failure (bad or missing token)
-        #   3  token file unreadable
-        #   4  post-auth unhandled exception (parsing bug, etc.)
-        # 1 and 3 → auth class; 4 is generic (must not misroute to "re-auth").
-        if proc.returncode in (1, 3):
+        #   1  uncaught Node crash / module-load (reserved for Node itself)
+        #   2  missing env var
+        #   3  token file unreadable          → auth class
+        #   4  post-auth unhandled exception
+        #   5  auth/list-locations failure    → auth class
+        # Only 3 and 5 are auth. Exit 1 is a Node crash (e.g. undici requiring
+        # global `File` on Node <20) and MUST NOT route to "Auth Required".
+        if proc.returncode in (3, 5):
             raise BeamsAuthError(msg)
         raise RuntimeError(f"sidecar exit={proc.returncode}: {msg}")
+
+    # Sidecar succeeded but may have emitted structured warnings on stderr
+    # (e.g. TOKEN_WRITE_FAILED — server rotated refresh_token but our write
+    # threw, leaving the file with an already-consumed token). Log them so
+    # the next RingSecurity invalid_grant is traceable.
+    if proc.stderr.strip():
+        logger.warning(f"sidecar stderr on success: {proc.stderr.strip()}")
 
     try:
         payload = json.loads(proc.stdout)

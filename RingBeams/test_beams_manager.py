@@ -133,14 +133,14 @@ def test_missing_token_raises_auth_error(tmp_path: Path, logger: logging.Logger)
         run_sidecar(cfg, logger)
 
 
-def test_sidecar_json_error_treated_as_auth(tmp_path: Path, logger: logging.Logger) -> None:
-    """Simulate a fake sidecar that exits 1 with JSON error — auth-class failure."""
+def test_sidecar_auth_failure_exit5_treated_as_auth(tmp_path: Path, logger: logging.Logger) -> None:
+    """Sidecar exit=5 with JSON error is the auth/list-locations failure class."""
     tok = tmp_path / "tok.json"
     tok.write_text('{"refresh_token": "fake"}')
     script = tmp_path / "fake_sidecar.js"
     # Not a real node file — we pass /bin/sh and pretend it's node.
     fake = tmp_path / "fake.sh"
-    fake.write_text('#!/bin/sh\necho \'{"error":"bad token"}\' >&2\nexit 1\n')
+    fake.write_text('#!/bin/sh\necho \'{"error":"bad token"}\' >&2\nexit 5\n')
     fake.chmod(0o755)
     cfg = RingBeamsConfig(
         token_file=str(tok),
@@ -149,6 +149,31 @@ def test_sidecar_json_error_treated_as_auth(tmp_path: Path, logger: logging.Logg
     )
     with pytest.raises(BeamsAuthError, match="bad token"):
         run_sidecar(cfg, logger, node_path=str(fake), script_path=str(script))
+
+
+def test_sidecar_exit1_node_crash_not_auth(tmp_path: Path, logger: logging.Logger) -> None:
+    """Node crash-at-load (exit=1 with raw stack, no JSON envelope) MUST route
+    to RuntimeError, not BeamsAuthError. This is the aibo 2026-07-04 case:
+    undici + Node 18 ReferenceError got misclassified as "Auth Required"."""
+    tok = tmp_path / "tok.json"
+    tok.write_text('{"refresh_token": "fake"}')
+    fake = tmp_path / "fake.sh"
+    # Raw stack trace on stderr, no {"error": "..."} envelope, exit 1.
+    fake.write_text(
+        "#!/bin/sh\n"
+        "echo 'ReferenceError: File is not defined' >&2\n"
+        "echo '    at Object.<anonymous>' >&2\n"
+        "exit 1\n"
+    )
+    fake.chmod(0o755)
+    cfg = RingBeamsConfig(
+        token_file=str(tok),
+        battery_threshold_pct=25,
+        sidecar_timeout_seconds=5,
+    )
+    with pytest.raises(RuntimeError, match="sidecar exit=1") as exc:
+        run_sidecar(cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js"))
+    assert not isinstance(exc.value, BeamsAuthError)
 
 
 def test_sidecar_generic_error_not_misclassified_as_auth(
@@ -217,3 +242,36 @@ def test_sidecar_surfaces_partial_errors(tmp_path: Path, logger: logging.Logger)
     devs, errs = run_sidecar(cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js"))
     assert len(devs) == 1
     assert errs == ["getDevices(Second Home): oops"]
+
+
+def test_sidecar_token_write_warn_on_stderr_is_logged_not_raised(
+    tmp_path: Path, logger: logging.Logger, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Sidecar exit=0 with a TOKEN_WRITE_FAILED warn on stderr: parse normally
+    and log the warning. Regression guard for the 2026-07-05 invalid_grant
+    scenario — the ring-client-api rotates refresh_token; if our write fails
+    silently, the next RingSecurity run gets invalid_grant. Surfacing the
+    warn line lets us diagnose the chain."""
+    tok = tmp_path / "tok.json"
+    tok.write_text('{"refresh_token": "fake"}')
+    fake = tmp_path / "fake.sh"
+    fake.write_text(
+        "#!/bin/sh\n"
+        'echo \'{"warn":"TOKEN_WRITE_FAILED: EACCES","path":"/tmp/tok"}\' >&2\n'
+        "cat <<EOF\n"
+        '{"devices":[{"name":"Mailbox","batteryLevel":90,"batteryStatus":"ok",'
+        '"tamperStatus":"ok"}]}\nEOF\n'
+    )
+    fake.chmod(0o755)
+    cfg = RingBeamsConfig(
+        token_file=str(tok),
+        battery_threshold_pct=25,
+        sidecar_timeout_seconds=5,
+    )
+    with caplog.at_level(logging.WARNING):
+        devs, errs = run_sidecar(
+            cfg, logger, node_path=str(fake), script_path=str(tmp_path / "x.js")
+        )
+    assert len(devs) == 1
+    assert errs == []
+    assert any("TOKEN_WRITE_FAILED" in r.message for r in caplog.records)
