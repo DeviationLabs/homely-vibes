@@ -42,7 +42,9 @@ function writeRefreshToken(path, token) {
     } catch (_) {
         // fall through: write plain token
     }
+    // mode:0600 applies on file CREATE only; chmod normalizes pre-existing loose perms.
     fs.writeFileSync(path, payload, { mode: 0o600 });
+    fs.chmodSync(path, 0o600);
 }
 
 async function main() {

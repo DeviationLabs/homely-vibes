@@ -27,6 +27,7 @@ from tesla_fleet_api.tesla import EnergySite, TeslaFleetOAuth
 
 from lib.config import get_config
 from lib.logger import get_logger
+from lib.secure_io import write_secret_atomic
 
 
 class TeslaAuthError(Exception):
@@ -88,9 +89,7 @@ class TeslaAPIClient:
             "expires_at": int(oauth.expires),
             "token_type": "Bearer",
         }
-        with open(self.token_file, "w") as f:
-            json.dump(token_data, f, indent=2)
-        os.chmod(self.token_file, 0o600)
+        write_secret_atomic(self.token_file, token_data)
         self.logger.debug(f"Tokens persisted to {self.token_file}")
 
     async def _with_oauth(self, fn: Callable[[TeslaFleetOAuth], Awaitable[T]]) -> T:

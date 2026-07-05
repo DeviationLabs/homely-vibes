@@ -13,7 +13,6 @@ import asyncio
 import getpass
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -24,6 +23,7 @@ from ring_doorbell import AuthenticationError, Auth, Requires2FAError, Ring
 from lib.config import RingConfig, get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.secure_io import write_secret_atomic
 
 USER_AGENT = "android:com.ringapp"
 PUSHOVER_KEY = "Ring Security"
@@ -41,18 +41,7 @@ def _load_token(path: str) -> Optional[dict[str, Any]]:
 
 
 def _save_token(path: str, token: dict[str, Any]) -> None:
-    # Atomic 0600 create: avoids TOCTOU where a chmod-after-write leaves the
-    # token briefly world-readable under a typical 0o022 umask.
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.write(fd, json.dumps(token).encode())
-    finally:
-        os.close(fd)
-    # If the file pre-existed with looser perms, os.open above preserves the
-    # existing mode. Force-chmod as a safety net.
-    os.chmod(p, 0o600)
+    write_secret_atomic(path, token)
 
 
 async def _auth_flow(username: str, password: str, token_file: str) -> None:
