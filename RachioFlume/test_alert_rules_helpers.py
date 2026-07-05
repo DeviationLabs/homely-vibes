@@ -68,7 +68,7 @@ class TestSendZoneOutcomePushover:
         send_zone_outcome_pushover(**kw)
         kw["pushover"].send_message.assert_called_once()
         _, call_kwargs = kw["pushover"].send_message.call_args
-        assert call_kwargs["title"] == "RachioFlume: Zone Report"
+        assert call_kwargs["title"] == "Rachio Zone Report"
         assert call_kwargs["priority"] == -1
 
     def test_anomaly_above_threshold(self) -> None:
@@ -77,7 +77,7 @@ class TestSendZoneOutcomePushover:
         send_zone_outcome_pushover(**kw)
         kw["pushover"].send_message.assert_called_once()
         args, call_kwargs = kw["pushover"].send_message.call_args
-        assert call_kwargs["title"] == "RachioFlume: Zone Anomaly"
+        assert call_kwargs["title"] == "Rachio Zone Anomaly"
         assert call_kwargs["priority"] == 2
         # Deviation line appended for anomaly path
         assert "Deviation:" in args[0]

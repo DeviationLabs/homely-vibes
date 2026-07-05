@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from lib.config import RingBeamsConfig, get_config
+from lib.file_lock import LockTimeoutError, acquire_lock
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
@@ -100,13 +101,23 @@ def run_sidecar(
         except Exception:
             msg = proc.stderr.strip() or "sidecar failed with no stderr"
         # Sidecar exit-code contract (see fetch_status.js):
-        #   1  auth/list-locations failure (bad or missing token)
-        #   3  token file unreadable
-        #   4  post-auth unhandled exception (parsing bug, etc.)
-        # 1 and 3 → auth class; 4 is generic (must not misroute to "re-auth").
-        if proc.returncode in (1, 3):
+        #   1  uncaught Node crash / module-load (reserved for Node itself)
+        #   2  missing env var
+        #   3  token file unreadable          → auth class
+        #   4  post-auth unhandled exception
+        #   5  auth/list-locations failure    → auth class
+        # Only 3 and 5 are auth. Exit 1 is a Node crash (e.g. undici requiring
+        # global `File` on Node <20) and MUST NOT route to "Auth Required".
+        if proc.returncode in (3, 5):
             raise BeamsAuthError(msg)
         raise RuntimeError(f"sidecar exit={proc.returncode}: {msg}")
+
+    # Sidecar succeeded but may have emitted structured warnings on stderr
+    # (e.g. TOKEN_WRITE_FAILED — server rotated refresh_token but our write
+    # threw, leaving the file with an already-consumed token). Log them so
+    # the next RingSecurity invalid_grant is traceable.
+    if proc.stderr.strip():
+        logger.warning(f"sidecar stderr on success: {proc.stderr.strip()}")
 
     try:
         payload = json.loads(proc.stdout)
@@ -164,16 +175,16 @@ def notify(
     if low:
         body = "\n".join(low)
         logger.info(f"Low battery alert: {body}")
-        pushover.send_message(body, title="Ring Beams/Alarm: Low Battery", priority=1)
+        pushover.send_message(body, title="Ring: Low Battery", priority=1)
     if tamper:
         body = "\n".join(tamper)
         logger.info(f"Tamper alert: {body}")
-        pushover.send_message(body, title="Ring Beams/Alarm: Tamper", priority=0)
+        pushover.send_message(body, title="Ring: Tamper", priority=0)
     if errors:
         # Partial-location failure — coverage was incomplete, mustn't look healthy.
         body = "\n".join(errors)
         logger.error(f"Sidecar partial failure: {body}")
-        pushover.send_message(body, title="Ring Beams/Alarm: Partial Sidecar Failure", priority=1)
+        pushover.send_message(body, title="Ring: Partial Sidecar Failure", priority=1)
     if not low and not tamper and not errors:
         logger.info("All Ring Beams/Alarm sensors healthy.")
 
@@ -190,17 +201,26 @@ def main() -> None:
     cfg = get_config()
     pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens[PUSHOVER_KEY])
     try:
-        devices, errors = run_sidecar(cfg.ring_beams, logger)
+        # Serialize against RingSecurity — both share cfg.ring_beams.token_file
+        # (== cfg.ring.token_file); Ring OAuth rotates the refresh_token on
+        # every use. Parent Python holds the flock across the Node sidecar
+        # spawn; the child inherits serialization implicitly.
+        with acquire_lock(cfg.ring_beams.token_file):
+            devices, errors = run_sidecar(cfg.ring_beams, logger)
         logger.info(f"Fetched {len(devices)} devices from sidecar ({len(errors)} location errors)")
         low, tamper = classify(devices, cfg.ring_beams.battery_threshold_pct)
         notify(pushover, low, tamper, errors, logger)
+    except LockTimeoutError as e:
+        logger.error(f"Ring token lock timeout: {e}")
+        pushover.send_message(str(e), title="Ring: Token Lock Timeout", priority=1)
+        sys.exit(1)
     except BeamsAuthError as e:
         logger.error(f"Ring Beams auth failure: {e}")
-        pushover.send_message(str(e), title="Ring Beams: Auth Required", priority=0)
+        pushover.send_message(str(e), title="Ring: Auth Required", priority=0)
         sys.exit(1)
     except Exception as e:
         logger.error(f"Ring Beams check failed: {e}")
-        pushover.send_message(str(e), title="Ring Beams: Error", priority=1)
+        pushover.send_message(str(e), title="Ring: Error", priority=1)
         sys.exit(1)
 
 

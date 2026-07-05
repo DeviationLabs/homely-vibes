@@ -220,7 +220,7 @@ class TestZoneOutcomeDispatch:
         )
         call = self._outcome_call(pushover)
         assert call[1]["priority"] == -1
-        assert call[1]["title"] == "RachioFlume: Zone Report"
+        assert call[1]["title"] == "Rachio Zone Report"
         assert "Deviation" not in call[0][0]
         assert "'Upper Deck Planters' @ Hose Drip Jasmine" in call[0][0]
 
@@ -233,7 +233,7 @@ class TestZoneOutcomeDispatch:
         )
         call = self._outcome_call(pushover)
         assert call[1]["priority"] == 2
-        assert call[1]["title"] == "RachioFlume: Zone Anomaly"
+        assert call[1]["title"] == "Rachio Zone Anomaly"
         body = call[0][0]
         assert "Deviation" in body
         assert "Total: 15.0 gal" in body

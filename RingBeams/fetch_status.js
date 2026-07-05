@@ -9,7 +9,18 @@
 //
 // stdout: {"devices": [{zid, name, deviceType, categoryId, batteryLevel,
 //                       batteryStatus, tamperStatus, faulted, locationName}, ...]}
-// stderr: {"error": "<msg>"} on failure; exit code 1..3 signals class of error.
+// Exit-code contract (stderr carries a JSON {"error": "..."} on 2/3/4/5; on
+// exit 1 stderr is a raw Node stack trace with no JSON envelope):
+//   0  success
+//   1  uncaught Node crash / module-load failure (reserved for Node itself)
+//   2  missing RING_BEAMS_TOKEN_FILE env var
+//   3  token file unreadable / malformed         → auth-class
+//   4  post-auth unhandled JS exception
+//   5  auth / list-locations failure (bad token) → auth-class
+// Python (beams_manager.run_sidecar) maps 3 and 5 to BeamsAuthError; every
+// other non-zero code is a generic RuntimeError so a Node-version drift (e.g.
+// undici requiring global File on Node <20) does NOT get misclassified as
+// "Ring: Auth Required".
 import { RingApi } from 'ring-client-api';
 import fs from 'node:fs';
 
@@ -42,9 +53,12 @@ function writeRefreshToken(path, token) {
     } catch (_) {
         // fall through: write plain token
     }
-    // mode:0600 applies on file CREATE only; chmod normalizes pre-existing loose perms.
-    fs.writeFileSync(path, payload, { mode: 0o600 });
-    fs.chmodSync(path, 0o600);
+    // Atomic write: tmp file with 0o600 from birth, then rename over. Matches
+    // lib/secure_io.write_secret_atomic — a partial or crashed write can never
+    // leave the token file empty and page RingSecurity with invalid_grant.
+    const tmp = `${path}.tmp.${process.pid}`;
+    fs.writeFileSync(tmp, payload, { mode: 0o600 });
+    fs.renameSync(tmp, path);
 }
 
 async function main() {
@@ -65,8 +79,17 @@ async function main() {
         if (newRefreshToken) {
             try {
                 writeRefreshToken(tokenFile, newRefreshToken);
-            } catch (_) {
-                // best effort; next run will retry
+            } catch (e) {
+                // Ring rotated server-side but our write failed — the file now
+                // holds an already-consumed token. Surface loudly so the next
+                // invalid_grant is diagnosable (Python's run_sidecar tees this
+                // to stderr → cron log). Don't exit non-zero: we still have a
+                // valid in-memory session and returning devices is more useful
+                // than paging on a token-write hiccup.
+                console.error(JSON.stringify({
+                    warn: `TOKEN_WRITE_FAILED: ${e.message}`,
+                    path: tokenFile,
+                }));
             }
         }
     });
@@ -76,7 +99,7 @@ async function main() {
         locations = await ring.getLocations();
     } catch (e) {
         console.error(JSON.stringify({ error: `auth/list-locations failed: ${e.message}` }));
-        process.exit(1);
+        process.exit(5);
     }
 
     const devices = [];
