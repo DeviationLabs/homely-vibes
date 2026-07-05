@@ -12,7 +12,11 @@ Availability levels (from the tank):
     100 = full
 
 State is persisted to {logging_dir}/rheem_monitor_state.json as
-    {"alerted": {"<serial>": true/false}}
+    {"alerted": {"<serial>": "p1"|"p2"}}
+
+Deployment: cron runs `check` every few minutes (run-once per tick —
+fresh auth each run, free crash recovery, matches the repo cron convention).
+`monitor` is a foreground/dev alternative. `test` is a one-shot status dump.
 """
 
 import argparse
@@ -208,6 +212,22 @@ async def _monitor(args: argparse.Namespace, cfg: Config, logger: logging.Logger
     await monitor.run_continuous(args.poll_secs)
 
 
+async def _check(args: argparse.Namespace, cfg: Config, logger: logging.Logger) -> None:
+    """One polling cycle for cron: runs the alert state machine, then exits.
+
+    No Pushover status summary (unlike `test`) — alerts fire from the state
+    machine only when a threshold is crossed. Exit 0 on success so cron stays
+    quiet; non-zero exits surface in the cron log on real failures.
+    """
+    monitor = _build_monitor(cfg, logger)
+    heaters = await monitor.check_once()
+    logger.info(
+        "Rheem check complete: %d heater(s), %d alerted",
+        len(heaters),
+        len(monitor.alerted),
+    )
+
+
 async def _test(args: argparse.Namespace, cfg: Config, logger: logging.Logger) -> None:
     monitor = _build_monitor(cfg, logger)
     heaters = await monitor.check_once()
@@ -229,6 +249,8 @@ async def _test(args: argparse.Namespace, cfg: Config, logger: logging.Logger) -
 async def _run_command(args: argparse.Namespace, cfg: Config, logger: logging.Logger) -> None:
     if args.command == "monitor":
         await _monitor(args, cfg, logger)
+    elif args.command == "check":
+        await _check(args, cfg, logger)
     elif args.command == "test":
         await _test(args, cfg, logger)
 
@@ -243,12 +265,18 @@ def main() -> None:
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    monitor_parser = subparsers.add_parser("monitor", help="Continuous monitoring")
+    monitor_parser = subparsers.add_parser(
+        "monitor", help="Foreground continuous monitoring (dev; cron uses `check`)"
+    )
     monitor_parser.add_argument(
         "--poll-secs",
         type=int,
         default=None,
         help="Check interval in seconds (default: from config)",
+    )
+
+    _ = subparsers.add_parser(
+        "check", help="One polling cycle (cron): alert state machine, then exit"
     )
 
     _ = subparsers.add_parser("test", help="One-shot status check + Pushover summary")
