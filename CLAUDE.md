@@ -162,11 +162,6 @@ uv run pytest NodeCheck
 
 ## Component-Specific Guidance
 
-### Tesla Module (`Tesla/`)
-- **Authentication**: Uses TeslaPy library, requires OAuth setup via `lib/TeslaPy/gui.py`
-- **Main Features**: Powerwall monitoring, intelligent power management, battery history tracking
-- **Key Classes**: PowerwallManager, BatteryHistory, DecisionPoint
-
 ### August Module (`August/`)
 - **Authentication**: Requires 2FA via phone/email, tokens cached for ~7 days
 - **Main Features**: Smart lock monitoring, unlock duration alerts, door ajar detection, battery warnings, lock failure detection
@@ -174,13 +169,17 @@ uv run pytest NodeCheck
 - **Key Classes**: AugustManager with state persistence for alert tracking
 - **Alert Thresholds**: Configurable via CLI (default: 5min unlock, 10min ajar, 20% battery)
 
-### SamsungFrame Module (`SamsungFrame/`)
-- **Authentication**: WebSocket token-based auth, saved to `config samsung_frame.token_file`
-- **Main Features**: Image upload to Frame TV, matte/border management, slideshow control, art inventory management
-- **Initial Setup**: First upload command triggers TV pairing prompt, token auto-saved for future use
-- **Key Classes**: SamsungFrameClient, UploadResult (Pydantic), ImageUploadSummary
-- **CLI Commands**: upload, status, list-art, list-mattes, download-thumbnails, update-mattes, cycle-images
-- **Image Requirements**: JPG/PNG format, <10MB, validated before upload
+### BimpopAI Module (`BimpopAI/`)
+- **Architecture**: FastAPI backend + Streamlit frontend
+- **Features**: RAG system with document indexing, conversational AI
+- **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
+
+### lib/ (shared library)
+- **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
+- **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
+- **Secret I/O**: `lib/secure_io.py` — `write_secret_atomic(path, content)` for tokens we own (0o600 from birth), `ensure_secret_perms(path)` after third-party library writes (yalexs, SamsungTVWS). **All token/credential writes must go through these.**
+- **File lock**: `lib/file_lock.py` — POSIX `fcntl.flock` context manager for cross-process serialization on shared resources (e.g. Ring token file used by RingSecurity + RingBeams).
+- **TeslaPy Submodule**: External dependency managed as Git submodule
 
 ### NodeCheck Module (`NodeCheck/`)
 - **Purpose**: System node monitoring with continuous heartbeat tracking and automated device management
@@ -192,10 +191,28 @@ uv run pytest NodeCheck
 - **Architecture**: RachioClient, FlumeClient, WaterTrackingDB (SQLite), collector/reporter pattern
 - **Usage**: `rfmanager.py` CLI with collect/status/report commands
 
-### BimpopAI Module (`BimpopAI/`)
-- **Architecture**: FastAPI backend + Streamlit frontend
-- **Features**: RAG system with document indexing, conversational AI
-- **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
+### RingBeams Module (`RingBeams/`)
+- **Purpose**: Daily battery + tamper health check for Ring Beams motion sensors and Ring Alarm sensors via Node sidecar (ring-client-api over socket.io).
+- **Sidecar**: `fetch_status.js` — exit-code contract documented at top of file (0/1/2/3/4/5). Python parent maps 3 and 5 to `BeamsAuthError`; other non-zero codes raise `RuntimeError` (so a Node module-load crash never gets misclassified as "auth required").
+- **Token sharing**: reads/writes the same `config/tokens/ring_auth_token.json` as RingSecurity; a POSIX flock (`lib.file_lock`) serializes the two runs so overlapping refreshes don't produce `invalid_grant`.
+
+### RingSecurity Module (`RingSecurity/`)
+- **Purpose**: Daily battery + offline health check for Ring cameras and doorbells via REST.
+- **Authentication**: 2FA via `ring_manager.py auth`; token stored in `config/tokens/ring_auth_token.json`.
+- **Token sharing**: see RingBeams — shared token, POSIX flock.
+
+### SamsungFrame Module (`SamsungFrame/`)
+- **Authentication**: WebSocket token-based auth, saved to `config samsung_frame.token_file`
+- **Main Features**: Image upload to Frame TV, matte/border management, slideshow control, art inventory management
+- **Initial Setup**: First upload command triggers TV pairing prompt, token auto-saved for future use
+- **Key Classes**: SamsungFrameClient, UploadResult (Pydantic), ImageUploadSummary
+- **CLI Commands**: upload, status, list-art, list-mattes, download-thumbnails, update-mattes, cycle-images
+- **Image Requirements**: JPG/PNG format, <10MB, validated before upload
+
+### Tesla Module (`Tesla/`)
+- **Authentication**: Fleet API OAuth (previously TeslaPy — migrated in PR #178)
+- **Main Features**: Powerwall monitoring, intelligent power management, battery history tracking, retry on transient Fleet API errors
+- **Key Classes**: PowerwallManager, BatteryHistory, DecisionPoint, TeslaAPIClient
 
 ### VSCodeSidebarNotes Module (`VSCodeSidebarNotes/`)
 - **Stack**: TypeScript VS Code / Cursor extension (NOT Python — does not use uv, pytest, or the rest of the repo's Python tooling).
@@ -203,12 +220,6 @@ uv run pytest NodeCheck
 - **Build**: `cd VSCodeSidebarNotes && npm install && npm run compile` (esbuild → `dist/extension.js`). `npm run package-vsix` produces an installable `.vsix`.
 - **Marketplace**: published under the `deviationlabs` publisher; see the module README for the publish flow.
 - **Layout**: `package.json` (extension manifest), `src/` (TS source), `media/` (webview assets).
-
-### Shared Library (`lib/`)
-- **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
-- **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
-- **Secret I/O**: `lib/secure_io.py` — `write_secret_atomic(path, content)` for tokens we own (0o600 from birth), `ensure_secret_perms(path)` after third-party library writes (yalexs, SamsungTVWS). **All token/credential writes must go through these.**
-- **TeslaPy Submodule**: External dependency managed as Git submodule
 
 ## Best Practices
 

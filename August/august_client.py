@@ -83,7 +83,14 @@ class LockState:
 
 
 class AugustClient:
-    def __init__(self, email: str, password: str, phone: Optional[str] = None):
+    def __init__(
+        self,
+        email: str,
+        password: str,
+        phone: Optional[str] = None,
+        *,
+        pushover: Optional[Pushover] = None,
+    ):
         self.email = email
         self.password = password
         self.phone = phone
@@ -94,8 +101,13 @@ class AugustClient:
         self.authenticator: Optional[AuthenticatorAsync] = None
         self.access_token: Optional[str] = None
         self.locks: Dict[str, Lock] = {}
-        cfg = get_config()
-        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
+        # Injectable Pushover so tests can pass a recording double instead of
+        # touching real config + production tokens. Matches the RingSecurity /
+        # RingBeams factory-injection pattern; see CLAUDE.md "NEVER use patch()".
+        if pushover is None:
+            cfg = get_config()
+            pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
+        self.pushover = pushover
 
     async def unlock_lock(self, lock_id: str) -> bool:
         """Unlock a specific lock."""
@@ -305,16 +317,29 @@ class AugustMonitor:
         battery_threshold_pct: int = 20,
         battery_alert_cooldown_minutes: int = 42 * 60,  # 1.75 days
         door_alert_cooldown_minutes: int = 2,
+        *,
+        client: Optional[AugustClient] = None,
+        pushover: Optional[Pushover] = None,
+        state_file: Optional[str] = None,
     ):
-        self.client = AugustClient(email, password, phone)
+        # Injectable client + pushover + state_file path so tests never touch
+        # real config or send real Pushover messages. See AugustClient.__init__.
+        if pushover is None or state_file is None:
+            cfg = get_config()
+            if pushover is None:
+                pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
+            if state_file is None:
+                state_file = f"{cfg.paths.logging_dir}/august_monitor_state.json"
+        if client is None:
+            client = AugustClient(email, password, phone, pushover=pushover)
+        self.client = client
         self.unlock_threshold = unlock_threshold_minutes * 60
         self.ajar_threshold = ajar_threshold_minutes * 60
         self.battery_threshold_pct = battery_threshold_pct
         self.battery_alert_cooldown = battery_alert_cooldown_minutes * 60
         self.door_alert_cooldown = door_alert_cooldown_minutes * 60
         self.logger = get_logger(__name__)
-        cfg = get_config()
-        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["August"])
+        self.pushover = pushover
         self.unlock_start_times: Dict[str, float] = {}
         self.ajar_start_times: Dict[str, float] = {}
         self.last_unlock_alerts: Dict[str, float] = {}
@@ -324,7 +349,7 @@ class AugustMonitor:
         # Track unknown status for recovery
         self.unknown_status_start_times: Dict[str, float] = {}
         self.unknown_threshold = 30 * 60  # 30 minutes
-        self.state_file = f"{cfg.paths.logging_dir}/august_monitor_state.json"
+        self.state_file = state_file
         # Pending alerts for consolidation: (lock_name, alert_type, message)
         self.pending_alerts: list[tuple[str, str, str]] = []
         self._load_state()
