@@ -344,23 +344,6 @@ class PersonalCalSyncConfig:
 
 
 @dataclass
-class WhatsAppSummaryJobConfig:
-    """Schedule + log paths for the WhatsApp summary launchd job"""
-
-    hour: int
-    minute: int
-    stdout_path: str
-    stderr_path: str
-
-
-@dataclass
-class LaunchJobsConfig:
-    """macOS launchd job configuration"""
-
-    whatsapp_summary: WhatsAppSummaryJobConfig
-
-
-@dataclass
 class VoiceNotesConfig:
     """VoiceNotes local STT via whisper.cpp configuration"""
 
@@ -404,7 +387,6 @@ class Config:
     personal_cal_sync: PersonalCalSyncConfig
     voice_notes: VoiceNotesConfig
     prod_controller: ProdControllerConfig
-    launch_jobs: LaunchJobsConfig
     my_external_ip: str
     seconds_in_day: int
 

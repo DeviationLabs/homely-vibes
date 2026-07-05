@@ -46,7 +46,6 @@ exclude:
 - GarageCheck/
 - GPXParser/
 - LambdaEmailFwder/
-- LaunchJobs/
 - lib/
 - NetworkCheck/
 - NodeCheck/

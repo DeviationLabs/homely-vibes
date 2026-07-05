@@ -85,7 +85,6 @@ See `config/default.yaml` for the full structure and `config/local.yaml.example`
 | 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | [📖 README](GarageCheck/README.md) |
 | 🗺️ **GPXParser** | GPX track analysis and processing tools for GPS data visualization and route analysis. | [📖 README](GPXParser/README.md) |
 | 📧 **LambdaEmailFwder** | AWS Lambda function for automated email forwarding and intelligent message processing. | [📖 README](LambdaEmailFwder/README.md) |
-| ⏰ **LaunchJobs** | One CLI for every homely_vibes-owned macOS `launchd` job. Render plists, bootstrap them, tail logs. First job: WhatsApp daily summary. | [📖 README](LaunchJobs/README.md) |
 | 🛠️ **lib** | Shared utilities: OmegaConf config, Pushover / Mailer / Twilio, atomic secret I/O, POSIX file lock. Used by every module. | - |
 | 🌐 **NetworkCheck** | Network uplink speedtest with outcome-driven Pushover priority and external IP reporter. | [📖 README](NetworkCheck/README.md) |
 | 🖥️ **NodeCheck** | System node monitoring with continuous heartbeat tracking and automated device management. | [📖 README](NodeCheck/README.md) |
