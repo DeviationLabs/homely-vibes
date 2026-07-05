@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 from lib.config import RingBeamsConfig, get_config
+from lib.file_lock import LockTimeoutError, acquire_lock
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 
@@ -200,10 +201,19 @@ def main() -> None:
     cfg = get_config()
     pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens[PUSHOVER_KEY])
     try:
-        devices, errors = run_sidecar(cfg.ring_beams, logger)
+        # Serialize against RingSecurity — both share cfg.ring_beams.token_file
+        # (== cfg.ring.token_file); Ring OAuth rotates the refresh_token on
+        # every use. Parent Python holds the flock across the Node sidecar
+        # spawn; the child inherits serialization implicitly.
+        with acquire_lock(cfg.ring_beams.token_file):
+            devices, errors = run_sidecar(cfg.ring_beams, logger)
         logger.info(f"Fetched {len(devices)} devices from sidecar ({len(errors)} location errors)")
         low, tamper = classify(devices, cfg.ring_beams.battery_threshold_pct)
         notify(pushover, low, tamper, errors, logger)
+    except LockTimeoutError as e:
+        logger.error(f"Ring token lock timeout: {e}")
+        pushover.send_message(str(e), title="Ring: Token Lock Timeout", priority=1)
+        sys.exit(1)
     except BeamsAuthError as e:
         logger.error(f"Ring Beams auth failure: {e}")
         pushover.send_message(str(e), title="Ring: Auth Required", priority=0)

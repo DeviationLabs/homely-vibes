@@ -21,6 +21,7 @@ import aiohttp
 from ring_doorbell import AuthenticationError, Auth, Requires2FAError, Ring
 
 from lib.config import RingConfig, get_config
+from lib.file_lock import LockTimeoutError, acquire_lock
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
 from lib.secure_io import write_secret_atomic
@@ -153,8 +154,17 @@ def main() -> None:
 
     pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens[PUSHOVER_KEY])
     try:
-        low, offline = asyncio.run(check_devices(cfg.ring, logger))
+        # Serialize against RingBeams (Node sidecar via beams_manager) — both
+        # read/write cfg.ring.token_file and Ring OAuth rotates refresh_token
+        # on every use. Held for the whole ring session (refresh happens
+        # inside ring-doorbell, not at a call site we control).
+        with acquire_lock(cfg.ring.token_file):
+            low, offline = asyncio.run(check_devices(cfg.ring, logger))
         notify(pushover, low, offline, logger)
+    except LockTimeoutError as e:
+        logger.error(f"Ring token lock timeout: {e}")
+        pushover.send_message(str(e), title="Ring: Token Lock Timeout", priority=1)
+        sys.exit(1)
     except RingAuthError as e:
         logger.error(f"Ring auth failure: {e}")
         pushover.send_message(str(e), title="Ring: Auth Required", priority=0)
