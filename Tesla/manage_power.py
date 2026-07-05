@@ -67,8 +67,15 @@ class BatteryHistory:
 class PowerwallManager:
     """Manages Tesla Powerwall operations."""
 
-    def __init__(self, email: str, send_notifications: bool = False):
-        cfg = get_config()
+    def __init__(
+        self,
+        email: str,
+        send_notifications: bool = False,
+        *,
+        pushover: Optional["Pushover"] = None,
+    ):
+        # Injectable Pushover so tests can pass a recording double and never
+        # touch real config or Amit's phone. See CLAUDE.md "NEVER use patch()".
         self.email = email
         self.send_notifications = send_notifications
         self.battery_history = BatteryHistory()
@@ -78,7 +85,10 @@ class PowerwallManager:
             None  # APB: 5/25/23 seems we are no longer getting this data from the query
         )
         self.logger = get_logger(__name__)
-        self.pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["Powerwall"])
+        if pushover is None:
+            cfg = get_config()
+            pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["Powerwall"])
+        self.pushover = pushover
 
     def sanitize_battery_percentage(self, pct: float, time_sampling: float) -> float:
         """Sanitize battery percentage using history and extrapolation."""

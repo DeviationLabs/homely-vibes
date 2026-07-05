@@ -3,9 +3,10 @@
 
 import pytest
 from pathlib import Path
-from typing import Any, Generator
+from typing import Generator
 from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from yalexs.lock import LockStatus, LockDoorStatus
+from lib.MyPushover import Pushover
 from August.august_client import (
     AugustClient,
     AugustMonitor,
@@ -41,20 +42,17 @@ class TestAugustClient:
     """Test AugustClient functionality"""
 
     @pytest.fixture
-    def client(self) -> Generator[AugustClient, None, None]:
-        # AugustClient.__init__ builds a real Pushover from real config unless we
-        # stub it here. Tests that mock authenticate() to REQUIRES_VALIDATION /
-        # error paths would otherwise send a real Pushover message to Amit's
-        # phone via the production August token. Mirror TestAugustMonitor's
-        # fixture-level patching.
-        mock_config = MagicMock()
-        mock_config.pushover.user = "user123"
-        mock_config.pushover.tokens = {"August": "token123"}
-        with (
-            patch("August.august_client.Pushover"),
-            patch("August.august_client.get_config", return_value=mock_config),
-        ):
-            yield AugustClient("test@example.com", "password123", "+1234567890")
+    def client(self) -> AugustClient:
+        # Inject a fake Pushover — AugustClient.__init__ has an optional
+        # pushover= kwarg for exactly this. Tests that hit auth error paths
+        # (REQUIRES_VALIDATION / unknown state / exception) would otherwise
+        # push real notifications to Amit's phone via the production token.
+        return AugustClient(
+            "test@example.com",
+            "password123",
+            "+1234567890",
+            pushover=MagicMock(spec=Pushover),
+        )
 
     def test_init(self, client: AugustClient) -> None:
         """Test AugustClient initialization"""
@@ -262,20 +260,17 @@ class TestAugustMonitor:
     """Test AugustMonitor functionality"""
 
     @pytest.fixture
-    def monitor(self) -> AugustMonitor:
-        # Mock the config to return test values
-        mock_config = MagicMock()
-        mock_config.pushover.user = "user123"
-        mock_config.pushover.tokens = {"August": "token123"}
-        mock_config.august.token_file = "/tmp/august_auth_token.json"
-        mock_config.paths.logging_dir = "/tmp"
-
-        with (
-            patch("August.august_client.AugustClient"),
-            patch("August.august_client.Pushover"),
-            patch("August.august_client.get_config", return_value=mock_config),
-        ):
-            return AugustMonitor("test@example.com", "password123")
+    def monitor(self, tmp_path: Path) -> AugustMonitor:
+        # DI: pass fakes directly. No patch() on production symbols. The
+        # AugustClient is a bare Mock (we exercise Monitor behavior; the
+        # client is only touched by tests that reassign monitor.client).
+        return AugustMonitor(
+            "test@example.com",
+            "password123",
+            client=MagicMock(spec=AugustClient),
+            pushover=MagicMock(spec=Pushover),
+            state_file=str(tmp_path / "august_monitor_state.json"),
+        )
 
     def test_init(self, monitor: AugustMonitor) -> None:
         """Test AugustMonitor initialization"""
@@ -293,40 +288,28 @@ class TestAugustMonitor:
         assert monitor.last_unlock_alerts == {}
         assert monitor.last_ajar_alerts == {}
 
-    @patch("August.august_client.json.load")
-    @patch("builtins.open")
-    def test_load_state_with_file(self, mock_open: Any, mock_json_load: Any) -> None:
-        """Test loading state from existing file"""
-        mock_state = {
-            "unlock_start_times": {"lock1": 1234567890.0},
-            "ajar_start_times": {"lock2": 1234567900.0},
-            "last_unlock_alerts": {"lock1": 1234567800.0},
-            "last_ajar_alerts": {"lock2": 1234567850.0},
-            "last_battery_alerts": {},
-            "last_lock_failure_alerts": {},
-        }
-        mock_json_load.return_value = mock_state
-
-        # Mock config
-        mock_config = MagicMock()
-        mock_config.pushover.user = "user123"
-        mock_config.pushover.tokens = {"August": "token123"}
-        mock_config.august.token_file = "/tmp/august_auth_token.json"
-        mock_config.paths.logging_dir = "/tmp"
-
-        with (
-            patch("August.august_client.AugustClient"),
-            patch("August.august_client.Pushover"),
-            patch("August.august_client.get_config", return_value=mock_config),
-        ):
-            monitor = AugustMonitor("test@example.com", "password123")
-
-            # Verify the file was opened
-            mock_open.assert_called_once()
-            assert monitor.unlock_start_times == {"lock1": 1234567890.0}
-            assert monitor.ajar_start_times == {"lock2": 1234567900.0}
-            assert monitor.last_unlock_alerts == {"lock1": 1234567800.0}
-            assert monitor.last_ajar_alerts == {"lock2": 1234567850.0}
+    def test_load_state_with_file(self, tmp_path: Path) -> None:
+        """State file is read on construction."""
+        state_file = tmp_path / "state.json"
+        state_file.write_text(
+            '{"unlock_start_times": {"lock1": 1234567890.0}, '
+            '"ajar_start_times": {"lock2": 1234567900.0}, '
+            '"last_unlock_alerts": {"lock1": 1234567800.0}, '
+            '"last_ajar_alerts": {"lock2": 1234567850.0}, '
+            '"last_battery_alerts": {}, '
+            '"last_lock_failure_alerts": {}}'
+        )
+        monitor = AugustMonitor(
+            "test@example.com",
+            "password123",
+            client=MagicMock(spec=AugustClient),
+            pushover=MagicMock(spec=Pushover),
+            state_file=str(state_file),
+        )
+        assert monitor.unlock_start_times == {"lock1": 1234567890.0}
+        assert monitor.ajar_start_times == {"lock2": 1234567900.0}
+        assert monitor.last_unlock_alerts == {"lock1": 1234567800.0}
+        assert monitor.last_ajar_alerts == {"lock2": 1234567850.0}
 
     @pytest.mark.asyncio
     async def test_process_lock_status_locked(self, monitor: AugustMonitor) -> None:

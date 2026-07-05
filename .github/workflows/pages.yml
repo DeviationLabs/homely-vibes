@@ -67,8 +67,17 @@ jobs:
           
           echo '</body></html>' >> _site/index.html
           
+      # Per-run unique artifact name. Working around a GitHub upstream bug
+      # where actions/upload-pages-artifact@v3 sometimes uploads the same
+      # payload multiple times under the default name "github-pages", which
+      # then trips actions/deploy-pages@v4 with:
+      #   Multiple artifacts named "github-pages" were unexpectedly found
+      # for this workflow run. Artifact count is 3.
+      # Unique-per-run name sidesteps the collision entirely.
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
+        with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
 
   deploy:
     environment:
@@ -81,3 +90,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
