@@ -59,7 +59,7 @@ This is a **modular IoT home automation system** with independent components tha
 - **`lib/`**: Shared utilities (config, networking, notifications, logging, secret I/O, file lock)
 - **Home / IoT modules**: August, NetworkCheck, NodeCheck, RachioFlume, RingBeams, RingSecurity, SamsungFrame, Tesla
 - **AI / ML modules**: BimpopAI (RAG system), GarageCheck (computer vision), VoiceNotes (local STT)
-- **Ops modules**: LaunchJobs (macOS launchd), PersonalCalSync (Google Apps Script), OpenAIAdmin, LambdaEmailFwder
+- **Ops modules**: PersonalCalSync (Google Apps Script), OpenAIAdmin, LambdaEmailFwder
 - **Client / adjacent**: NoShorts (iOS app), VSCodeSidebarNotes (VS Code / Cursor extension), BrowserAlert, GPXParser
 
 ### Key Architectural Patterns
@@ -252,8 +252,9 @@ Convention: `P{N}` maps 1:1 to Pushover `priority=N`. Every module README uses t
 - Drain stdout before `process.exit(0)` — pass the exit callback to `process.stdout.write(payload, () => process.exit(0))`. On stdout-as-pipe, writes above ~16KB are buffered.
 - Surface partial failures (per-location, per-device) in the JSON payload, not just stderr. Python only reads stderr on non-zero exit, so a silent partial with `exit 0` becomes a false "all healthy" report.
 
-### Cron & deployment
-- **Aibo (Linux prod) hosts homely_vibes at `~/Code`** — NOT `~/Documents/homely_vibes` as on the Mac. All aibo cron entries `cd ~/Code`.
+### Scheduling & deployment
+- **macOS scheduled jobs live in Claude Code routines**, not in this repo. The former `LaunchJobs/` module (macOS `launchd` plist generator, incl. WhatsApp daily summary) was removed — routines replace it. Don't reintroduce a launchd module here; if you need a new scheduled Mac job, add a Claude Code routine.
+- **Aibo (Linux prod) hosts homely_vibes at `~/Code`** — NOT `~/Documents/deviation-labs/homely_vibes` as on the Mac. All aibo cron entries `cd ~/Code`.
 - Cron entries redirect stdout+stderr to a file: `>> ~/logs/<script>.log 2>&1`. Never `> /dev/null` — you'd lose pre-logger crashes (import errors, `uv` failures, missing binaries).
 - `lib.logger.get_logger()` sets up dual handlers (stdout + per-script log file under `cfg.paths.logging_dir`). Cron file redirection is the safety net for anything that happens before the logger initializes.
 - Cron env needs `PATH` set for non-standard binaries (`node`, `uv`). Prepend `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin` at the top of the crontab, or use absolute paths in commands.
