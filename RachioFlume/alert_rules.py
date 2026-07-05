@@ -183,9 +183,9 @@ def send_zone_outcome_pushover(
         lines.extend(line for line in extra_lines if line)
 
     if is_anomaly:
-        title, priority = "RachioFlume: Zone Anomaly", 2
+        title, priority = "Rachio Zone Anomaly", 2
     else:
-        title, priority = "RachioFlume: Zone Report", -1
+        title, priority = "Rachio Zone Report", -1
 
     pushover.send_message("\n".join(lines), title=title, priority=priority)
     logger.info(

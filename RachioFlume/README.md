@@ -9,7 +9,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
 - **Data Correlation**: Match watering events with water usage patterns
 - **Smart Hose Timer support** (`rachio_hose_client.py`, `hose_timer_processor.py`): Rachio Smart Hose Timer base stations exposed via `cloud-rest.rach.io` alongside the controller. Runs detected via `lastWateringAction` state polling; flow stats from Flume.
 - **Usage Alerts** (`alert_engine.py`):
-  - **Single dispatch per zone end**: One Pushover per zone end — `RachioFlume: Zone Report` (P-1) below anomaly threshold, `RachioFlume: Zone Anomaly` (P2) above. Never both. Includes runtime, avg GPM, `(thresh X.XX)` (computed anomaly threshold), Total, and Deviation line on anomalies.
+  - **Single dispatch per zone end**: One Pushover per zone end — `Rachio Zone Report` (P-1) below anomaly threshold, `Rachio Zone Anomaly` (P2) above. Never both. Includes runtime, avg GPM, `(thresh X.XX)` (computed anomaly threshold), Total, and Deviation line on anomalies.
   - **Zone anomaly detection**: Per-zone baselines under `rachio_flume.alerts.zone_anomaly.zone_thresholds`, keyed by device label then zone identifier (controller: stringified `zone_number`; hose-timer: valve name). Threshold formula: `avg_gpm + max(absolute_gpm, percent_above/100 × avg_gpm)`.
   - **Default flow rules** (whole-house, Flume-only): Pipe Break / High Flow / Mid Flow / Leak — P2 (emergency), at most once per day per rule. CV-based variance filter rejects spiky noise on low-flow rules.
   - **Cross-source suppression**: Controller-active OR hose-timer-active state suppresses Flume rules for `max_rule_duration + 10min` slack. Symmetric.
@@ -144,8 +144,8 @@ Key behaviors:
 
 - **One Pushover per zone end** — `_send_zone_outcome` on both AlertEngine and
   HoseTimerProcessor picks `(title, priority)` based on whether measured flow
-  exceeds the anomaly threshold. Either `RachioFlume: Zone Report` (P-1) OR
-  `RachioFlume: Zone Anomaly` (P2). Never both. Anomaly variant adds a
+  exceeds the anomaly threshold. Either `Rachio Zone Report` (P-1) OR
+  `Rachio Zone Anomaly` (P2). Never both. Anomaly variant adds a
   `Deviation: +X.XX GPM (Y%)` line. Both variants include `Total: N.N gal`.
 - **Unified threshold value** — the `(thresh X.XX)` shown on every zone-end
   report is the computed anomaly trigger value, matching what actually fires.
