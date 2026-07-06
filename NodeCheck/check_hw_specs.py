@@ -9,8 +9,8 @@ Prompts for a sudo password only if the remote sudo requires one
 (tries passwordless first, falls back to password).
 
 Usage:
-    uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200
-    uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200 --user <ssh-user>
+    uv run NodeCheck/check_hw_specs.py --ip 192.168.x.x
+    uv run NodeCheck/check_hw_specs.py --ip 192.168.x.x --user <ssh-user>
 """
 
 import argparse

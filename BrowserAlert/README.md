@@ -9,7 +9,7 @@ This system monitors web browsing activity by analyzing Chrome browser history a
 ## Prerequisites
 
 ### Network Setup
-- **Static IP**: 192.168.1.24
+- **Static IP**: 192.168.x.x
 - **Network**: Ensure device is on main network (Aerosol), not guest network
   - Check from Deco Device page
   - If on Guest network, disable Guest on Deco to force device to roam back
@@ -122,7 +122,7 @@ Also tried: `chrome://net-internals/#dns`
 Attempted redirect configuration:
 ```apache
 # /etc/apache2/sites-enabled/000-default.conf
-ErrorDocument 404 http://192.168.1.1:30000/shn_blocking.html?cat_id=100&domain=EDEN_Inc_Not_Allowed/
+ErrorDocument 404 http://192.168.x.x:30000/shn_blocking.html?cat_id=100&domain=EDEN_Inc_Not_Allowed/
 
 # Test and restart
 sudo apache2ctl configtest
