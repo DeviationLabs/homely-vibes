@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Tests for HeartbeatMonitor flap-suppression logic."""
 
-from typing import List
+from typing import List, cast
 from unittest.mock import MagicMock
 
 import pytest
 
 from NodeCheck.heartbeat_nodes import HeartbeatMonitor
+from NodeCheck.nodes import GenericNode
 
 
 def _fake_node(name: str, healthy_sequence: List[bool]) -> MagicMock:
@@ -23,7 +24,7 @@ def _monitor(nodes: List[MagicMock]) -> HeartbeatMonitor:
     monitor = HeartbeatMonitor.__new__(HeartbeatMonitor)
     monitor.specific_nodes = None
     monitor.pushover = MagicMock()
-    monitor.monitored_nodes = nodes
+    monitor.monitored_nodes = cast(List[GenericNode], nodes)
     monitor.last_down_nodes = set()
     monitor.last_notification_time = None
     monitor.consecutive_down = {}
