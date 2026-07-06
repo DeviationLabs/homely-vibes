@@ -2,7 +2,7 @@
 import argparse
 import sys
 import time
-from typing import List, Set
+from typing import Dict, List, Set
 from lib.config import NodeType, get_config
 from lib.logger import SystemLogger
 from lib.MyPushover import Pushover
@@ -15,6 +15,12 @@ _NODE_CLASS_BY_TYPE: dict[NodeType, type[GenericNode]] = {
     NodeType.GENERIC: GenericNode,
     NodeType.ARP: ArpNode,
 }
+
+# Flap suppression: require this many consecutive down probes before alerting.
+# Absorbs one-off blips (WiFi power-save, transient packet loss, cold ARP cache)
+# without waiting a full cooloff period. Costs one extra poll cycle of latency
+# before a real outage triggers a page.
+_MIN_CONSECUTIVE_DOWN_FOR_ALERT = 2
 
 logger = SystemLogger.get_logger(__name__)
 
@@ -29,6 +35,7 @@ class HeartbeatMonitor:
 
         self.last_down_nodes: Set[str] = set()
         self.last_notification_time: float | None = None
+        self.consecutive_down: Dict[str, int] = {}
 
     def _create_nodes_list(self) -> List[GenericNode]:
         """Create nodes for all node types and filter based on specific_nodes parameter"""
@@ -62,22 +69,37 @@ class HeartbeatMonitor:
         return nodes
 
     def check_monitored_nodes(self) -> Set[str]:
-        """Check all monitored nodes and return set of down node names"""
-        down_nodes = set()
+        """Probe every node and return only the flap-suppressed down set.
+
+        A node must fail `_MIN_CONSECUTIVE_DOWN_FOR_ALERT` consecutive probes
+        before appearing in the returned set. A single successful probe resets
+        the streak. This applies uniformly to every NodeType.
+        """
+        confirmed_down: Set[str] = set()
 
         for node in self.monitored_nodes:
+            logger.debug(f"Checking {node.name} ({node.config.ip})...")
             try:
-                logger.debug(f"Checking {node.name} ({node.config.ip})...")
-                if not node.heartbeat():
-                    down_nodes.add(node.name)
-                    logger.warning(f"Node {node.name} is down")
-                else:
-                    logger.debug(f"Node {node.name} is healthy")
+                healthy = node.heartbeat()
             except Exception as e:
                 logger.error(f"Error checking node {node.name}: {e}")
-                down_nodes.add(node.name)
+                healthy = False
 
-        return down_nodes
+            if healthy:
+                if self.consecutive_down.get(node.name, 0) > 0:
+                    logger.debug(f"Node {node.name} recovered (streak reset)")
+                self.consecutive_down[node.name] = 0
+                continue
+
+            streak = self.consecutive_down.get(node.name, 0) + 1
+            self.consecutive_down[node.name] = streak
+            if streak >= _MIN_CONSECUTIVE_DOWN_FOR_ALERT:
+                confirmed_down.add(node.name)
+                logger.warning(f"Node {node.name} is down (streak={streak})")
+            else:
+                logger.info(f"Node {node.name} failed probe (streak={streak}, suppressing alert)")
+
+        return confirmed_down
 
     def send_notification(self, down_nodes: Set[str]) -> None:
         """Send pushover notification for down nodes"""
