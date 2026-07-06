@@ -63,6 +63,7 @@ temperature. Prompts for a sudo password only if the remote requires one
 - **`FoscamNode`**: Camera operations (image capture, HTTP reboot)
 - **`WindowsNode`**: SSH commands, uptime checks
 - **`GenericNode`**: Ping-only monitoring
+- **`ArpNode`**: Presence via ARP cache — for WiFi devices that drop ICMP under power-save (e.g. iPhones)
 
 ## Configuration
 
@@ -90,6 +91,9 @@ node_check:
     "Server1":
       ip: "192.168.1.101"
       node_type: generic
+    "PhoneOnWifi":
+      ip: "192.168.1.xxx"
+      node_type: arp
 ```
 
 ## Command Reference
