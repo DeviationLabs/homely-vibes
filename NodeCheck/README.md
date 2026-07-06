@@ -30,8 +30,8 @@ uv run NodeCheck/manage_nodes.py --type foscam --always_email
 ### Hardware Specs
 
 ```bash
-uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200
-uv run NodeCheck/check_hw_specs.py --ip 192.168.1.200 --user <ssh-user> --port 22
+uv run NodeCheck/check_hw_specs.py --ip 192.168.x.x
+uv run NodeCheck/check_hw_specs.py --ip 192.168.x.x --user <ssh-user> --port 22
 ```
 
 SSHes into the host and prints model, SoC, CPU, memory, storage, network
@@ -63,6 +63,7 @@ temperature. Prompts for a sudo password only if the remote requires one
 - **`FoscamNode`**: Camera operations (image capture, HTTP reboot)
 - **`WindowsNode`**: SSH commands, uptime checks
 - **`GenericNode`**: Ping-only monitoring
+- **`ArpNode`**: Presence via ARP cache — for WiFi devices that drop ICMP under power-save (e.g. iPhones)
 
 ## Configuration
 
@@ -78,18 +79,21 @@ node_check:
     password: your_password
   node_configs:
     "Camera1":
-      ip: "192.168.1.51"
+      ip: "192.168.x.x"
       node_type: foscam
       username: your_username
       password: your_password
     "WinBox1":
-      ip: "192.168.1.100"
+      ip: "192.168.x.x"
       node_type: windows
       username: your_username
       password: your_password
     "Server1":
-      ip: "192.168.1.101"
+      ip: "192.168.x.x"
       node_type: generic
+    "PhoneOnWifi":
+      ip: "192.168.1.xxx"
+      node_type: arp
 ```
 
 ## Command Reference

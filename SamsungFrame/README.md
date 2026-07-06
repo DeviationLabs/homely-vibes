@@ -133,7 +133,7 @@ uv run python SamsungFrame/manage_samsung.py status
 
 Example output:
 ```
-Connecting to Samsung Frame TV at 192.168.1.4...
+Connecting to Samsung Frame TV at 192.168.x.x...
 ==================================================
 TV STATUS
 ==================================================
@@ -318,7 +318,7 @@ Run `uv run python SamsungFrame/manage_samsung.py list-mattes` to see your TV's 
 
 ### Cannot Connect to TV
 
-**Symptoms**: `Failed to connect to TV at 192.168.1.4`
+**Symptoms**: `Failed to connect to TV at 192.168.x.x`
 
 **Solutions**:
 - Verify TV is powered on (not fully off)

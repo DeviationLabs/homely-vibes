@@ -29,6 +29,7 @@ class NodeType(StrEnum):
     WINDOWS = "windows"
     GENERIC = "generic"
     MYLINK = "mylink"
+    ARP = "arp"
 
 
 class OpMode(StrEnum):

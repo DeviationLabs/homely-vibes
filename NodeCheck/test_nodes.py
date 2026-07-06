@@ -2,13 +2,14 @@
 """Tests for NodeCheck nodes module."""
 
 import pytest
+import subprocess
 from unittest.mock import patch
 from typing import Any
 import json
 import socket
 from unittest.mock import MagicMock
 from NodeCheck.manage_nodes import NodeChecker
-from NodeCheck.nodes import FoscamNode, GenericNode, SomfyMyLinkNode, WindowsNode
+from NodeCheck.nodes import ArpNode, FoscamNode, GenericNode, SomfyMyLinkNode, WindowsNode
 from lib.config import NodeConfig, NodeType
 
 
@@ -414,6 +415,80 @@ class TestWaitForHeartbeat:
 
         assert self._checker()._wait_for_heartbeat(node, attempts=4, delay=0) is False
         assert node.heartbeat.call_count == 4
+
+
+class TestArpNode:
+    """Test ArpNode functionality"""
+
+    @pytest.fixture
+    def arp_config(self) -> NodeConfig:
+        return NodeConfig("192.0.2.79", NodeType.ARP)
+
+    @pytest.fixture
+    def arp_node(self, arp_config: NodeConfig) -> ArpNode:
+        return ArpNode("TestPhone", arp_config)
+
+    @patch("NodeCheck.nodes.subprocess.run")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_arp_node_online(self, mock_ping: Any, mock_run: Any, arp_node: ArpNode) -> None:
+        """MAC in ARP cache -> online, regardless of ping result."""
+        mock_ping.return_value = False
+        mock_run.return_value = MagicMock(
+            stdout="? (192.0.2.79) at aa:bb:cc:dd:ee:ff [ether] on en0\n",
+            returncode=0,
+        )
+
+        assert arp_node.heartbeat() is True
+        assert arp_node.is_online is True
+
+    @patch("NodeCheck.nodes.subprocess.run")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_arp_node_offline_incomplete(
+        self, mock_ping: Any, mock_run: Any, arp_node: ArpNode
+    ) -> None:
+        """ARP cache entry marked (incomplete) -> offline."""
+        mock_ping.return_value = False
+        mock_run.return_value = MagicMock(
+            stdout="? (192.0.2.79) at (incomplete) on en0\n",
+            returncode=0,
+        )
+
+        assert arp_node.heartbeat() is False
+        assert arp_node.is_online is False
+
+    @patch("NodeCheck.nodes.subprocess.run")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_arp_node_offline_no_entry(
+        self, mock_ping: Any, mock_run: Any, arp_node: ArpNode
+    ) -> None:
+        """Empty ARP output -> offline."""
+        mock_ping.return_value = False
+        mock_run.return_value = MagicMock(stdout="", returncode=1)
+
+        assert arp_node.heartbeat() is False
+        assert arp_node.is_online is False
+
+    @patch("NodeCheck.nodes.subprocess.run")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_arp_node_timeout(self, mock_ping: Any, mock_run: Any, arp_node: ArpNode) -> None:
+        """subprocess timeout -> offline, no crash."""
+        mock_ping.return_value = False
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="arp", timeout=2)
+
+        assert arp_node.heartbeat() is False
+        assert arp_node.is_online is False
+
+    @patch("NodeCheck.nodes.subprocess.run")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_arp_node_binary_missing(
+        self, mock_ping: Any, mock_run: Any, arp_node: ArpNode
+    ) -> None:
+        """`arp` binary not on PATH -> offline, no crash."""
+        mock_ping.return_value = False
+        mock_run.side_effect = FileNotFoundError(2, "No such file or directory", "arp")
+
+        assert arp_node.heartbeat() is False
+        assert arp_node.is_online is False
 
 
 if __name__ == "__main__":

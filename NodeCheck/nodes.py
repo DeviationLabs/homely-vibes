@@ -2,6 +2,7 @@
 import json
 import re
 import socket
+import subprocess
 import time
 from lib import NetHelpers
 from lib.config import NodeConfig
@@ -199,3 +200,40 @@ class WindowsNode(GenericNode):
                 logger.info(f"{self.name} is up since {foundStr}")
                 return True
         return False
+
+
+# WiFi devices in power-save (notably iPhones) drop ICMP replies but stay
+# associated with the AP, so the router's ARP cache still has a valid MAC.
+# ArpNode probes presence via the ARP cache instead of ICMP.
+_MAC_RE = re.compile(r"([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}")
+
+
+class ArpNode(GenericNode):
+    def heartbeat(self) -> bool:
+        # Fire one ping to trigger ARP resolution if the entry is stale.
+        # Result is intentionally discarded — we only care about the ARP cache.
+        NetHelpers.ping_output(node=self.config.ip, count=1, desired_up=True)
+        try:
+            result = subprocess.run(
+                ["arp", "-n", self.config.ip],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            logger.debug(f"ARP check for {self.name}: timeout")
+            self.is_online = False
+            return False
+        except FileNotFoundError:
+            # `arp` binary missing (minimal Linux images may ship only iproute2).
+            logger.warning(f"ARP check for {self.name}: `arp` binary not found on PATH")
+            self.is_online = False
+            return False
+
+        stdout = result.stdout or ""
+        has_mac = bool(_MAC_RE.search(stdout))
+        is_incomplete = "incomplete" in stdout.lower()
+        self.is_online = has_mac and not is_incomplete
+        logger.debug(f"ARP check for {self.name}: {self.is_online} ({stdout!r})")
+        return self.is_online
