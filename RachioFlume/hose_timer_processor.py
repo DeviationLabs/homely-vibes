@@ -19,7 +19,7 @@ from RachioFlume.alert_rules import (
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient
 from RachioFlume.rachio_hose_client import HoseValve, RachioHoseClient
-from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 from lib.logger import get_logger
 
 
@@ -44,7 +44,7 @@ class HoseTimerProcessor:
     def __init__(
         self,
         client: RachioHoseClient,
-        pushover: Pushover,
+        pushover: Notifier,
         db: WaterTrackingDB,
         thresholds: Optional[dict[str, ZoneThreshold]] = None,
         flume_client: Optional[FlumeClient] = None,

@@ -26,21 +26,14 @@ import json
 import logging
 import os
 import sys
-from typing import Protocol
-
 from Rheem.rheem_client import RheemAPIError, RheemAuthError, RheemClient, WaterHeaterStatus
 from lib.config import Config, get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 
 
 _AVAILABILITY_LABEL = {0: "empty", 33: "1/3rd full", 66: "2/3rd full", 100: "full"}
-
-
-class Notifier(Protocol):
-    """Send-only notification surface (satisfied by Pushover or test fakes)."""
-
-    def send_message(self, message: str, title: str | None = None, priority: int = 0) -> bool: ...
 
 
 def _label(avail: int) -> str:

@@ -16,7 +16,7 @@ import logging
 from pydantic import BaseModel, Field
 
 from lib.config import get_config
-from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 
 
 class AlertRule(BaseModel):
@@ -123,7 +123,7 @@ def load_zone_thresholds_from_config() -> dict[str, dict[str, ZoneThreshold]]:
 
 def send_zone_outcome_pushover(
     *,
-    pushover: Pushover,
+    pushover: Notifier,
     logger: logging.Logger,
     log_label: str,
     header: str,

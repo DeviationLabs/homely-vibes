@@ -18,6 +18,7 @@ from yalexs.lock import Lock, LockStatus, LockDoorStatus
 from lib.config import get_config
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 from lib.secure_io import ensure_secret_perms
 
 # August revoked the API key yalexs ships for Brand.AUGUST (d9984f29...): the
@@ -89,7 +90,7 @@ class AugustClient:
         password: str,
         phone: Optional[str] = None,
         *,
-        pushover: Optional[Pushover] = None,
+        pushover: Optional[Notifier] = None,
     ):
         self.email = email
         self.password = password
@@ -319,7 +320,7 @@ class AugustMonitor:
         door_alert_cooldown_minutes: int = 2,
         *,
         client: Optional[AugustClient] = None,
-        pushover: Optional[Pushover] = None,
+        pushover: Optional[Notifier] = None,
         state_file: Optional[str] = None,
     ):
         # Injectable client + pushover + state_file path so tests never touch
