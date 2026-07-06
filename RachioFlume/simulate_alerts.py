@@ -122,7 +122,7 @@ async def run_simulation(
     engine = AlertEngine(
         flume_client=fake_flume,  # type: ignore[arg-type]
         rachio_client=fake_rachio,  # type: ignore[arg-type]
-        pushover=fake_pushover,  # type: ignore[arg-type]
+        pushover=fake_pushover,
         db=db,
         rules=rules,
         zone_thresholds=controller_thresholds,

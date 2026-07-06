@@ -31,6 +31,7 @@ from lib.config import RingBeamsConfig, get_config
 from lib.file_lock import LockTimeoutError, acquire_lock
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 
 PUSHOVER_KEY = "Ring Security"
 WIRED_BATTERY_STATUSES = {"none", "charging", "charged"}
@@ -166,7 +167,7 @@ def classify(devices: list[DeviceRecord], threshold_pct: int) -> tuple[list[str]
 
 
 def notify(
-    pushover: Pushover,
+    pushover: Notifier,
     low: list[str],
     tamper: list[str],
     errors: list[str],

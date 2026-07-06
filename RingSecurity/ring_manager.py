@@ -24,6 +24,7 @@ from lib.config import RingConfig, get_config
 from lib.file_lock import LockTimeoutError, acquire_lock
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 from lib.secure_io import write_secret_atomic
 
 USER_AGENT = "android:com.ringapp"
@@ -122,7 +123,7 @@ async def check_devices(
     return low, offline
 
 
-def notify(pushover: Pushover, low: list[str], offline: list[str], logger: logging.Logger) -> None:
+def notify(pushover: Notifier, low: list[str], offline: list[str], logger: logging.Logger) -> None:
     if low:
         body = "\n".join(low)
         logger.info(f"Low battery alert: {body}")

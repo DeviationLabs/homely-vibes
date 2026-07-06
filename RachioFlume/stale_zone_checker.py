@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from RachioFlume.data_storage import WaterTrackingDB
-from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 from lib.logger import get_logger
 
 _LAST_RUN_KEY = "stale_zone::last_run"
@@ -27,7 +27,7 @@ class StaleZoneChecker:
     def __init__(
         self,
         db: WaterTrackingDB,
-        pushover: Pushover,
+        pushover: Notifier,
         stale_zone_days: int = 7,
     ) -> None:
         self.db = db

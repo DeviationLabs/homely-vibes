@@ -20,7 +20,7 @@ from enum import Enum
 from typing import Optional
 
 from lib.logger import get_logger
-from lib.MyPushover import Pushover
+from lib.notifications import Notifier
 from RachioFlume.alert_rules import AlertRule, ZoneThreshold, send_zone_outcome_pushover
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient, WaterReading
@@ -129,7 +129,7 @@ class AlertEngine:
         self,
         flume_client: FlumeClient,
         rachio_client: RachioClient,
-        pushover: Pushover,
+        pushover: Notifier,
         db: WaterTrackingDB,
         rules: list[AlertRule],
         zone_thresholds: Optional[dict[int, ZoneThreshold]] = None,
