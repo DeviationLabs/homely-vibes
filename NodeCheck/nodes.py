@@ -225,6 +225,11 @@ class ArpNode(GenericNode):
             logger.debug(f"ARP check for {self.name}: timeout")
             self.is_online = False
             return False
+        except FileNotFoundError:
+            # `arp` binary missing (minimal Linux images may ship only iproute2).
+            logger.warning(f"ARP check for {self.name}: `arp` binary not found on PATH")
+            self.is_online = False
+            return False
 
         stdout = result.stdout or ""
         has_mac = bool(_MAC_RE.search(stdout))

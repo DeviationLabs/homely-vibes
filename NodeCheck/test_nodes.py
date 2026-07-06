@@ -478,6 +478,18 @@ class TestArpNode:
         assert arp_node.heartbeat() is False
         assert arp_node.is_online is False
 
+    @patch("NodeCheck.nodes.subprocess.run")
+    @patch("NodeCheck.nodes.NetHelpers.ping_output")
+    def test_arp_node_binary_missing(
+        self, mock_ping: Any, mock_run: Any, arp_node: ArpNode
+    ) -> None:
+        """`arp` binary not on PATH -> offline, no crash."""
+        mock_ping.return_value = False
+        mock_run.side_effect = FileNotFoundError(2, "No such file or directory", "arp")
+
+        assert arp_node.heartbeat() is False
+        assert arp_node.is_online is False
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
