@@ -212,6 +212,8 @@ class ArpNode(GenericNode):
     def heartbeat(self) -> bool:
         # Fire one ping to trigger ARP resolution if the entry is stale.
         # Result is intentionally discarded — we only care about the ARP cache.
+        # A single cold-cache false-negative is absorbed by HeartbeatMonitor's
+        # consecutive-failure flap suppression.
         NetHelpers.ping_output(node=self.config.ip, count=1, desired_up=True)
         try:
             result = subprocess.run(
