@@ -1,6 +1,6 @@
 # NoShorts V2 — PRD, Implementation Plan, System Design
 
-Status: **decided, ready to build**
+Status: **built and merged, then shelved on-device — see §8**
 Author: Amit Butala
 Reviewer: Claude Code
 Last edited: 2026-07-08
@@ -218,6 +218,65 @@ Install a device-wide `.mobileconfig` DoH override for `*.youtube.com`. This def
 Watch YouTube on a different device (laptop, Apple TV) for the foreseeable. Come back when iOS 27 ships and re-evaluate. This is the only tier that involves not shipping.
 
 **Explicit non-plan:** we do NOT chase the "self-hosted yt-dlp on aibo" path unless Tier 4 is also unacceptable AND Amit signs up for the ongoing maintenance treadmill. It's over-scoped for MVP.
+
+## 8. Outcome (2026-07-08) — built, merged, then shelved
+
+V2 was built exactly per §5–§6 and merged as PR #231. Simulator verification passed cleanly (see Appendix B). The **on-device test with NextDNS active failed**, and — critically — it failed in **both** of the fault modes §7 asked us to disambiguate, in the same session on the same phone.
+
+### On-device test log — first video
+
+- `LocalProxy started on 127.0.0.1:<port>, scoped to *.youtube.com`
+- `LocalProxy: CONNECT www.youtube.com:443 -> 142.251.218.238`  (Google-owned IP, succeeds)
+- `LocalProxy: CONNECT m.youtube.com:443 -> 142.251.219.46`
+- **Zero** `LocalProxy: CONNECT` lines for `googlevideo.com`, `ytimg.com`, or `doubleclick.net` — `matchDomains` scoping worked exactly as designed.
+- YouTube's ads played. Video preview thumbnail rendered. Player JS loaded. Then transition to content failed with "An error occurred."
+- Diagnosis: proxy path is fine. **WebContent's direct fetches to `googlevideo.com` (ISP-hosted Google Global Cache edges, e.g. `50.151.x.x` for Xfinity) cannot complete** from this third-party app on iOS 26.5.2. This is the §7 Tier 2 signal — the failure is in WebContent, not in the LocalProxy.
+
+### On-device test log — second video, same session
+
+- `LocalProxy: CONNECT www.youtube.com:443 -> 142.251.218.238`  (same Google IP that worked seconds earlier)
+- `Socket SO_ERROR [54: Connection reset by peer]`
+- `Receive failed with error "Connection reset by peer"`
+- `LocalProxy upstream failed www.youtube.com->142.251.218.238: POSIXErrorCode(rawValue: 50): Network is down`
+- Diagnosis: **the LocalProxy's own outbound TCP to a Google-owned IP got RST mid-flight.** Same failure signature we'd only seen on `googlevideo.com` IPs before.
+
+### Interpretation
+
+- The pattern is now consistent across every mitigation we tried across three days: whether traffic goes through our proxy or direct, whether the destination is Google-owned or ISP-hosted, whether we use `matchDomains` scoping or route everything, whether we're on Wi-Fi or cellular.
+- The block is systemic to iOS 26.5.2's treatment of outbound TCP from a third-party WKWebView app's bundle. It is not addressable via the `WKWebView.proxyConfigurations` API alone.
+- The V2 code is the cleanest possible expression of the V1 architecture and is correct given what we knew when we built it. **Nothing about V2 is wrong; the platform tightened under us.**
+
+### Why we stopped at Tier 3 rather than trying it
+
+§7 pointed at `NEAppProxyProvider` (Network Extension) as the remaining app-side option. We chose **not** to pursue it, for these reasons:
+
+- The failure pattern (both proxy AND direct fetches failing in the same session, both to Google-owned and to ISP-hosted IPs) suggests the tightening is at the **app-bundle sandbox** level, not at the specific-networking-primitive level. A Network Extension is still code running in our app's bundle — unlikely to be treated meaningfully differently by iOS's outbound-TCP gate.
+- 1–2 days of real work on a speculative fix, with strong prior evidence pointing at "won't work either," is a bad ROI.
+- iOS 27 will land in a few months. If Apple relaxes the sandbox constraints, V2 as-is may start working with no new code. If they tighten further, no in-app architecture is going to save us.
+
+### What we're keeping vs. shelving
+
+**Keeping (merged as PR #231):**
+
+- V2 code. Clean rewrite of V1. Eliminates the accumulated cruft. Correct architecture given our constraints. Natural resume point when the platform changes.
+- This PRD, including Appendix A/B/C. Every dead end is documented so the next attempt doesn't repeat them.
+
+**Shelved, but on-record as viable alternate architectures if needed later:**
+
+- Self-hosted `yt-dlp` on aibo (Amit's residential-IP home box), exposed via Cloudflare Tunnel or similar. Real ops surface but removes the "third-party app can't reach googlevideo" problem entirely by making our app talk to aibo instead.
+- Self-hosted Piped instance on aibo — same idea, heavier stack.
+- Full native `AVPlayer` + DASH-manifest extraction rewrite. Biggest scope, most independent of platform changes.
+
+### Re-attempt trigger
+
+Re-attempt V2 or a successor when **any** of these change:
+
+1. An iOS point release relaxes third-party WKWebView outbound TCP.
+2. Apple documents an entitlement that unblocks the specific behavior we need.
+3. Amit decides self-hosting an extractor on aibo is worth the ongoing ops.
+4. Piped/Invidious ecosystem recovers meaningfully.
+
+Until then, watch YouTube on a laptop / Apple TV / a device where the platform doesn't fight us.
 
 ---
 

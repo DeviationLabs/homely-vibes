@@ -2,9 +2,15 @@
 //  LocalProxy.swift
 //  NoShorts
 //
-//  HTTP CONNECT proxy on 127.0.0.1. Resolves hostnames via DoHResolver (bypassing
-//  system DNS / NextDNS), then tunnels TLS bytes verbatim. Pointed at by
-//  WKWebsiteDataStore.proxyConfigurations so all WKWebView traffic flows through it.
+//  HTTP CONNECT proxy on 127.0.0.1 that only ever sees `*.youtube.com` traffic
+//  from WKWebView (because `ProxyConfiguration.matchDomains = ["youtube.com"]`
+//  is set on the data store, see ContentView.swift). For each CONNECT request:
+//    1. Resolve the host via DoH (bypasses NextDNS's `*.youtube.com` deny).
+//    2. Open a plain TCP connection to that IP:port.
+//    3. Reply "HTTP/1.1 200 Connection Established" and pipe bytes.
+//
+//  Deliberately minimal: no per-connection retry, no multi-IP failover, no
+//  hostname-based bypass, no v6 support. See V2_PRD.md §5 for the rationale.
 //
 
 import Foundation
@@ -15,8 +21,11 @@ final class LocalProxy: @unchecked Sendable {
     private var listener: NWListener?
     private(set) var port: UInt16 = 0
 
+    /// Start listening on the loopback interface, return the ephemeral port.
     func start() throws -> UInt16 {
         let params = NWParameters.tcp
+        // Loopback-only so the proxy is unreachable from LAN.
+        params.requiredInterfaceType = .loopback
         let l = try NWListener(using: params, on: .any)
         l.newConnectionHandler = { [weak self] conn in self?.handle(conn) }
 
@@ -35,16 +44,15 @@ final class LocalProxy: @unchecked Sendable {
         guard sem.wait(timeout: .now() + 3) == .success,
               let p = l.port, p.rawValue > 0 else {
             l.cancel()
-            throw NSError(domain: "LocalProxy", code: -1, userInfo: [NSLocalizedDescriptionKey: "listener not ready or port invalid"])
+            throw NSError(domain: "LocalProxy", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "listener not ready"])
         }
-
         self.listener = l
         self.port = p.rawValue
         return p.rawValue
     }
 
     private func handle(_ client: NWConnection) {
-        NSLog("LocalProxy: incoming connection")
         client.start(queue: queue)
         readConnect(client, accumulated: Data())
     }
@@ -52,21 +60,28 @@ final class LocalProxy: @unchecked Sendable {
     private func readConnect(_ client: NWConnection, accumulated: Data) {
         client.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, isComplete, error in
             guard let self else { return }
-            if let error { NSLog("CONNECT read error: \(error)"); client.cancel(); return }
-            var buf = accumulated
-            if let data { buf.append(data) }
-            if let endRange = buf.range(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
-                let header = buf.prefix(upTo: endRange.lowerBound)
-                self.processConnect(client, header: header)
+            if let error {
+                NSLog("LocalProxy CONNECT read error: \(error)")
+                client.cancel()
                 return
             }
-            if isComplete || buf.count > 16384 { client.cancel(); return }
+            var buf = accumulated
+            if let data { buf.append(data) }
+            if let end = buf.range(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
+                self.processConnect(client, header: buf.prefix(upTo: end.lowerBound))
+                return
+            }
+            if isComplete || buf.count > 16384 {
+                client.cancel()
+                return
+            }
             self.readConnect(client, accumulated: buf)
         }
     }
 
     private func processConnect(_ client: NWConnection, header: Data) {
-        guard let line = String(data: header, encoding: .utf8)?.split(separator: "\r\n").first else {
+        guard let line = String(data: header, encoding: .utf8)?
+                .split(separator: "\r\n").first else {
             sendError(client, "400 Bad Request"); return
         }
         let parts = line.split(separator: " ")
@@ -94,20 +109,24 @@ final class LocalProxy: @unchecked Sendable {
     }
 
     private func openTunnel(client: NWConnection, host: String, ip: String, port: UInt16) {
-        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(ip), port: NWEndpoint.Port(rawValue: port)!)
+        let endpoint = NWEndpoint.hostPort(host: NWEndpoint.Host(ip),
+                                          port: NWEndpoint.Port(rawValue: port)!)
         let upstream = NWConnection(to: endpoint, using: .tcp)
         upstream.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
             switch state {
             case .ready:
-                let ok = "HTTP/1.1 200 Connection Established\r\n\r\n".data(using: .utf8)!
+                let ok = Data("HTTP/1.1 200 Connection Established\r\n\r\n".utf8)
                 client.send(content: ok, completion: .contentProcessed { error in
-                    if let error { NSLog("client send 200 failed: \(error)"); client.cancel(); upstream.cancel(); return }
+                    if let error {
+                        NSLog("LocalProxy send 200 failed: \(error)")
+                        client.cancel(); upstream.cancel(); return
+                    }
                     self.pump(from: client, to: upstream)
                     self.pump(from: upstream, to: client)
                 })
             case .failed(let e):
-                NSLog("upstream failed \(host)->\(ip): \(e)")
+                NSLog("LocalProxy upstream failed \(host)->\(ip): \(e)")
                 self.sendError(client, "502 Bad Gateway")
                 upstream.cancel()
             case .cancelled:
@@ -126,9 +145,8 @@ final class LocalProxy: @unchecked Sendable {
                     self?.pump(from: src, to: dst)
                 })
             } else if isComplete || error != nil {
-                dst.send(content: nil, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in
-                    src.cancel()
-                })
+                dst.send(content: nil, contentContext: .finalMessage, isComplete: true,
+                         completion: .contentProcessed { _ in src.cancel() })
             } else {
                 self?.pump(from: src, to: dst)
             }
@@ -136,7 +154,7 @@ final class LocalProxy: @unchecked Sendable {
     }
 
     private func sendError(_ client: NWConnection, _ status: String) {
-        let resp = "HTTP/1.1 \(status)\r\nContent-Length: 0\r\n\r\n".data(using: .utf8)!
+        let resp = Data("HTTP/1.1 \(status)\r\nContent-Length: 0\r\n\r\n".utf8)
         client.send(content: resp, completion: .contentProcessed { _ in client.cancel() })
     }
 }
