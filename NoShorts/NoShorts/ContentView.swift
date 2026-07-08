@@ -2,20 +2,34 @@
 //  ContentView.swift
 //  NoShorts
 //
+//  V2 architecture: WKWebView, LocalProxy scoped to *.youtube.com via
+//  ProxyConfiguration.matchDomains. All other traffic (googlevideo, ytimg,
+//  doubleclick, googleapis, etc.) goes direct from the WebContent process
+//  via system DNS. See V2_PRD.md §5 for the full rationale.
+//
 
 import SwiftUI
 import WebKit
 import Observation
 import Network
 
-// Runs at document start: fingerprint removal + CSS + autoplay block + SPA navigation guard
+// MARK: - Injected user scripts
+
+/// Runs at document start in every frame. Does three things:
+/// 1. Hides `window.webkit` on accounts.google.com so Google's sign-in doesn't
+///    fingerprint us as a WKWebView.
+/// 2. Injects CSS that hides Shorts affordances before first paint.
+/// 3. Wraps `HTMLVideoElement.prototype.play()` so it only resolves within
+///    1.5s of a real user gesture. Load-bearing beyond autoplay: without this
+///    wrapper YouTube's player refuses to serve modern content (confirmed
+///    during the 2026-07 debugging session).
+/// 4. Intercepts SPA `pushState`/`replaceState` for `/shorts`.
 private let earlyScript = """
 (function() {
     if (window.location.hostname.includes('accounts.google')) {
         try { Object.defineProperty(window, 'webkit', { get: () => undefined, configurable: true }); } catch(e) {}
     }
 
-    // CSS: hide Shorts before paint
     const s = document.createElement('style');
     s.id = 'no-shorts';
     s.textContent = `
@@ -29,47 +43,43 @@ private let earlyScript = """
     `;
     (document.head || document.documentElement).appendChild(s);
 
-    // Block autoplay: intercept video.play() — only allow within 1.5s of a user touch/click
     let lastInteraction = 0;
-    document.addEventListener('touchstart', () => { lastInteraction = Date.now(); }, { capture: true, passive: true });
-    document.addEventListener('click', () => { lastInteraction = Date.now(); }, { capture: true, passive: true });
+    document.addEventListener('touchstart', () => { lastInteraction = Date.now(); },
+        { capture: true, passive: true });
+    document.addEventListener('click', () => { lastInteraction = Date.now(); },
+        { capture: true, passive: true });
     const _play = HTMLVideoElement.prototype.play;
     HTMLVideoElement.prototype.play = function() {
         if (Date.now() - lastInteraction < 1500) return _play.call(this);
         return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
     };
 
-    // Block SPA navigation to /shorts. Home (/) is handled in Swift via KVO on
-    // webView.url so we catch it regardless of who triggered the URL change.
     const _push = history.pushState.bind(history);
     const _replace = history.replaceState.bind(history);
     const isShorts = (u) => u && String(u).startsWith('/shorts');
-    history.pushState = (s,t,u) => { if (!isShorts(u)) _push(s,t,u); };
-    history.replaceState = (s,t,u) => { if (!isShorts(u)) _replace(s,t,u); };
+    history.pushState    = (state, title, url) => { if (!isShorts(url)) _push(state, title, url); };
+    history.replaceState = (state, title, url) => { if (!isShorts(url)) _replace(state, title, url); };
 })();
 """
 
-// Listens for HTML5 video play/pause/ended events anywhere in the page and
-// posts a message to native. Works for inline playback AND fullscreen — both
-// fire `play`/`pause` events on the same <video> element.
+/// Report HTML5 video lifecycle back to Swift so we can lock orientation.
+/// Deliberately NOT listening for `error`/`stalled` — those fire on every
+/// buffer hiccup and previously caused portrait↔landscape flapping.
 private let videoEventScript = """
 (function() {
     const post = (kind) => {
         try { window.webkit.messageHandlers.video.postMessage(kind); } catch(e) {}
     };
-    const onPlay = (e) => { if (e.target instanceof HTMLVideoElement) post('play'); };
-    const onPause = (e) => { if (e.target instanceof HTMLVideoElement) post('pause'); };
-    const onEnded = (e) => { if (e.target instanceof HTMLVideoElement) post('ended'); };
-    document.addEventListener('play', onPlay, true);
-    document.addEventListener('pause', onPause, true);
-    document.addEventListener('ended', onEnded, true);
-    // Navigating away from a watch page tears down the <video> element
-    // without firing pause. pagehide covers the SPA-back case too.
+    document.addEventListener('play',  (e) => { if (e.target instanceof HTMLVideoElement) post('play');  }, true);
+    document.addEventListener('pause', (e) => { if (e.target instanceof HTMLVideoElement) post('pause'); }, true);
+    document.addEventListener('ended', (e) => { if (e.target instanceof HTMLVideoElement) post('ended'); }, true);
+    // pagehide covers SPA-back navigating away from /watch without a pause event.
     window.addEventListener('pagehide', () => post('pause'));
 })();
 """
 
-// Runs at document end: DOM removal + debounced MutationObserver
+/// Runs at document end + as a MutationObserver: yank any Shorts DOM nodes
+/// that survived the CSS in earlyScript.
 private let shortsBlockScript = """
 (function() {
     function removeShorts() {
@@ -88,7 +98,6 @@ private let shortsBlockScript = """
             if (item.querySelector('a[href*="/shorts/"]')) item.remove();
         });
     }
-
     removeShorts();
     let debounce;
     new MutationObserver(() => {
@@ -100,6 +109,8 @@ private let shortsBlockScript = """
 
 private let sessionDuration: TimeInterval = 30 * 60
 
+// MARK: - Model
+
 @Observable
 final class WebViewModel {
     @ObservationIgnored let webView: WKWebView
@@ -107,10 +118,15 @@ final class WebViewModel {
     var isLoading = false
     var canGoBack = false
     var canGoForward = false
+    var proxyReady = false
 
     init() {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = .video
+        // YouTube's adaptive-streaming pipeline expects inline <video>. Without
+        // this, playback on iOS 26 hits a limited fullscreen-only codepath.
+        config.allowsInlineMediaPlayback = true
+
         config.userContentController.addUserScript(
             WKUserScript(source: earlyScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         )
@@ -121,17 +137,23 @@ final class WebViewModel {
             WKUserScript(source: videoEventScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         )
 
-        // Route WKWebView traffic through a local DoH-backed proxy so requests
-        // bypass system DNS (and any NextDNS-style filtering on youtube.com).
+        // Route ONLY *.youtube.com through the local DoH-backed proxy. Every
+        // other host (googlevideo, ytimg, doubleclick, googleapis, ...) goes
+        // direct via WKWebView's own networking + system DNS. This is the
+        // critical scoping that V1 got wrong on iOS 26.5.2 — see V2_PRD.md §5.
         if let port = try? proxy.start() {
-            let endpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
-            let proxyConfig = ProxyConfiguration(httpCONNECTProxy: endpoint, tlsOptions: nil)
+            let endpoint = NWEndpoint.hostPort(host: "127.0.0.1",
+                                               port: NWEndpoint.Port(rawValue: port)!)
+            var proxyConfig = ProxyConfiguration(httpCONNECTProxy: endpoint, tlsOptions: nil)
+            proxyConfig.matchDomains = ["youtube.com"]
             let dataStore = WKWebsiteDataStore.default()
             dataStore.proxyConfigurations = [proxyConfig]
             config.websiteDataStore = dataStore
-            NSLog("LocalProxy listening on 127.0.0.1:\(port)")
+            self.proxyReady = true
+            NSLog("LocalProxy started on 127.0.0.1:\(port), scoped to *.youtube.com")
         } else {
-            NSLog("LocalProxy failed to start; WKWebView will use system DNS")
+            NSLog("LocalProxy failed to start; NoShorts cannot reach youtube.com")
+            self.proxyReady = false
         }
 
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -139,15 +161,17 @@ final class WebViewModel {
         self.webView = wv
     }
 
+    // MARK: - Navigation helpers
+
     func load(_ urlString: String) {
         guard let url = URL(string: urlString) else { return }
         webView.load(URLRequest(url: url))
     }
 
-    func goHome() { load("https://www.youtube.com/feed/channels") }
     func goPlaylists() { load("https://www.youtube.com/feed/playlists") }
-    func goLiked() { load("https://www.youtube.com/playlist?list=LL") }
-    func goAccount() { load("https://www.youtube.com/account") }
+    func goLiked()     { load("https://www.youtube.com/playlist?list=LL") }
+    func goHome()      { load("https://www.youtube.com/feed/channels") }
+    func goAccount()   { load("https://www.youtube.com/account") }
 
     func search(_ query: String) {
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
@@ -155,16 +179,17 @@ final class WebViewModel {
     }
 }
 
+// MARK: - WKWebView bridge & delegate
+
 struct YouTubeWebView: UIViewRepresentable {
     let model: WebViewModel
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
     func makeUIView(context: Context) -> WKWebView {
-        let wv = model.webView
-        wv.navigationDelegate = context.coordinator
+        model.webView.navigationDelegate = context.coordinator
         model.goPlaylists()
-        return wv
+        return model.webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
@@ -172,24 +197,41 @@ struct YouTubeWebView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let model: WebViewModel
-        private var urlObservation: NSKeyValueObservation?
+        private var urlObs: NSKeyValueObservation?
+        private var canBackObs: NSKeyValueObservation?
+        private var canFwdObs: NSKeyValueObservation?
+        private var orientationTask: Task<Void, Never>?
+        private var currentOrientation: UIInterfaceOrientationMask = .portrait
 
         init(model: WebViewModel) {
             self.model = model
             super.init()
             model.webView.configuration.userContentController.add(self, name: "video")
+
             // Catch SPA URL changes (history.pushState / replaceState). decidePolicyFor
-            // does NOT fire for these, so YouTube's in-app Home tab tap can sneak past.
-            urlObservation = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
+            // does NOT fire for these, so a YouTube-in-page Home tap can sneak past
+            // without KVO on the url property.
+            urlObs = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
                 guard let self, let url = change.newValue ?? nil else { return }
                 if Self.isYouTubeHome(url) {
                     Task { @MainActor in self.model.goPlaylists() }
                 }
             }
+            // Mirror the history-stack flags live. Reading them only in didFinish
+            // leaves the toolbar chevrons stale whenever a nav is cancelled — which
+            // our /shorts and home intercepts do frequently.
+            canBackObs = model.webView.observe(\.canGoBack, options: [.new, .initial]) { [weak self] wv, _ in
+                Task { @MainActor in self?.model.canGoBack = wv.canGoBack }
+            }
+            canFwdObs = model.webView.observe(\.canGoForward, options: [.new, .initial]) { [weak self] wv, _ in
+                Task { @MainActor in self?.model.canGoForward = wv.canGoForward }
+            }
         }
 
         deinit {
-            urlObservation?.invalidate()
+            urlObs?.invalidate()
+            canBackObs?.invalidate()
+            canFwdObs?.invalidate()
             model.webView.configuration.userContentController.removeScriptMessageHandler(forName: "video")
         }
 
@@ -197,17 +239,34 @@ struct YouTubeWebView: UIViewRepresentable {
             (url.host?.hasSuffix("youtube.com") == true) && (url.path.isEmpty || url.path == "/")
         }
 
-        nonisolated func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        // MARK: WKScriptMessageHandler — video events → orientation
+
+        nonisolated func userContentController(_ controller: WKUserContentController,
+                                               didReceive message: WKScriptMessage) {
             guard let kind = message.body as? String else { return }
             Task { @MainActor in
+                let target: UIInterfaceOrientationMask
                 switch kind {
-                case "play":
-                    Self.setOrientation(.landscapeRight)
-                case "pause", "ended":
-                    Self.setOrientation(.portrait)
-                default:
-                    break
+                case "play":           target = .landscapeRight
+                case "pause", "ended": target = .portrait
+                default: return
                 }
+                self.scheduleOrientation(target)
+            }
+        }
+
+        /// 400 ms coalesce. YouTube's player fires transient pause→play during
+        /// buffering; without coalescing, the screen orientation flaps.
+        private func scheduleOrientation(_ target: UIInterfaceOrientationMask) {
+            if target == currentOrientation && orientationTask == nil { return }
+            orientationTask?.cancel()
+            orientationTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                guard let self, !Task.isCancelled else { return }
+                self.orientationTask = nil
+                guard target != self.currentOrientation else { return }
+                self.currentOrientation = target
+                Self.setOrientation(target)
             }
         }
 
@@ -224,25 +283,40 @@ struct YouTubeWebView: UIViewRepresentable {
             }
         }
 
+        // MARK: WKNavigationDelegate
+
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = action.request.url else { return .allow }
-            if url.path.hasPrefix("/shorts") { model.goPlaylists(); return .cancel }
-            if Self.isYouTubeHome(url) { model.goPlaylists(); return .cancel }
+            // /shorts: cancel silently. No follow-up load() — pushing playlists
+            // onto history destroys any forward stack.
+            if url.path.hasPrefix("/shorts") { return .cancel }
+            // youtube.com/ (algorithmic home): redirect to Playlists, but only
+            // on forward navs. Backward/Forward navs must be preserved or the
+            // toolbar chevrons appear broken.
+            if Self.isYouTubeHome(url) {
+                if action.navigationType != .backForward { model.goPlaylists() }
+                return .cancel
+            }
             return .allow
         }
 
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) { model.isLoading = true }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
+            model.isLoading = true
+        }
 
         func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
             webView.evaluateJavaScript(shortsBlockScript)
             model.isLoading = false
-            model.canGoBack = webView.canGoBack
-            model.canGoForward = webView.canGoForward
+            // canGoBack / canGoForward are mirrored via KVO in init.
         }
 
-        func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) { model.isLoading = false }
+        func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError _: Error) {
+            model.isLoading = false
+        }
     }
 }
+
+// MARK: - Root view
 
 struct ContentView: View {
     @State private var model = WebViewModel()
@@ -272,16 +346,24 @@ struct ContentView: View {
                 .padding(.top, 60)
                 .padding(.trailing, 12)
                 .frame(maxWidth: .infinity, alignment: .trailing)
+
+            if !model.proxyReady {
+                proxyErrorBanner
+                    .padding(.top, 60)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
         .onAppear { startTimer() }
         .onDisappear { timer?.invalidate() }
     }
 
+    // MARK: Toolbars
+
     private var topToolbar: some View {
         HStack(spacing: 0) {
-            toolbarButton("play.square.stack.fill", enabled: true) { model.goPlaylists() }
-            toolbarButton("hand.thumbsup.fill", enabled: true) { model.goLiked() }
-            toolbarButton("square.grid.3x3.fill", enabled: true) { model.goHome() }
+            toolbarButton("play.square.stack.fill",  enabled: true) { model.goPlaylists() }
+            toolbarButton("hand.thumbsup.fill",      enabled: true) { model.goLiked() }
+            toolbarButton("square.grid.3x3.fill",    enabled: true) { model.goHome() }
             toolbarButton("person.crop.circle.fill", enabled: true) { model.goAccount() }
         }
         .frame(height: 52)
@@ -292,41 +374,15 @@ struct ContentView: View {
     private var bottomToolbar: some View {
         HStack(spacing: 0) {
             if isSearching {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 12)
-                    TextField("Search YouTube", text: $searchText)
-                        .focused($searchFocused)
-                        .submitLabel(.search)
-                        .onSubmit {
-                            if !searchText.isEmpty { model.search(searchText) }
-                            isSearching = false
-                            searchText = ""
-                        }
-                    Button {
-                        isSearching = false
-                        searchText = ""
-                        searchFocused = false
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .padding(.trailing, 12)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 36)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .padding(.horizontal, 12)
+                searchField
             } else {
-                toolbarButton("chevron.left", enabled: model.canGoBack) { model.webView.goBack() }
+                toolbarButton("chevron.left",  enabled: model.canGoBack)    { model.webView.goBack() }
                 toolbarButton("chevron.right", enabled: model.canGoForward) { model.webView.goForward() }
                 toolbarButton("magnifyingglass", enabled: true) {
                     isSearching = true
                     searchFocused = true
                 }
-                toolbarButton("house.fill", enabled: true) { model.goHome() }
+                toolbarButton("house.fill",      enabled: true) { model.goHome() }
                 toolbarButton("arrow.clockwise", enabled: true) { model.webView.reload() }
             }
         }
@@ -335,6 +391,38 @@ struct ContentView: View {
         .overlay(alignment: .top) { Divider() }
         .animation(.easeInOut(duration: 0.2), value: isSearching)
     }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .padding(.leading, 12)
+            TextField("Search YouTube", text: $searchText)
+                .focused($searchFocused)
+                .submitLabel(.search)
+                .onSubmit {
+                    if !searchText.isEmpty { model.search(searchText) }
+                    isSearching = false
+                    searchText = ""
+                }
+            Button {
+                isSearching = false
+                searchText = ""
+                searchFocused = false
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 12)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 36)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 12)
+    }
+
+    // MARK: Session countdown
 
     private var countdownBadge: some View {
         let minutes = Int(remaining) / 60
@@ -349,6 +437,16 @@ struct ContentView: View {
             .background(isVeryLow ? Color.red : Color(.systemBackground).opacity(0.85))
             .clipShape(Capsule())
             .shadow(radius: 2)
+    }
+
+    private var proxyErrorBanner: some View {
+        Text("DoH proxy unavailable — restart NoShorts")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.red)
+            .clipShape(Capsule())
     }
 
     private func startTimer() {

@@ -1,20 +1,21 @@
 # NoShorts
 
-An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navigation, feed shelves, autoplay), and lands on the **All Subscriptions** channel grid (`/feed/channels`) instead of the algorithmic home page.
+An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navigation, feed shelves, autoplay), and lands on **Playlists** (`/feed/playlists`) instead of the algorithmic home page.
+
+Architecture and V2 rationale live in [V2_PRD.md](V2_PRD.md).
 
 ## Features
 
-- **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM
-- **All Subscriptions as default landing**: app launches into `/feed/channels` (the channel grid, not the videos feed). Any navigation to `/` (algorithmic home) — including YouTube's own in-page Home tab, the YouTube logo, the toolbar Home button, post-login redirects — is caught and rewritten via KVO on `webView.url` (catches SPA `pushState`) plus `WKNavigationDelegate` (catches full-page navs).
-- **Auto-rotate to landscape on video play**: tapping a video (URL → `/watch?v=...`) calls `UIWindowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))` to force landscape immediately. Off the watch page, orientation is unlocked (`.allButUpsideDown`) so manual rotation works.
-- **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a user tap
-- **SPA navigation guard**: intercepts `pushState`/`replaceState` to drop `/shorts` navigations
-- **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0
-- **Top toolbar**: 4 destination shortcuts — Playlists (`/feed/playlists`), Liked Videos (`/playlist?list=LL`), All Subscriptions (`/feed/channels`), Account/Login (`/account`)
-- **Bottom toolbar**: back, forward, search (expands inline), home (→ All Subscriptions), reload
-- **Search bar**: tap the magnifying glass in the bottom toolbar to expand an animated inline search field
-- **Google sign-in**: works natively in-app (no Safari handoff required)
-- **DNS bypass**: in-app DoH proxy lets WKWebView reach `youtube.com` even when system DNS (e.g. NextDNS) blocks it — used to block YouTube in Chrome while keeping it accessible here
+- **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM.
+- **Playlists as default landing**: app launches into `/feed/playlists`. Any navigation to `/` (algorithmic home) — YouTube's in-page Home tab, the logo, the toolbar Home button, post-login redirects — is caught and rewritten via KVO on `webView.url` (SPA `pushState`) plus `WKNavigationDelegate` (full-page navs). The `/` intercept skips forward/back navs so the toolbar chevrons don't appear broken.
+- **Auto-rotate to landscape on video play**: JS reports `<video>` `play`/`pause`/`ended` events; a 400ms debounce coalesces buffering-driven pause↔play blips before flipping orientation. Portrait when not playing.
+- **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a real user gesture. Load-bearing beyond autoplay — without the wrapper YouTube's player refuses to serve modern content.
+- **SPA navigation guard**: intercepts `pushState`/`replaceState` to drop `/shorts` navigations.
+- **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0.
+- **Top toolbar**: 4 destination shortcuts — Playlists, Liked Videos, All Subscriptions, Account/Login.
+- **Bottom toolbar**: back, forward, search (expands inline), home, reload. Back/forward mirror `WKWebView.canGoBack`/`canGoForward` via KVO — refreshed live rather than only at `didFinish` so the chevrons stay accurate through cancelled navs.
+- **Google sign-in**: works natively in-app (no Safari handoff required).
+- **DNS bypass, per-app + per-domain**: a `LocalProxy` (loopback-only `NWListener`) resolves `*.youtube.com` via DoH to `dns.google` and tunnels bytes to the resolved IP. The proxy is set on `WKWebsiteDataStore.default().proxyConfigurations` with `matchDomains = ["youtube.com"]`, so **only** `*.youtube.com` traffic goes through it. Everything else (`googlevideo`, `ytimg`, `doubleclick`, `googleapis`) resolves directly through system DNS. This is what lets NoShorts reach YouTube on a phone where NextDNS pinholes `*.youtube.com` for every other app — the bypass is scoped to this WKWebView data store and doesn't leak to Safari.
 
 ## Requirements
 
