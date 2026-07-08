@@ -30,7 +30,7 @@ class FakeWaterHeater:
     name: str
     availability: Optional[int]
     running: bool = False
-    set_point: int = 120
+    set_point: Optional[int] = 120
     connected: bool = True
 
     @property

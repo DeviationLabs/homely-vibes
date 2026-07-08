@@ -513,7 +513,7 @@ class TestGenerateReport:
 
     @patch("NodeCheck.manage_nodes.pushover")
     @patch("NodeCheck.manage_nodes.Mailer")
-    def test_reboot_complete_is_p2(self, mock_mailer: Any, mock_pushover: Any) -> None:
+    def test_reboot_complete_is_p2(self, _mock_mailer: Any, mock_pushover: Any) -> None:
         """Successful reboot notification is priority -2 (lowest)."""
         checker = self._checker()
         checker.generate_report(is_healthy=True, was_rebooted=True)
@@ -524,7 +524,7 @@ class TestGenerateReport:
 
     @patch("NodeCheck.manage_nodes.pushover")
     @patch("NodeCheck.manage_nodes.Mailer")
-    def test_healthy_no_reboot_no_message(self, mock_mailer: Any, mock_pushover: Any) -> None:
+    def test_healthy_no_reboot_no_message(self, _mock_mailer: Any, mock_pushover: Any) -> None:
         """Healthy with no reboot -> no success Pushover at all."""
         checker = self._checker()
         checker.generate_report(is_healthy=True, was_rebooted=False)

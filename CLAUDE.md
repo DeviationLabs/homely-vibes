@@ -15,7 +15,34 @@ We use **GitHub Issues** for tracking bugs, enhancements, and tech debt. Claude 
 
 **Package Manager**: This project uses `uv` for fast Python dependency management.
 
-**Development Setup**:
+**Worktree venv**: Git worktrees share the main repo's `.venv` (in the primary
+checkout at `~/Documents/deviation-labs/homely_vibes/.venv`). Worktrees don't
+get their own `.venv` (uv won't sync there due to cache permission issues and
+networkless sandboxes). To run tests from a worktree, use the main venv's
+interpreter directly:
+
+```bash
+# From any worktree:
+VIRTUAL_ENV=~/Documents/deviation-labs/homely_vibes/.venv \
+  ~/Documents/deviation-labs/homely_vibes/.venv/bin/python -m pytest [args]
+
+# NodeCheck runs in isolation (matches `make test`):
+VIRTUAL_ENV=~/Documents/deviation-labs/homely_vibes/.venv \
+  ~/Documents/deviation-labs/homely_vibes/.venv/bin/python -m pytest NodeCheck
+```
+
+If tests fail with `PermissionError` on the log directory, create a temporary
+`config/local.yaml` pointing `logging_dir` at a writable path (e.g. `/tmp/hv-logs`)
+and remove it before committing:
+
+```yaml
+# config/local.yaml (temporary, gitignored -- do not commit)
+paths:
+  home: /tmp
+  logging_dir: /tmp/hv-logs
+```
+
+**Development Setup** (primary checkout):
 ```bash
 make setup  # Installs Python 3.13.7, dependencies, Git submodules, and pre-commit hooks
 ```
