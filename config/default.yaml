@@ -289,7 +289,7 @@ rachio_flume:
     # === Stale-zone monitoring ===
     # Fire a P-1 heads-up if any enabled controller zone or connected
     # hose-timer valve hasn't run within this many days.
-    stale_zone_days: 7
+    stale_zone_days: 15
 
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:

@@ -493,3 +493,40 @@ class TestArpNode:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestGenerateReport:
+    """Test NodeChecker.generate_report Pushover priority routing.
+
+    Uses __new__ to bypass __init__ (which loads full config) and patches the
+    module-level pushover object.
+    """
+
+    def _checker(self) -> NodeChecker:
+        c = NodeChecker.__new__(NodeChecker)
+        c.mode = "foscam"
+        c.nodes = []
+        c.messages = []
+        c.reboot_failures = []
+        c.recovery_failures = []
+        return c
+
+    @patch("NodeCheck.manage_nodes.pushover")
+    @patch("NodeCheck.manage_nodes.Mailer")
+    def test_reboot_complete_is_p2(self, _mock_mailer: Any, mock_pushover: Any) -> None:
+        """Successful reboot notification is priority -2 (lowest)."""
+        checker = self._checker()
+        checker.generate_report(is_healthy=True, was_rebooted=True)
+        calls = mock_pushover.send_message.call_args_list
+        reboot_call = [c for c in calls if "reboot completed" in c[0][0]]
+        assert len(reboot_call) == 1
+        assert reboot_call[0][1]["priority"] == -2
+
+    @patch("NodeCheck.manage_nodes.pushover")
+    @patch("NodeCheck.manage_nodes.Mailer")
+    def test_healthy_no_reboot_no_message(self, _mock_mailer: Any, mock_pushover: Any) -> None:
+        """Healthy with no reboot -> no success Pushover at all."""
+        checker = self._checker()
+        checker.generate_report(is_healthy=True, was_rebooted=False)
+        calls = mock_pushover.send_message.call_args_list
+        assert len(calls) == 0

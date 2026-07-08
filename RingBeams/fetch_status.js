@@ -40,14 +40,31 @@ function readRefreshToken(path) {
     return raw;
 }
 
+function decodeRefreshToken(token) {
+    // ring-client-api wraps the real refresh token as base64(JSON({rt, hid}))
+    // on rotation (see rest-client.js toBase64). Python ring-doorbell expects
+    // the raw refresh_token string in the JSON envelope, not the base64 blob.
+    // Decode it back so the shared token file stays compatible with both sides.
+    try {
+        const config = JSON.parse(Buffer.from(token, 'base64').toString('ascii'));
+        if (config && config.rt) return config.rt;
+    } catch (_) {
+        // Not base64-encoded — already a raw token string, return as-is.
+    }
+    return token;
+}
+
 function writeRefreshToken(path, token) {
+    // Decode base64-wrapped token from ring-client-api back to the raw
+    // refresh_token string that Python ring-doorbell expects.
+    const rawToken = decodeRefreshToken(token);
     // Preserve Python-style JSON envelope if the file currently holds a dict.
-    let payload = token;
+    let payload = rawToken;
     try {
         const raw = fs.readFileSync(path, 'utf-8').trim();
         if (raw.startsWith('{')) {
             const parsed = JSON.parse(raw);
-            parsed.refresh_token = token;
+            parsed.refresh_token = rawToken;
             payload = JSON.stringify(parsed);
         }
     } catch (_) {
