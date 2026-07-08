@@ -40,6 +40,11 @@ def _label(avail: int) -> str:
     return _AVAILABILITY_LABEL.get(avail, f"{avail}%")
 
 
+def _setpoint(status: WaterHeaterStatus) -> str:
+    """Format the setpoint for inclusion in alert messages, or 'unknown'."""
+    return f"{status.set_point}°F" if status.set_point is not None else "unknown"
+
+
 class RheemMonitor:
     """Polls water heaters and fires/clears low-hot-water alerts."""
 
@@ -63,6 +68,9 @@ class RheemMonitor:
         # Per-device current alert tier: "p1" (low) or "p2" (empty).
         # Absent key = not alerted. Cleared only on recovery to >= mid_threshold.
         self.alerted: dict[str, str] = {}
+        # Per-device last observed setpoint, used to detect a raise that would
+        # explain a sudden drop in availability (tank reheating to new target).
+        self.setpoints: dict[str, int] = {}
         self._load_state()
 
     def _load_state(self) -> None:
@@ -70,6 +78,7 @@ class RheemMonitor:
             with open(self.state_file, "r") as f:
                 state = json.load(f)
                 self.alerted = state.get("alerted", {})
+                self.setpoints = state.get("setpoints", {})
             self.logger.debug("Loaded Rheem monitor state from %s", self.state_file)
         except (FileNotFoundError, json.JSONDecodeError):
             self.logger.debug("No existing Rheem state file; starting fresh")
@@ -81,7 +90,7 @@ class RheemMonitor:
         tmp_path = self.state_file + ".tmp"
         try:
             with open(tmp_path, "w") as f:
-                json.dump({"alerted": self.alerted}, f)
+                json.dump({"alerted": self.alerted, "setpoints": self.setpoints}, f)
             os.replace(tmp_path, self.state_file)
             self.logger.debug("Saved Rheem monitor state to %s", self.state_file)
         except OSError as e:
@@ -122,6 +131,7 @@ class RheemMonitor:
 
         # Prune devices that no longer appear.
         self.alerted = {s: v for s, v in self.alerted.items() if s in current_serials}
+        self.setpoints = {s: v for s, v in self.setpoints.items() if s in current_serials}
         self._save_state()
         return heaters
 
@@ -134,13 +144,24 @@ class RheemMonitor:
             self.logger.debug("%s does not report availability; skipping", status.name)
             return
 
+        # Record the current setpoint for next cycle's comparison before any
+        # early return so we always have a baseline to detect a raise.
+        previous_setpoint = self.setpoints.get(status.serial_number)
+        if status.set_point is not None:
+            self.setpoints[status.serial_number] = status.set_point
+        setpoint_raised = (
+            status.set_point is not None
+            and previous_setpoint is not None
+            and status.set_point > previous_setpoint
+        )
+
         active_tier = self.alerted.get(status.serial_number)
 
         # Clear only on explicit recovery to >= mid_threshold (not merely
         # "above low" — that would let a level between low and mid prematurely
         # clear an active alert). mid_threshold is the configured recovery gate.
         if active_tier is not None and avail >= self.mid_threshold:
-            msg = f"Hot water recovered: {status.name} at {_label(avail)} ({avail}%)"
+            msg = f"Hot water recovered: {status.name} at {_label(avail)} ({avail}%), setpoint {_setpoint(status)}"
             self.pushover.send_message(msg, title="Rheem Hot Water Recovered", priority=-1)
             del self.alerted[status.serial_number]
             self.logger.info("Cleared hot-water alert: %s", msg)
@@ -153,11 +174,32 @@ class RheemMonitor:
             return
 
         # In a low zone (empty or 1/3rd). Decide whether to fire/escalate.
+        # Suppress when the setpoint was raised since the last check: the drop
+        # in availability is expected while the tank reheats to the new target.
         if active_tier is None:
-            self._fire(status, avail, current_tier)
+            if setpoint_raised:
+                self.logger.info(
+                    "Suppressing %s alert for %s: setpoint raised %s->%s, "
+                    "low availability likely due to reheating",
+                    current_tier,
+                    status.name,
+                    previous_setpoint,
+                    status.set_point,
+                )
+            else:
+                self._fire(status, avail, current_tier)
         elif current_tier == "p2" and active_tier == "p1":
-            # Escalate low -> empty.
-            self._fire(status, avail, current_tier)
+            # Escalate low -> empty (unless setpoint was raised).
+            if setpoint_raised:
+                self.logger.info(
+                    "Suppressing p2 escalation for %s: setpoint raised %s->%s, "
+                    "low availability likely due to reheating",
+                    status.name,
+                    previous_setpoint,
+                    status.set_point,
+                )
+            else:
+                self._fire(status, avail, current_tier)
         # Same tier, or recovering empty->low: no re-alert (clear at mid resets).
 
     def _tier_for(self, availability: int) -> str | None:
@@ -171,7 +213,7 @@ class RheemMonitor:
     def _fire(self, status: WaterHeaterStatus, avail: int, tier: str) -> None:
         priority = 2 if tier == "p2" else 1
         label = "empty" if tier == "p2" else "low"
-        msg = f"Hot water {label}: {status.name} at {_label(avail)} ({avail}%)"
+        msg = f"Hot water {label}: {status.name} at {_label(avail)} ({avail}%), setpoint {_setpoint(status)}"
         title = "Rheem Hot Water Empty" if tier == "p2" else "Rheem Low Hot Water"
         self.pushover.send_message(msg, title=title, priority=priority)
         self.alerted[status.serial_number] = tier

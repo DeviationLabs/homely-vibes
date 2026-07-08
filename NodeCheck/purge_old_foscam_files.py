@@ -103,7 +103,7 @@ def purge_old_foscam_files() -> tuple[bool, str]:
 
     finally:
         # Restore original working directory
-        pushover.send_message(pushover_msg, title="Foscam Cleanup", priority=-1)
+        pushover.send_message(pushover_msg, title="Foscam Cleanup", priority=-2)
         os.chdir(original_cwd)
 
     return success, "\n".join(messages)

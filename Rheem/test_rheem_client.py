@@ -152,6 +152,7 @@ def test_low_availability_fires_p1_alert(tmp_path: Path) -> None:
     assert title == "Rheem Low Hot Water"
     assert priority == 1
     assert "Garage" in msg
+    assert "setpoint 120°F" in msg
     assert monitor.alerted["S1"] == "p1"
 
 
@@ -165,6 +166,7 @@ def test_empty_tank_fires_p2_alert(tmp_path: Path) -> None:
     msg, title, priority = pushover.sent[0]
     assert title == "Rheem Hot Water Empty"
     assert priority == 2
+    assert "setpoint 120°F" in msg
     assert monitor.alerted["S1"] == "p2"
 
 
@@ -221,6 +223,7 @@ def test_recovery_to_mid_clears_alert(tmp_path: Path) -> None:
     msg, title, priority = pushover.sent[1]
     assert title == "Rheem Hot Water Recovered"
     assert priority == -1
+    assert "setpoint 120°F" in msg
     assert "S1" not in monitor.alerted
 
 
@@ -292,6 +295,138 @@ def test_pruned_gone_device(tmp_path: Path) -> None:
     monitor, _ = _monitor_with([], state)
     asyncio.run(monitor.check_once())
     assert "S1" not in monitor.alerted
+
+
+def test_none_setpoint_shows_unknown(tmp_path: Path) -> None:
+    """A heater that doesn't report a setpoint shows 'unknown' in the alert."""
+    state = str(tmp_path / "state.json")
+    monitor, pushover = _monitor_with(
+        [FakeWaterHeater(serial_number="S1", name="Garage", availability=33, set_point=None)], state
+    )
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 1
+    msg, _, _ = pushover.sent[0]
+    assert "setpoint unknown" in msg
+
+
+def test_setpoint_raised_suppresses_new_alert(tmp_path: Path) -> None:
+    """Setpoint raised since last check suppresses a new low alert.
+
+    The tank reports less hot water because it's reheating to the new higher
+    target, not because of an actual shortage — don't alert.
+    """
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=120)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # baseline: full, no alert
+    assert pushover.sent == []
+    # Setpoint raised and availability drops to low.
+    heaters[0].set_point = 140
+    heaters[0].availability = 33
+    asyncio.run(monitor.check_once())
+    assert pushover.sent == []  # suppressed
+    assert "S1" not in monitor.alerted
+
+
+def test_setpoint_raised_suppresses_escalation(tmp_path: Path) -> None:
+    """Setpoint raised while already in P1 suppresses P2 escalation."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=33, set_point=120)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # P1 fired
+    assert monitor.alerted["S1"] == "p1"
+    assert len(pushover.sent) == 1
+    # Setpoint raised and availability drops to empty.
+    heaters[0].set_point = 140
+    heaters[0].availability = 0
+    asyncio.run(monitor.check_once())
+    # Escalation suppressed; still only the original P1.
+    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p1"
+
+
+def test_setpoint_unchanged_still_alerts(tmp_path: Path) -> None:
+    """No setpoint raise -> alert fires normally (regression guard)."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=120)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # baseline
+    # Same setpoint, availability drops to low.
+    heaters[0].availability = 33
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p1"
+
+
+def test_setpoint_lowered_still_alerts(tmp_path: Path) -> None:
+    """Setpoint lowered does not suppress (drop is not caused by reheating)."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=140)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # baseline
+    heaters[0].set_point = 120
+    heaters[0].availability = 33
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p1"
+
+
+def test_setpoint_raised_then_unchanged_fires_alert(tmp_path: Path) -> None:
+    """Suppression is one-cycle only; if still low next check, alert fires."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=120)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # baseline
+    # Setpoint raised, availability drops.
+    heaters[0].set_point = 140
+    heaters[0].availability = 33
+    asyncio.run(monitor.check_once())  # suppressed
+    assert pushover.sent == []
+    # Next cycle: setpoint unchanged, still low -> alert fires.
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p1"
+
+
+def test_none_setpoint_never_suppresses(tmp_path: Path) -> None:
+    """A tank that doesn't report setpoint can never trigger suppression."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=None)]
+    monitor, pushover = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())  # baseline
+    heaters[0].availability = 33
+    asyncio.run(monitor.check_once())
+    assert len(pushover.sent) == 1
+    assert monitor.alerted["S1"] == "p1"
+
+
+def test_setpoint_persisted_across_instances(tmp_path: Path) -> None:
+    """Setpoint tracking survives restart (persisted in state file)."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=120)]
+    monitor, _ = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())
+    assert monitor.setpoints["S1"] == 120
+    # New instance loads persisted setpoint.
+    monitor2, pushover2 = _monitor_with(heaters, state)
+    assert monitor2.setpoints["S1"] == 120
+    # Raise setpoint + drop availability -> suppressed (previous setpoint known).
+    heaters[0].set_point = 140
+    heaters[0].availability = 33
+    asyncio.run(monitor2.check_once())
+    assert pushover2.sent == []
+
+
+def test_setpoints_pruned_with_gone_device(tmp_path: Path) -> None:
+    """Setpoint entry is pruned when a device disappears."""
+    state = str(tmp_path / "state.json")
+    heaters = [FakeWaterHeater(serial_number="S1", name="Garage", availability=100, set_point=120)]
+    monitor, _ = _monitor_with(heaters, state)
+    asyncio.run(monitor.check_once())
+    assert "S1" in monitor.setpoints
+    monitor, _ = _monitor_with([], state)
+    asyncio.run(monitor.check_once())
+    assert "S1" not in monitor.setpoints
 
 
 def test_multiple_heaters_independent(tmp_path: Path) -> None:
@@ -379,7 +514,7 @@ def test_save_state_is_atomic_no_tmp_left(tmp_path: Path) -> None:
     # State file is valid JSON.
     with open(state) as f:
         data = json.load(f)
-    assert data == {"alerted": {"S1": "p1"}}
+    assert data == {"alerted": {"S1": "p1"}, "setpoints": {"S1": 120}}
     # No leftover tmp file.
     assert not Path(state + ".tmp").exists()
 

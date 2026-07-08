@@ -122,7 +122,7 @@ class NodeChecker:
                 pushover.send_message(
                     f"{self.mode.title()} node reboot completed successfully",
                     title=f"{self.mode.title()} Reboot Complete",
-                    priority=-1,
+                    priority=-2,
                 )
 
         if self.reboot_failures:
@@ -140,7 +140,7 @@ class NodeChecker:
 
         Mailer.sendmail(
             topic=f"[NodeCheck-{self.mode}]",
-            alert=not system_healthy,
+            alert=not is_healthy,
             message="\n".join(self.messages),
             always_email=always_email,
         )
