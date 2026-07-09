@@ -11,6 +11,7 @@ its diagnosis (Google stream attestation, not an OS network block), and the fix 
 - **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM.
 - **Playlists as default landing**: app launches into `/feed/playlists`. Any navigation to `/` (algorithmic home) — YouTube's in-page Home tab, the logo, the toolbar Home button, post-login redirects — is caught and rewritten via KVO on `webView.url` (SPA `pushState`) plus `WKNavigationDelegate` (full-page navs). The `/` intercept skips forward/back navs so the toolbar chevrons don't appear broken.
 - **Auto-rotate to landscape on video play**: JS reports `<video>` `play`/`pause`/`ended` events; a 400ms debounce coalesces buffering-driven pause↔play blips before flipping orientation. Portrait when not playing.
+- **Fullscreen on play**: a fresh video start (content or ad, `currentTime < 1s`) calls the element's native `webkitEnterFullscreen()`, with a retry on `playing` if media wasn't loaded yet. Resume-from-pause does *not* re-enter — a manual fullscreen exit isn't fought. Fullscreen exits automatically when the video ends. See the fullscreen gotcha below for why it's done exactly this way.
 - **Autoplay gated natively**: `mediaTypesRequiringUserActionForPlayback = .video`. The former JS `video.play()` wrapper was removed 2026-07-09 — prototype tampering tripped YouTube's stream attestation and killed playback (see [V2_REMEDIATION_PLAN.md](V2_REMEDIATION_PLAN.md) §3a).
 - **Shorts navigation guard**: full-page navigations to `/shorts` are cancelled in `WKNavigationDelegate`. SPA (`pushState`) navigations are currently unguarded — the JS `pushState` wrapper was removed with the attestation fix; a Swift-side replacement is tracked in [#232](https://github.com/DeviationLabs/homely-vibes/issues/232).
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0.
@@ -78,7 +79,7 @@ Free Apple IDs must re-sign every 7 days. Leave the **Sideloadly daemon running 
 
 ## How It Works
 
-Two `WKUserScript` injections run on every page:
+Three `WKUserScript` injections run on every page:
 
 **`atDocumentStart` (`earlyScript`)**:
 - Injects CSS to hide Shorts elements before first paint (`.pivot-shorts`, `ytm-shorts-lockup-view-model`, etc.)
@@ -91,6 +92,11 @@ Two `WKUserScript` injections run on every page:
 **`atDocumentEnd` (`shortsBlockScript`)**:
 - DOM removal of all Shorts-related elements
 - Debounced `MutationObserver` (300ms) re-runs removal as YouTube's SPA loads new content
+
+**`atDocumentEnd` (`videoEventScript`)**:
+- Passive `play`/`pause`/`ended` listeners post video lifecycle to Swift (drives the orientation lock)
+- On fresh play, enters native fullscreen via `webkitEnterFullscreen()` (retry on `playing`); exits on `ended`
+- Listener-only — calls standard APIs, never touches prototypes (see the attestation gotcha above)
 
 `WKNavigationDelegate` intercepts full-page navigations to `/shorts` and to `/` (or empty path) on `*.youtube.com`, redirecting both to the All Subscriptions grid.
 
@@ -129,6 +135,22 @@ YouTube's mobile DOM uses custom elements not documented anywhere (`ytm-shorts-l
   3. The device's iOS minor version is newer than any DDI Xcode has — open Xcode → Window → Devices and Simulators, select the iPhone, click **Get** to fetch the matching DDI. If unavailable, update Xcode.
   4. Mac ↔ iPhone trust didn't carry over (e.g., fresh macOS user account) — Settings → General → Transfer or Reset iPhone → Reset → Reset Location & Privacy, then replug and tap **Trust**.
 - **App installs but crashes immediately with `dyld_shared_cache_extract_dylibs` error** — different problem from the above; happens when the device's iOS is newer than Xcode's symbol cache. Edit Scheme → Run → Info → uncheck **Debug executable**.
+
+### Fullscreen in WKWebView (why `webkitEnterFullscreen`, why the retry)
+Established empirically via simulator probe, 2026-07-09:
+
+- **The Element Fullscreen API does not exist in iOS WKWebView.** `document.fullscreenEnabled` is
+  `undefined` (prefixed variant too) even with `WKPreferences.isElementFullscreenEnabled = true`.
+  Any `requestFullscreen()`-based approach is dead code here.
+- **Delegating to YouTube's own fullscreen button doesn't work.** The mweb button doesn't exist in
+  the DOM until playback starts, and once it does, YouTube ignores synthetic clicks
+  (`isTrusted: false`). Worse, a matched-but-ignored click can short-circuit fallbacks — don't.
+- **`webkitEnterFullscreen()` throws `InvalidStateError` until media is loaded**, so a `play`-time
+  call can be too early. Call it on `play` (fresh starts only) and retry on `playing`, when a
+  renderable frame guarantees valid state.
+- Native fullscreen is the **system video player** — the same fullscreen real iPhone Safari users
+  get on m.youtube.com. Captions render as text tracks (CC button in the native controls), not
+  YouTube's DOM overlay.
 
 ### Autoplay interception
 Native-only: `mediaTypesRequiringUserActionForPlayback = .video`. The earlier claim that a JS-level `HTMLVideoElement.prototype.play()` override was "the reliable fix" dated from the broken-proxy era and is disproven — the wrapper itself was tripping stream attestation. If autoplay leaks through the native gate, solve it Swift-side ([#232](https://github.com/DeviationLabs/homely-vibes/issues/232)), never by re-tampering with the prototype.
