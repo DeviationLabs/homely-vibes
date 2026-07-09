@@ -38,17 +38,51 @@ private let earlyScript = """
 })();
 """
 
-/// Report HTML5 video lifecycle back to Swift so we can lock orientation.
-/// Deliberately NOT listening for `error`/`stalled` — those fire on every
-/// buffer hiccup and previously caused portrait↔landscape flapping.
+/// Report HTML5 video lifecycle back to Swift so we can lock orientation,
+/// and enter fullscreen when a video starts. Deliberately NOT listening for
+/// `error`/`stalled` — those fire on every buffer hiccup and previously
+/// caused portrait↔landscape flapping.
+///
+/// Fullscreen entry calls native webkitEnterFullscreen() directly from the
+/// play/playing listeners — sim probe (2026-07-09) showed element fullscreen
+/// is unavailable in iOS WKWebView (document.fullscreenEnabled undefined even
+/// with isElementFullscreenEnabled) and synthetic clicks on YouTube's button
+/// are ignored (untrusted). webkitEnterFullscreen throws InvalidStateError
+/// until media is loaded, hence the retry on 'playing'.
+/// No prototype/history tampering here — that trips stream attestation
+/// (V2_REMEDIATION_PLAN.md §3a).
 private let videoEventScript = """
 (function() {
     const post = (kind) => {
         try { window.webkit.messageHandlers.video.postMessage(kind); } catch(e) {}
     };
-    document.addEventListener('play',  (e) => { if (e.target instanceof HTMLVideoElement) post('play');  }, true);
-    document.addEventListener('pause', (e) => { if (e.target instanceof HTMLVideoElement) post('pause'); }, true);
-    document.addEventListener('ended', (e) => { if (e.target instanceof HTMLVideoElement) post('ended'); }, true);
+    let wantFS = false;
+    const tryFS = (v) => {
+        if (!wantFS || v.webkitDisplayingFullscreen) { wantFS = false; return; }
+        try { v.webkitEnterFullscreen(); wantFS = false; } catch (e) { /* retry on 'playing' */ }
+    };
+    document.addEventListener('play', (e) => {
+        const v = e.target;
+        if (!(v instanceof HTMLVideoElement)) return;
+        post('play');
+        // Only on fresh starts (content or ad begin), not on pause→resume —
+        // re-entering after a manual fullscreen exit would fight the user.
+        if (v.currentTime < 1) { wantFS = true; tryFS(v); }
+    }, true);
+    document.addEventListener('playing', (e) => {
+        if (e.target instanceof HTMLVideoElement) tryFS(e.target);
+    }, true);
+    document.addEventListener('pause', (e) => {
+        if (!(e.target instanceof HTMLVideoElement)) return;
+        wantFS = false;
+        post('pause');
+    }, true);
+    document.addEventListener('ended', (e) => {
+        const v = e.target;
+        if (!(v instanceof HTMLVideoElement)) return;
+        post('ended');
+        try { if (v.webkitDisplayingFullscreen) v.webkitExitFullscreen(); } catch (err) {}
+    }, true);
     // pagehide covers SPA-back navigating away from /watch without a pause event.
     window.addEventListener('pagehide', () => post('pause'));
 })();
