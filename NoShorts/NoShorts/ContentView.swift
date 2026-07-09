@@ -16,11 +16,11 @@ import Network
 // MARK: - Injected user scripts
 
 /// Runs at document start in every frame: CSS that hides Shorts affordances
-/// before first paint. Track-A diagnostic build (see noshorts-v2-plan.md):
-/// the window.webkit hide, HTMLVideoElement.play() wrapper, and pushState
-/// wrappers are stripped — all three are BotGuard-visible tampering and the
-/// prime suspects for failed stream attestation (no pot= param, streams
-/// killed mid-body). /shorts SPA navs are NOT blocked in this build.
+/// before first paint. CSS-only BY DESIGN — the former window.webkit hide,
+/// HTMLVideoElement.play() wrapper, and pushState wrappers were BotGuard-visible
+/// tampering that tripped YouTube's stream attestation and killed playback
+/// (V2_REMEDIATION_PLAN.md §3a). Do not reintroduce page-JS tampering here.
+/// /shorts SPA navs are currently unguarded — Swift-side replacement: issue #232.
 private let earlyScript = """
 (function() {
     const s = document.createElement('style');
