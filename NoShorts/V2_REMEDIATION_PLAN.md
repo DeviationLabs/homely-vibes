@@ -171,6 +171,32 @@ home host looks like plain HTTPS and dodges whatever gate exists). Re-check at e
    cellular playback then rides home upload bandwidth.)
 4. **If it comes to it: A4 treadmill vs shelve?**
 
+## 7. Follow-up plan — issue #232 (post-resolution TODO)
+
+Restoring the behaviors stripped by the attestation fix, Swift-side only (hard constraint: no
+page-JS prototype/history tampering — §3a). Parts ordered by priority; 2 and 3 are evidence-gated.
+
+- [ ] **P1 — `/shorts` SPA guard (do now).** Full-page navs to `/shorts` are still cancelled in
+  `decidePolicyFor`, but YouTube's SPA routing bypasses it. Fix: add a `/shorts` case to the existing
+  KVO observer on `webView.url` in the Coordinator (same mechanism as the YouTube-home redirect —
+  KVO fires on SPA URL changes where `decidePolicyFor` does not). ~5 lines:
+  on `url.path.hasPrefix("/shorts")` → `goBack()` if possible, else `goPlaylists()`.
+  Verify on-device: Shorts unreachable via search results and channel Shorts tabs; playback
+  unaffected (inspector spot-check: segments flowing, no attestation regression).
+- [ ] **P2 — autoplay-next gate (evidence-gated, likely moot).** We rely on the native
+  `mediaTypesRequiringUserActionForPlayback = .video` gate. The old claim that YouTube bypasses it
+  dates from the broken-proxy era. Gate: observe real usage — does the next video ever auto-play
+  after one ends? (Fullscreen auto-exits on `ended`, landing on the endscreen in portrait, which
+  already breaks the binge flow.) Only if a leak is observed: design a Swift-side countermeasure
+  (e.g., video-event heuristic → `evaluateJavaScript` pause), design TBD on evidence.
+- [ ] **P3 — fresh sign-in workaround (deferred until it bites).** The `window.webkit` hide on
+  `accounts.google.com` was removed. Existing session cookies persist, so this only matters after a
+  sign-out/data wipe. If a fresh login is ever blocked: restore the hide scoped to
+  `accounts.google.com` only, then re-verify playback attestation (the hide never ran on
+  youtube.com pages, so risk is low — but verify, don't assume).
+- [ ] **Housekeeping:** issue #232 is authored by `mastrix-tech` (wrong-hat account was active).
+  Either accept it or recreate under `abutala` and update references (README ×3, this file, PR #233 body).
+
 ## References
 
 - [`V2_PRD.md`](V2_PRD.md) (esp. §7 fail-fast ladder, §8 outcome — to be amended per §3a)
