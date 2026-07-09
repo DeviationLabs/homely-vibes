@@ -157,6 +157,11 @@ final class WebViewModel {
         }
 
         let wv = WKWebView(frame: .zero, configuration: config)
+        #if DEBUG
+        // Phase-0 diagnostics: attach Mac Safari Web Inspector (Develop menu)
+        // to observe googlevideo request statuses. Never ships in Release.
+        wv.isInspectable = true
+        #endif
         wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         self.webView = wv
     }
