@@ -2,15 +2,17 @@
 
 An iOS app that wraps YouTube in a `WKWebView`, blocks all Shorts content (navigation, feed shelves, autoplay), and lands on **Playlists** (`/feed/playlists`) instead of the algorithmic home page.
 
-Architecture and V2 rationale live in [V2_PRD.md](V2_PRD.md).
+Architecture and V2 rationale live in [V2_PRD.md](V2_PRD.md). The iOS 26.5.2 playback outage,
+its diagnosis (Google stream attestation, not an OS network block), and the fix are in
+[V2_REMEDIATION_PLAN.md](V2_REMEDIATION_PLAN.md).
 
 ## Features
 
 - **Shorts blocking**: removes Shorts tab, home feed shelf, and all `/shorts/` links from the DOM.
 - **Playlists as default landing**: app launches into `/feed/playlists`. Any navigation to `/` (algorithmic home) — YouTube's in-page Home tab, the logo, the toolbar Home button, post-login redirects — is caught and rewritten via KVO on `webView.url` (SPA `pushState`) plus `WKNavigationDelegate` (full-page navs). The `/` intercept skips forward/back navs so the toolbar chevrons don't appear broken.
 - **Auto-rotate to landscape on video play**: JS reports `<video>` `play`/`pause`/`ended` events; a 400ms debounce coalesces buffering-driven pause↔play blips before flipping orientation. Portrait when not playing.
-- **Autoplay blocked**: JS interceptor only allows `video.play()` within 1.5s of a real user gesture. Load-bearing beyond autoplay — without the wrapper YouTube's player refuses to serve modern content.
-- **SPA navigation guard**: intercepts `pushState`/`replaceState` to drop `/shorts` navigations.
+- **Autoplay gated natively**: `mediaTypesRequiringUserActionForPlayback = .video`. The former JS `video.play()` wrapper was removed 2026-07-09 — prototype tampering tripped YouTube's stream attestation and killed playback (see [V2_REMEDIATION_PLAN.md](V2_REMEDIATION_PLAN.md) §3a).
+- **Shorts navigation guard**: full-page navigations to `/shorts` are cancelled in `WKNavigationDelegate`. SPA (`pushState`) navigations are currently unguarded — the JS `pushState` wrapper was removed with the attestation fix; a Swift-side replacement is tracked in [#232](https://github.com/DeviationLabs/homely-vibes/issues/232).
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0.
 - **Top toolbar**: 4 destination shortcuts — Playlists, Liked Videos, All Subscriptions, Account/Login.
 - **Bottom toolbar**: back, forward, search (expands inline), home, reload. Back/forward mirror `WKWebView.canGoBack`/`canGoForward` via KVO — refreshed live rather than only at `didFinish` so the chevrons stay accurate through cancelled navs.
@@ -80,9 +82,11 @@ Two `WKUserScript` injections run on every page:
 
 **`atDocumentStart` (`earlyScript`)**:
 - Injects CSS to hide Shorts elements before first paint (`.pivot-shorts`, `ytm-shorts-lockup-view-model`, etc.)
-- Intercepts `HTMLVideoElement.prototype.play()` — blocked unless called within 1.5s of a user touch/click
-- Intercepts `history.pushState`/`replaceState` to drop any navigation to `/shorts`
-- Removes `window.webkit` for `accounts.google.com` only, so Google's sign-in flow doesn't detect WKWebView
+- **CSS-only by design.** It previously also wrapped `HTMLVideoElement.prototype.play()`,
+  `history.pushState`/`replaceState`, and hid `window.webkit` on `accounts.google.com`. All three were
+  removed 2026-07-09: page-visible JS tampering is detectable by YouTube's BotGuard attestation, which
+  responded by killing googlevideo media streams mid-body (`200 OK` + zero bytes, no `pot=` parameter,
+  `playerfallback/1`). Removing them (plus the honest UA) restored playback on iOS 26.5.2.
 
 **`atDocumentEnd` (`shortsBlockScript`)**:
 - DOM removal of all Shorts-related elements
@@ -95,7 +99,7 @@ A `KVO` observer on `webView.url` catches SPA URL changes (`history.pushState`/`
 ## Architecture Notes / Gotchas
 
 ### Why mobile user agent?
-YouTube's mobile site (`m.youtube.com`-style layout via user agent) renders more predictably in WKWebView than the desktop site. The app uses a standard iPhone Safari UA.
+YouTube's mobile site (`m.youtube.com`-style layout via user agent) renders more predictably in WKWebView than the desktop site. The app uses `applicationNameForUserAgent = "Version/26.5 Mobile/15E148 Safari/604.1"`, so WebKit generates a truthful UA (real OS + WebKit version) with a Safari-shaped suffix. **Do not pin a fake `customUserAgent`**: the old iOS-17 pin contradicted the real WebKit fingerprint and contributed to YouTube's attestation failures (V2_REMEDIATION_PLAN.md §3a).
 
 ### Why `@Observable` instead of `ObservableObject`?
 Swift 6 strict concurrency prevents `@MainActor` classes from conforming to `ObservableObject`. Using `@Observable` macro with `@ObservationIgnored` on the `WKWebView` property sidesteps the issue cleanly.
@@ -107,7 +111,7 @@ Injecting CSS before paint prevents the Shorts shelf from flickering in before t
 `setInterval` at 800ms caused page freezes on YouTube's heavy SPA. A debounced (300ms) `MutationObserver` fires only when the DOM actually changes and doesn't block the main thread.
 
 ### Google sign-in in WKWebView
-Google detects WKWebView via `window.webkit` and blocks sign-in with a "browser not supported" error. Removing `window.webkit` (scoped to `accounts.google.com` only) makes it appear as Safari. Cookies stay in the WKWebView jar — no `SFSafariViewController` needed.
+Google detects WKWebView via `window.webkit` and can block sign-in with a "browser not supported" error. The old workaround (removing `window.webkit` on `accounts.google.com`) was stripped with the 2026-07-09 attestation fix. Existing sessions persist in the default data store's cookie jar, so this only matters for *fresh* sign-ins — if one hits the block, revisit under [#232](https://github.com/DeviationLabs/homely-vibes/issues/232) (the hide was scoped to accounts.google.com and may be safe to restore alone; verify playback with Web Inspector after).
 
 ### Discovering actual mobile YouTube element names
 YouTube's mobile DOM uses custom elements not documented anywhere (`ytm-shorts-lockup-view-model`, `ytm-pivot-bar-renderer`, etc.). To discover them, inject `document.querySelectorAll('*')` filtered to custom elements via `evaluateJavaScript` with a Swift completion handler — `console.log` output is not accessible from Swift.
@@ -127,7 +131,7 @@ YouTube's mobile DOM uses custom elements not documented anywhere (`ytm-shorts-l
 - **App installs but crashes immediately with `dyld_shared_cache_extract_dylibs` error** — different problem from the above; happens when the device's iOS is newer than Xcode's symbol cache. Edit Scheme → Run → Info → uncheck **Debug executable**.
 
 ### Autoplay interception
-`mediaTypesRequiringUserActionForPlayback = .video` alone is insufficient — YouTube's player works around it. The JS-level `HTMLVideoElement.prototype.play()` override is the reliable fix. The 1.5s window after a touch/click allows legitimate user-initiated plays (including tap-to-play on feed thumbnails).
+Native-only: `mediaTypesRequiringUserActionForPlayback = .video`. The earlier claim that a JS-level `HTMLVideoElement.prototype.play()` override was "the reliable fix" dated from the broken-proxy era and is disproven — the wrapper itself was tripping stream attestation. If autoplay leaks through the native gate, solve it Swift-side ([#232](https://github.com/DeviationLabs/homely-vibes/issues/232)), never by re-tampering with the prototype.
 
 ## Block-YouTube-in-Chrome Setup (DNS bypass)
 

@@ -15,21 +15,14 @@ import Network
 
 // MARK: - Injected user scripts
 
-/// Runs at document start in every frame. Does three things:
-/// 1. Hides `window.webkit` on accounts.google.com so Google's sign-in doesn't
-///    fingerprint us as a WKWebView.
-/// 2. Injects CSS that hides Shorts affordances before first paint.
-/// 3. Wraps `HTMLVideoElement.prototype.play()` so it only resolves within
-///    1.5s of a real user gesture. Load-bearing beyond autoplay: without this
-///    wrapper YouTube's player refuses to serve modern content (confirmed
-///    during the 2026-07 debugging session).
-/// 4. Intercepts SPA `pushState`/`replaceState` for `/shorts`.
+/// Runs at document start in every frame: CSS that hides Shorts affordances
+/// before first paint. CSS-only BY DESIGN — the former window.webkit hide,
+/// HTMLVideoElement.play() wrapper, and pushState wrappers were BotGuard-visible
+/// tampering that tripped YouTube's stream attestation and killed playback
+/// (V2_REMEDIATION_PLAN.md §3a). Do not reintroduce page-JS tampering here.
+/// /shorts SPA navs are currently unguarded — Swift-side replacement: issue #232.
 private let earlyScript = """
 (function() {
-    if (window.location.hostname.includes('accounts.google')) {
-        try { Object.defineProperty(window, 'webkit', { get: () => undefined, configurable: true }); } catch(e) {}
-    }
-
     const s = document.createElement('style');
     s.id = 'no-shorts';
     s.textContent = `
@@ -42,23 +35,6 @@ private let earlyScript = """
         ytm-pivot-bar-renderer { display:none!important; }
     `;
     (document.head || document.documentElement).appendChild(s);
-
-    let lastInteraction = 0;
-    document.addEventListener('touchstart', () => { lastInteraction = Date.now(); },
-        { capture: true, passive: true });
-    document.addEventListener('click', () => { lastInteraction = Date.now(); },
-        { capture: true, passive: true });
-    const _play = HTMLVideoElement.prototype.play;
-    HTMLVideoElement.prototype.play = function() {
-        if (Date.now() - lastInteraction < 1500) return _play.call(this);
-        return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
-    };
-
-    const _push = history.pushState.bind(history);
-    const _replace = history.replaceState.bind(history);
-    const isShorts = (u) => u && String(u).startsWith('/shorts');
-    history.pushState    = (state, title, url) => { if (!isShorts(url)) _push(state, title, url); };
-    history.replaceState = (state, title, url) => { if (!isShorts(url)) _replace(state, title, url); };
 })();
 """
 
@@ -126,6 +102,10 @@ final class WebViewModel {
         // YouTube's adaptive-streaming pipeline expects inline <video>. Without
         // this, playback on iOS 26 hits a limited fullscreen-only codepath.
         config.allowsInlineMediaPlayback = true
+        // Honest UA: WebKit generates the true OS/WebKit prefix and appends
+        // this Safari-shaped suffix. Replaces the pinned iOS-17 customUserAgent
+        // lie, which contradicted the real WebKit fingerprint (Track A).
+        config.applicationNameForUserAgent = "Version/26.5 Mobile/15E148 Safari/604.1"
 
         config.userContentController.addUserScript(
             WKUserScript(source: earlyScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
@@ -157,7 +137,11 @@ final class WebViewModel {
         }
 
         let wv = WKWebView(frame: .zero, configuration: config)
-        wv.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        #if DEBUG
+        // Phase-0 diagnostics: attach Mac Safari Web Inspector (Develop menu)
+        // to observe googlevideo request statuses. Never ships in Release.
+        wv.isInspectable = true
+        #endif
         self.webView = wv
     }
 

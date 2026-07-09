@@ -221,6 +221,17 @@ Watch YouTube on a different device (laptop, Apple TV) for the foreseeable. Come
 
 ## 8. Outcome (2026-07-08) — built, merged, then shelved
 
+> **Update 2026-07-09 — unshelved and FIXED.** This section's root-cause interpretation ("systemic to
+> iOS 26.5.2's treatment of outbound TCP from a third-party WKWebView app's bundle") is **disproven**.
+> Web Inspector diagnostics showed direct WebContent→googlevideo fetches succeeding continuously
+> (manifests, first media segments) while the server killed media streams mid-body (`200 OK` + zero
+> bytes, `Server: gvs 1.0`, no `pot=` parameter, `playerfallback/1`) — i.e., **YouTube stream
+> attestation (PoToken/BotGuard) enforcement**, not an OS network gate. The observed RSTs were remote,
+> from Google edges. Fix: honest UA via `applicationNameForUserAgent` + removal of BotGuard-visible JS
+> tampering (`play()` wrapper, `pushState` wrappers, `window.webkit` hide). Playback verified restored
+> on-device with NextDNS active. Full diagnosis and evidence: [V2_REMEDIATION_PLAN.md](V2_REMEDIATION_PLAN.md).
+> The section below is preserved unedited as the historical record of what we believed on 2026-07-08.
+
 V2 was built exactly per §5–§6 and merged as PR #231. Simulator verification passed cleanly (see Appendix B). The **on-device test with NextDNS active failed**, and — critically — it failed in **both** of the fault modes §7 asked us to disambiguate, in the same session on the same phone.
 
 ### On-device test log — first video
