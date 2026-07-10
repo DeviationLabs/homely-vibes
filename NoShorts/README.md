@@ -13,7 +13,7 @@ its diagnosis (Google stream attestation, not an OS network block), and the fix 
 - **Auto-rotate to landscape on video play**: JS reports `<video>` `play`/`pause`/`ended` events; a 400ms debounce coalesces buffering-driven pause↔play blips before flipping orientation. Portrait when not playing.
 - **Fullscreen on play**: a fresh video start (content or ad, `currentTime < 1s`) calls the element's native `webkitEnterFullscreen()`, with a retry on `playing` if media wasn't loaded yet. Resume-from-pause does *not* re-enter — a manual fullscreen exit isn't fought. Fullscreen exits automatically when the video ends. See the fullscreen gotcha below for why it's done exactly this way.
 - **Autoplay gated natively**: `mediaTypesRequiringUserActionForPlayback = .video`. The former JS `video.play()` wrapper was removed 2026-07-09 — prototype tampering tripped YouTube's stream attestation and killed playback (see [V2_REMEDIATION_PLAN.md](V2_REMEDIATION_PLAN.md) §3a).
-- **Shorts navigation guard**: full-page navigations to `/shorts` are cancelled in `WKNavigationDelegate`. SPA (`pushState`) navigations are currently unguarded — the JS `pushState` wrapper was removed with the attestation fix; a Swift-side replacement is tracked in [#232](https://github.com/DeviationLabs/homely-vibes/issues/232).
+- **Shorts navigation guard**: full-page navigations to `/shorts` are cancelled in `WKNavigationDelegate`; SPA (`pushState`) navigations are caught Swift-side by the KVO observer on `webView.url`, which bounces back (`goBack()`, else Playlists). The old JS `pushState` wrapper is gone for good — page-JS tampering trips attestation ([#232](https://github.com/DeviationLabs/homely-vibes/issues/232) P1).
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0.
 - **Top toolbar**: 4 destination shortcuts — Playlists, Liked Videos, All Subscriptions, Account/Login.
 - **Bottom toolbar**: back, forward, search (expands inline), home, reload. Back/forward mirror `WKWebView.canGoBack`/`canGoForward` via KVO — refreshed live rather than only at `didFinish` so the chevrons stay accurate through cancelled navs.
@@ -100,7 +100,7 @@ Three `WKUserScript` injections run on every page:
 
 `WKNavigationDelegate` intercepts full-page navigations to `/shorts` and to `/` (or empty path) on `*.youtube.com`, redirecting both to the All Subscriptions grid.
 
-A `KVO` observer on `webView.url` catches SPA URL changes (`history.pushState`/`replaceState` from YouTube's own Home tab) — `decidePolicyFor` does NOT fire for SPA navigations, so KVO is the catch-all. When the URL becomes `/`, the observer calls `goHome()` to force a real navigation; rewriting the URL alone wouldn't stop YouTube's home content from being rendered.
+A `KVO` observer on `webView.url` catches SPA URL changes (`history.pushState`/`replaceState` from YouTube's own routing) — `decidePolicyFor` does NOT fire for SPA navigations, so KVO is the catch-all. When the URL becomes `/shorts…`, the observer bounces back (`goBack()` if possible, else Playlists). When the URL becomes `/`, it forces a real navigation to Playlists; rewriting the URL alone wouldn't stop YouTube's home content from being rendered.
 
 ## Architecture Notes / Gotchas
 
