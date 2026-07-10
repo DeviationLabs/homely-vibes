@@ -20,7 +20,7 @@ import Network
 /// HTMLVideoElement.play() wrapper, and pushState wrappers were BotGuard-visible
 /// tampering that tripped YouTube's stream attestation and killed playback
 /// (V2_REMEDIATION_PLAN.md §3a). Do not reintroduce page-JS tampering here.
-/// /shorts SPA navs are currently unguarded — Swift-side replacement: issue #232.
+/// /shorts SPA navs are guarded Swift-side via KVO on webView.url (Coordinator).
 private let earlyScript = """
 (function() {
     const s = document.createElement('style');
@@ -227,11 +227,21 @@ struct YouTubeWebView: UIViewRepresentable {
             model.webView.configuration.userContentController.add(self, name: "video")
 
             // Catch SPA URL changes (history.pushState / replaceState). decidePolicyFor
-            // does NOT fire for these, so a YouTube-in-page Home tap can sneak past
-            // without KVO on the url property.
+            // does NOT fire for these, so a YouTube-in-page Home tap — or a Shorts
+            // link routed by YouTube's SPA — can sneak past without KVO on the url
+            // property. This replaces the old JS pushState wrappers, which were
+            // BotGuard-visible tampering (V2_REMEDIATION_PLAN.md §3a, issue #232 P1).
             urlObs = model.webView.observe(\.url, options: [.new]) { [weak self] _, change in
                 guard let self, let url = change.newValue ?? nil else { return }
-                if Self.isYouTubeHome(url) {
+                if url.path.hasPrefix("/shorts") {
+                    Task { @MainActor in
+                        if self.model.webView.canGoBack {
+                            self.model.webView.goBack()
+                        } else {
+                            self.model.goPlaylists()
+                        }
+                    }
+                } else if Self.isYouTubeHome(url) {
                     Task { @MainActor in self.model.goPlaylists() }
                 }
             }

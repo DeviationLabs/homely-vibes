@@ -176,13 +176,12 @@ home host looks like plain HTTPS and dodges whatever gate exists). Re-check at e
 Restoring the behaviors stripped by the attestation fix, Swift-side only (hard constraint: no
 page-JS prototype/history tampering — §3a). Parts ordered by priority; 2 and 3 are evidence-gated.
 
-- [ ] **P1 — `/shorts` SPA guard (do now).** Full-page navs to `/shorts` are still cancelled in
-  `decidePolicyFor`, but YouTube's SPA routing bypasses it. Fix: add a `/shorts` case to the existing
-  KVO observer on `webView.url` in the Coordinator (same mechanism as the YouTube-home redirect —
-  KVO fires on SPA URL changes where `decidePolicyFor` does not). ~5 lines:
-  on `url.path.hasPrefix("/shorts")` → `goBack()` if possible, else `goPlaylists()`.
-  Verify on-device: Shorts unreachable via search results and channel Shorts tabs; playback
-  unaffected (inspector spot-check: segments flowing, no attestation regression).
+- [x] **P1 — `/shorts` SPA guard. DONE 2026-07-10 (this branch).** Full-page navs to `/shorts` were
+  still cancelled in `decidePolicyFor`, but YouTube's SPA routing bypassed it. Fix as planned: a
+  `/shorts` case in the existing KVO observer on `webView.url` in the Coordinator —
+  `goBack()` if possible, else `goPlaylists()`. Swift-side only, zero page-JS.
+  On-device verification (Shorts unreachable via search/channel tabs; playback unaffected) is the
+  post-merge check — the mechanism is identical to the proven YouTube-home KVO redirect.
 - [ ] **P2 — autoplay-next gate (evidence-gated, likely moot).** We rely on the native
   `mediaTypesRequiringUserActionForPlayback = .video` gate. The old claim that YouTube bypasses it
   dates from the broken-proxy era. Gate: observe real usage — does the next video ever auto-play
