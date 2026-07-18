@@ -168,6 +168,8 @@ def _build_alert_engine() -> AlertEngine:
         absolute_gpm=za_cfg.absolute_gpm,
         percent_above=za_cfg.percent_above,
         min_runtime_minutes=za_cfg.min_runtime_minutes,
+        flume_outage_stale_after_minutes=cfg.rachio_flume.alerts.flume_outage.stale_after_minutes,
+        flume_outage_retrigger_minutes=cfg.rachio_flume.alerts.flume_outage.retrigger_minutes,
     )
 
 

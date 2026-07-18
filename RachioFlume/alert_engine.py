@@ -35,6 +35,7 @@ RACHIO_POST_ACTIVE_SLACK_MINUTES = 10
 _RACHIO_STATE_KEY = "alert::__rachio__::last_active"
 _REPORTED_ZONES_KEY = "reported::zones::{date}"
 _REPORTED_RULES_KEY = "reported::rules::{date}"
+_FLUME_OUTAGE_NAME = "Flume Data Outage"
 
 
 def _zone_name_matches(session_name: str, lookup_name: str) -> bool:
@@ -136,6 +137,8 @@ class AlertEngine:
         absolute_gpm: float = 0.5,
         percent_above: float = 10.0,
         min_runtime_minutes: int = 5,
+        flume_outage_stale_after_minutes: int = 60,
+        flume_outage_retrigger_minutes: int = 360,
     ) -> None:
         self.flume = flume_client
         self.rachio = rachio_client
@@ -146,6 +149,8 @@ class AlertEngine:
         self.absolute_gpm = absolute_gpm
         self.percent_above = percent_above
         self.min_runtime_minutes = min_runtime_minutes
+        self.flume_outage_stale_after_minutes = flume_outage_stale_after_minutes
+        self.flume_outage_retrigger_minutes = flume_outage_retrigger_minutes
         self.logger = get_logger(__name__)
 
     # ------------------------------------------------------------------ #
@@ -396,6 +401,76 @@ class AlertEngine:
         self.logger.info(f"Clear notification: {rule.name}")
 
     # ------------------------------------------------------------------ #
+    # Flume data-outage watchdog                                          #
+    # ------------------------------------------------------------------ #
+
+    def _check_flume_outage(self, now: datetime, dry_run: bool) -> dict:
+        """P2 when no Flume readings have landed for the configured window.
+
+        Healthy Flume meters produce a row every minute (even at 0.0 GPM), so
+        a gap in `water_readings` means the pipeline is blind — expired auth,
+        API outage, or collector bug — and every leak rule is silently dead.
+        Retriggers on its own cadence while stale; P0 once on recovery. Never
+        suppressed by irrigation activity, and exempt from the once-per-day
+        rule dedup: while blind, keep firing.
+        """
+        rule = AlertRule(
+            name=_FLUME_OUTAGE_NAME,
+            min_gpm=0.0,
+            duration_minutes=1,
+            retrigger_minutes=self.flume_outage_retrigger_minutes,
+        )
+        latest = self.db.get_last_data_timestamp("flume")
+        is_stale = latest is None or (now - latest) >= timedelta(
+            minutes=self.flume_outage_stale_after_minutes
+        )
+        state = self._load_state(rule)
+        action = self._decide_action(is_stale, state, rule, now)
+
+        entry: dict = {
+            "rule": rule.name,
+            "action": action.value,
+            "is_active": is_stale,
+            "last_reading_at": latest.isoformat() if latest else None,
+        }
+        if dry_run:
+            return entry
+
+        if action == AlertAction.FIRE:
+            if latest:
+                age_min = (now - latest).total_seconds() / 60
+                detail = f"Last reading {latest:%Y-%m-%d %H:%M} ({age_min:.0f} min ago)."
+            else:
+                detail = "No readings recorded at all."
+            self.pushover.send_message(
+                f"No Flume water readings for over "
+                f"{self.flume_outage_stale_after_minutes} min. {detail}\n"
+                f"Leak detection is BLIND — check Flume auth, API, or collector.",
+                title=f"RachioFlume: {_FLUME_OUTAGE_NAME}",
+                priority=2,
+            )
+            self.logger.warning(f"FIRED P2 alert: {_FLUME_OUTAGE_NAME} (last reading: {latest})")
+            state.last_state = "active"
+            state.last_fired_at = now
+            self._save_state(rule, state)
+        elif action == AlertAction.FIRE_CLEAR:
+            self.pushover.send_message(
+                f"Flume water readings restored (latest: {latest:%Y-%m-%d %H:%M}).",
+                title=f"RachioFlume: {_FLUME_OUTAGE_NAME} cleared",
+                priority=0,
+            )
+            self.logger.info(f"Clear notification: {_FLUME_OUTAGE_NAME}")
+            state.last_state = "clear"
+            self._save_state(rule, state)
+        else:
+            new_state = "active" if is_stale else "clear"
+            if state.last_state != new_state:
+                state.last_state = new_state
+                self._save_state(rule, state)
+
+        return entry
+
+    # ------------------------------------------------------------------ #
     # Main evaluate loop                                                  #
     # ------------------------------------------------------------------ #
 
@@ -540,6 +615,12 @@ class AlertEngine:
                     self._save_state(rule, state)
 
             results.append(entry)
+
+        # --- Flume data-outage watchdog (never suppressed by irrigation) ---
+        try:
+            results.append(self._check_flume_outage(now, dry_run))
+        except Exception as e:
+            self.logger.error(f"Flume outage check failed: {e}")
 
         return results
 

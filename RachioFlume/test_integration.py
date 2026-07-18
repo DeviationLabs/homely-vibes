@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import os
 
 from RachioFlume.rachio_client import RachioClient, Zone, WateringEvent
-from RachioFlume.flume_client import FlumeClient, WaterReading
+from RachioFlume.flume_client import WaterReading
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.collector import WaterTrackingCollector
 from RachioFlume.reporter import WeeklyReporter
@@ -70,132 +70,9 @@ class TestRachioClient:
         assert zones[1].enabled is False
 
 
-class TestFlumeClient:
-    """Test Flume API client."""
-
-    @patch.object(FlumeClient, "_get_access_token", return_value="token123")
-    def test_init_with_env_vars(self, _mock_token: Mock) -> None:
-        """Test initialization with provided credentials."""
-        client = FlumeClient(
-            client_id="client123",
-            client_secret="secret456",  # nosecret
-            username="test@example.com",
-            password="password789",  # nosecret
-        )
-        assert client.client_id == "client123"
-        assert client.client_secret == "secret456"  # nosecret
-        assert client.username == "test@example.com"
-        assert client.password == "password789"  # nosecret
-
-    @patch.object(FlumeClient, "_get_access_token", return_value="token123")
-    @patch("RachioFlume.flume_client.requests.post")
-    @patch("RachioFlume.flume_client.requests.get")
-    def test_get_usage(self, mock_get: Mock, mock_post: Mock, *args: Mock) -> None:
-        """Test getting water usage data."""
-        client = FlumeClient()
-
-        # Mock devices response
-        devices_response = Mock()
-        devices_response.json.return_value = {
-            "success": True,
-            "data": [{"id": "device456", "connected": True, "type": 2}],
-        }
-        devices_response.raise_for_status.return_value = None
-        devices_response.status_code = 200
-
-        # Mock location response (optional call)
-        location_response = Mock()
-        location_response.status_code = 404
-
-        mock_get.side_effect = [devices_response, location_response]
-
-        # Mock usage data response
-        mock_usage_response = Mock()
-        mock_usage_response.json.return_value = {
-            "data": [
-                {
-                    "data": [
-                        {"datetime": "2023-01-01 10:00:00", "value": 1.5},
-                        {"datetime": "2023-01-01 10:01:00", "value": 2.0},
-                    ]
-                }
-            ]
-        }
-        mock_usage_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_usage_response
-
-        start_time = datetime(2023, 1, 1, 10, 0)
-        end_time = datetime(2023, 1, 1, 10, 2)
-
-        readings = client.get_usage(start_time, end_time)
-
-        assert len(readings) == 2
-        assert readings[0].value == 1.5
-        assert readings[1].value == 2.0
-
-    @patch.object(FlumeClient, "_get_access_token", return_value="token123")
-    @patch("RachioFlume.flume_client.requests.get")
-    def test_get_devices(self, mock_get: Mock, *args: Mock) -> None:
-        """Test getting user devices."""
-        client = FlumeClient()
-
-        # Mock devices response
-        devices_response = Mock()
-        devices_response.json.return_value = {
-            "success": True,
-            "data": [
-                {"id": "device1", "type": 2, "connected": True},
-                {"id": "device2", "type": 2, "connected": False},
-            ],
-        }
-        devices_response.raise_for_status.return_value = None
-        devices_response.status_code = 200
-
-        # Mock location response (optional call)
-        location_response = Mock()
-        location_response.status_code = 404  # Location not found, will use default names
-
-        mock_get.side_effect = [devices_response, location_response]
-
-        devices = client.get_devices()
-
-        assert len(devices) == 2
-        assert devices[0].id == "device1"
-        assert "Water Sensor" in devices[0].name
-        assert devices[0].active is True
-        assert devices[1].id == "device2"
-        assert "Water Sensor" in devices[1].name
-        assert devices[1].active is False
-
-    @patch.object(FlumeClient, "_get_access_token", return_value="token123")
-    @patch("RachioFlume.flume_client.requests.get")
-    def test_get_active_device(self, mock_get: Mock, *args: Mock) -> None:
-        """Test getting active device from device list."""
-        client = FlumeClient()
-
-        # Mock devices response
-        devices_response = Mock()
-        devices_response.json.return_value = {
-            "success": True,
-            "data": [
-                {"id": "inactive_device", "connected": False, "type": 2},
-                {"id": "active_device", "connected": True, "type": 2},
-            ],
-        }
-        devices_response.raise_for_status.return_value = None
-        devices_response.status_code = 200
-
-        # Mock location response (optional call)
-        location_response = Mock()
-        location_response.status_code = 404
-
-        mock_get.side_effect = [devices_response, location_response]
-
-        devices = client.get_devices()
-
-        active_devices = [d for d in devices if d.active]
-        assert len(active_devices) == 1
-        assert active_devices[0].id == "active_device"
+# FlumeClient tests live in test_flume_client.py (injected-session pattern,
+# no patch()) — including the auth/refresh flow and get_devices/get_usage
+# parsing formerly covered by a patch-based TestFlumeClient class here.
 
 
 class TestWaterTrackingDB:

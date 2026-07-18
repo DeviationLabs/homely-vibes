@@ -14,6 +14,7 @@ A Python integration that connects Rachio irrigation controllers with Flume wate
   - **Default flow rules** (whole-house, Flume-only): Pipe Break / High Flow / Mid Flow / Leak — P2 (emergency), at most once per day per rule. CV-based variance filter rejects spiky noise on low-flow rules.
   - **Cross-source suppression**: Controller-active OR hose-timer-active state suppresses Flume rules for `max_rule_duration + 10min` slack. Symmetric.
   - **Stale-zone monitor** (`stale_zone_checker.py`): P-1 heads-up if any enabled zone hasn't run within `stale_zone_days` (default 7). Daily dedup; hourly evaluation gate.
+  - **Flume data-outage watchdog**: P2 when no water readings have landed for `flume_outage.stale_after_minutes` (default 60) — healthy meters report every minute, so a gap means the whole leak-detection stack is blind (expired auth, API outage, dead collector). Re-fires every `flume_outage.retrigger_minutes` (default 360) while stale; never suppressed by irrigation; P0 once on recovery.
   - Mute support; P0 "all clear" on active→clear transition for sustained-flow rules.
 - **Synthetic Simulator** (`simulate_alerts.py`): Replay scenarios through the alert engine without hitting real APIs or Pushover; wired into `test_alert_simulation.py`. See [TESTABILITY.md](TESTABILITY.md).
 - **HTML Email Report**: Daily fixed-width table (via `<pre>` monospace) covering all zones — controllers and hose valves in one unified table. Per-zone anomaly threshold + alert-session count are surfaced alongside runtime / gallons / GPM.
