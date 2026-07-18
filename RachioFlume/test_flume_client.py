@@ -156,6 +156,22 @@ def test_get_devices_skips_non_meter_bridge() -> None:
     assert [d.id for d in devices] == ["meter1"]
 
 
+def test_get_devices_survives_location_404() -> None:
+    """A failing location lookup must not break device enumeration — the
+    HTTPError raised by _request is swallowed by get_devices' existing
+    fallback and devices keep their default naming."""
+    payload = {
+        "success": True,
+        "data": [{"id": "dev1", "type": 2, "connected": True, "location_id": 42}],
+    }
+    client = _client(FakeFlumeSession([FakeResponse(200, payload), FakeResponse(404)]))
+
+    devices = client.get_devices()
+
+    assert [d.id for d in devices] == ["dev1"]
+    assert devices[0].name == "Flume Water Sensor"  # default naming fallback
+
+
 def test_get_usage_parses_readings() -> None:
     usage_payload = {
         "data": [
