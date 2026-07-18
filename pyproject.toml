@@ -160,6 +160,10 @@ DEP002 = [
 ]
 DEP003 = ["google", "streamlit", "BimpopAI", "PyObjCTools"]  # PyObjCTools comes via rumps → pyobjc
 
+[tool.codespell]
+# doubleclick.net is a real ad domain (NoShorts docs) — not a typo.
+ignore-words-list = "doubleclick"
+
 [tool.pytest.ini_options]
 testpaths = ["Tesla", "RachioFlume", "August", "SamsungFrame", "VoiceNotes", "RingSecurity", "RingBeams", "Rheem", "lib"]
 addopts = "-v --tb=short"

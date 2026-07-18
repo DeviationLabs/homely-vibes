@@ -307,14 +307,23 @@ class ZoneAnomalyConfig:
 
 
 @dataclass
+class FlumeOutageConfig:
+    """Watchdog for Flume readings going silent (leak detection blind)."""
+
+    stale_after_minutes: int  # P2 fires when no readings land for this long
+    retrigger_minutes: int  # cadence for re-firing while still stale
+
+
+@dataclass
 class RachioFlumeAlertsConfig:
     """Usage alert configuration for RachioFlume.
 
-    Two independent alert paths share this block:
+    Independent alert paths share this block:
     - zone_anomaly: scoped to Rachio events (per-zone, at run end).
     - default_flow_rules: whole-house sustained-flow rules (Flume only);
       suppressed while any Rachio activity is recent.
     - stale_zone_days: heads-up if an enabled zone hasn't run in N days.
+    - flume_outage: P2 watchdog when Flume readings stop entirely.
     """
 
     enabled: bool
@@ -322,6 +331,7 @@ class RachioFlumeAlertsConfig:
     zone_anomaly: ZoneAnomalyConfig
     default_flow_rules: list[AlertRuleConfig]
     stale_zone_days: int
+    flume_outage: FlumeOutageConfig
 
 
 @dataclass

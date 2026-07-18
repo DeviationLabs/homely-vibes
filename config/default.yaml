@@ -291,6 +291,15 @@ rachio_flume:
     # hose-timer valve hasn't run within this many days.
     stale_zone_days: 15
 
+    # === Flume data-outage watchdog ===
+    # Healthy Flume meters report a row every minute (even at 0.0 GPM).
+    # P2 when no readings have landed for stale_after_minutes — the whole
+    # leak-detection stack is blind. Re-fires every retrigger_minutes while
+    # stale; P0 once on recovery.
+    flume_outage:
+      stale_after_minutes: 60
+      retrigger_minutes: 360
+
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:
   script_id: ""   # Apps Script project ID — override in config/local.yaml

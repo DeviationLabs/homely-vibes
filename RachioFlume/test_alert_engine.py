@@ -34,6 +34,9 @@ def rule() -> AlertRule:
 
 @pytest.fixture
 def engine(db: WaterTrackingDB, rule: AlertRule) -> AlertEngine:
+    # Seed a fresh reading so the Flume-outage watchdog stays quiet; outage
+    # behavior has its own test section below.
+    db.save_water_readings([WaterReading(timestamp=datetime.now(), value=0.0)])
     flume = MagicMock()
     rachio = MagicMock()
     rachio.get_active_zone.return_value = None
@@ -179,7 +182,8 @@ async def test_evaluate_fires_priority_2_on_first_active(
     engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
     results = await engine.evaluate()
 
-    assert len(results) == 1
+    # One entry per rule + the Flume-outage watchdog entry
+    assert len(results) == 2
     assert results[0]["action"] == AlertAction.FIRE.value
     # Pushover called with priority=2 (emergency)
     engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
@@ -401,6 +405,154 @@ async def test_zone_report_each_cycle(engine: AlertEngine, rule: AlertRule) -> N
     assert engine.pushover.send_message.call_count == 3  # type: ignore[attr-defined]
     assert "Zone A" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
     assert "Cycle 2" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------- #
+# Flume data-outage watchdog                                              #
+# ---------------------------------------------------------------------- #
+
+
+def _outage_entry(results: list[dict]) -> dict:
+    matches = [r for r in results if r.get("rule") == "Flume Data Outage"]
+    assert len(matches) == 1
+    return matches[0]
+
+
+async def test_flume_outage_fires_p2_when_db_has_no_readings(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    # Wipe the seeded reading so the DB looks like Flume never reported.
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 2
+    assert "Flume" in args[0]
+
+
+async def test_flume_outage_fires_when_readings_stale(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    stale_at = datetime.now() - timedelta(hours=2)
+    db.save_water_readings([WaterReading(timestamp=stale_at, value=1.0)])
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    assert entry["last_reading_at"] == stale_at.isoformat()
+
+
+async def test_flume_outage_silent_within_retrigger_window(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    await engine.evaluate()  # first evaluate fires
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    results = await engine.evaluate()  # still stale, within retrigger window
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_flume_outage_retriggers_after_cadence(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    await engine.evaluate()
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    # Past the retrigger cadence (default 360 min) → fires again
+    later = datetime.now() + timedelta(minutes=engine.flume_outage_retrigger_minutes + 1)
+    results = await engine.evaluate(now=later)
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+
+
+async def test_flume_outage_clears_p0_on_recovery(engine: AlertEngine, db: WaterTrackingDB) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    await engine.evaluate()  # fires: DB empty
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    db.save_water_readings([WaterReading(timestamp=datetime.now(), value=0.5)])
+    results = await engine.evaluate()  # recovered
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE_CLEAR.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 0
+
+
+async def test_flume_outage_quiet_with_fresh_readings(engine: AlertEngine) -> None:
+    # Fixture seeds a fresh reading → watchdog reports clear, sends nothing.
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.NOTHING.value
+    assert entry["is_active"] is False
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_flume_outage_dry_run_does_not_send_or_persist(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate(dry_run=True)
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    assert db.get_metadata("alert::Flume Data Outage::state") is None
+
+
+async def test_flume_outage_not_suppressed_by_active_zone(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """Irrigation suppression must not silence the outage watchdog."""
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Yard", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
 
 
 async def test_rachio_idle_reports_last_zone(engine: AlertEngine, rule: AlertRule) -> None:

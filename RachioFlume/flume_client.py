@@ -1,7 +1,7 @@
 """Flume API client for water consumption monitoring."""
 
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Any, Optional, List
 import requests
 from pydantic import BaseModel
 from lib.logger import get_logger
@@ -29,9 +29,19 @@ cfg = get_config()
 
 
 class FlumeClient:
-    """Client for Flume water monitoring API."""
+    """Client for Flume water monitoring API.
+
+    Access tokens expire (Flume default: 7 days). Long-running callers (the
+    collector daemon) go through `_request`, which re-authenticates
+    proactively near expiry and reactively on a 401 — a token fetched once in
+    `__init__` and never refreshed is exactly the failure mode that blinded
+    the collector for 6 days in July 2026.
+    """
 
     BASE_URL = "https://api.flumewater.com"
+    DEFAULT_TOKEN_LIFETIME_SECONDS = 604800  # Flume default: 7 days
+    # Refresh proactively at 90% of lifetime so a mid-request expiry is rare.
+    TOKEN_REFRESH_FRACTION = 0.9
 
     def __init__(
         self,
@@ -39,6 +49,7 @@ class FlumeClient:
         client_secret: Optional[str] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
+        session: Optional[requests.Session] = None,
     ):
         self.logger = get_logger(__name__)
 
@@ -48,21 +59,21 @@ class FlumeClient:
         self.username = username or cfg.flume.user_email
         self.password = password or cfg.flume.password
 
-        self.access_token = self._get_access_token()
+        # Injectable for tests (no patch()) and shared connection pooling.
+        self.session = session or requests.Session()
 
-        self.headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
+        self._token_acquired_at = datetime.min
+        self._token_lifetime_seconds = float(self.DEFAULT_TOKEN_LIFETIME_SECONDS)
+        self._authenticate()
 
         # Cache for device info
         self._devices: Optional[List[Device]] = None
 
-    def _get_access_token(self) -> str:
-        """Get access token using OAuth2 Resource Owner Credentials Grant."""
+    def _authenticate(self) -> None:
+        """(Re)acquire an access token and rebuild request headers."""
         self.logger.info(f"Authenticating with Flume API using OAuth2 for user: {self.username}")
 
-        url = "https://api.flumewater.com/oauth/token?envelope=true"
+        url = f"{self.BASE_URL}/oauth/token?envelope=true"
 
         payload = {
             "grant_type": "password",
@@ -78,7 +89,7 @@ class FlumeClient:
         }
 
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            response = self.session.post(url, json=payload, headers=headers)
             response.raise_for_status()
 
             response_data = response.json()
@@ -101,14 +112,46 @@ class FlumeClient:
             if not access_token:
                 raise ValueError("No access_token found in Flume API response")
 
+            self.access_token = str(access_token)
+            self._token_acquired_at = datetime.now()
+            self._token_lifetime_seconds = float(
+                token_info.get("expires_in") or self.DEFAULT_TOKEN_LIFETIME_SECONDS
+            )
+            self.headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json",
+            }
             self.logger.info("Successfully obtained access token from Flume API")
-            return str(access_token)
         except requests.RequestException as e:
             self.logger.error(f"Failed to authenticate with Flume API: {e}")
             if hasattr(e, "response") and e.response is not None:
                 self.logger.error(f"Response status: {e.response.status_code}")
                 self.logger.error(f"Response body: {e.response.text}")
             raise
+
+    def _token_is_stale(self) -> bool:
+        age = (datetime.now() - self._token_acquired_at).total_seconds()
+        return age >= self.TOKEN_REFRESH_FRACTION * self._token_lifetime_seconds
+
+    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+        """Issue an authenticated request, refreshing the token as needed.
+
+        Proactive: re-auth when past TOKEN_REFRESH_FRACTION of the token
+        lifetime. Reactive: on a 401, re-auth once and retry — covers early
+        revocation and wall-clock drift. Raises for status on the final
+        response either way.
+        """
+        if self._token_is_stale():
+            self.logger.info("Flume access token near expiry; re-authenticating proactively")
+            self._authenticate()
+
+        response = self.session.request(method, url, headers=self.headers, **kwargs)
+        if response.status_code == 401:
+            self.logger.warning("Flume API returned 401; re-authenticating and retrying once")
+            self._authenticate()
+            response = self.session.request(method, url, headers=self.headers, **kwargs)
+        response.raise_for_status()
+        return response
 
     def get_devices(self) -> List[Device]:
         """Get all devices for the authenticated user."""
@@ -117,8 +160,7 @@ class FlumeClient:
 
         # Use /me/devices format per API behavior
         url = f"{self.BASE_URL}/me/devices"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
+        response = self._request("GET", url)
 
         response_data = response.json()
 
@@ -142,7 +184,7 @@ class FlumeClient:
             if location_id:
                 try:
                     loc_url = f"{self.BASE_URL}/me/locations/{location_id}"
-                    loc_response = requests.get(loc_url, headers=self.headers)
+                    loc_response = self._request("GET", loc_url)
                     if loc_response.status_code == 200:
                         loc_data = loc_response.json()
                         loc_info = loc_data.get("data", [])
@@ -226,8 +268,7 @@ class FlumeClient:
             }
 
             try:
-                response = requests.post(url, json=payload, headers=self.headers)
-                response.raise_for_status()
+                response = self._request("POST", url, json=payload)
 
                 data = response.json()
 
