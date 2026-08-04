@@ -432,6 +432,7 @@ class AlertEngine:
         now: datetime,
         dry_run: bool,
         extra: Optional[dict] = None,
+        state_id: Optional[str] = None,
     ) -> dict:
         """Shared fire/retrigger/clear state machine for binary watchdogs.
 
@@ -439,9 +440,14 @@ class AlertEngine:
         retrigger cadence while active; P0 `clear_message` once on recovery.
         Exempt from the once-per-day rule dedup: while a watchdog condition
         holds, keep firing.
+
+        `state_id` scopes the persisted state key independently of the
+        display `rule_name`. Callers whose rule name embeds a user-set label
+        (e.g. a valve name two devices could share) must pass a unique
+        `state_id` so the devices don't clobber each other's fire/clear state.
         """
         rule = AlertRule(
-            name=rule_name,
+            name=state_id or rule_name,
             min_gpm=0.0,
             duration_minutes=1,
             retrigger_minutes=retrigger_minutes,
@@ -682,6 +688,9 @@ class AlertEngine:
             now=now,
             dry_run=dry_run,
             extra={"offline_since": since.isoformat() if since else None},
+            # `scope` is unique per device (valve id); the display rule_name
+            # embeds the user-set valve name two devices could share.
+            state_id=f"offline::{scope}",
         )
 
     # ------------------------------------------------------------------ #

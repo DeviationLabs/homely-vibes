@@ -793,7 +793,7 @@ async def test_controller_offline_clears_p0_and_since_key_on_recovery(
     _seed_controller_status(db, "ONLINE", now)
     db.set_metadata("offline::controller::since", (now - timedelta(hours=2)).isoformat())
     db.set_metadata(
-        f"alert::{_CONTROLLER_OFFLINE}::state",
+        "alert::offline::controller::state",
         AlertState(last_state="active", last_fired_at=now).to_json(),
     )
     _quiet_flume(engine)
@@ -852,6 +852,31 @@ async def test_valve_reconnect_clears_since_key(engine: AlertEngine, db: WaterTr
     assert _entry(results, _VALVE_OFFLINE)["action"] == AlertAction.NOTHING.value
     engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
     assert db.get_metadata("offline::hose::v1::since") is None
+
+
+async def test_two_same_named_valves_have_independent_state(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """Two valves sharing a user-set name must not clobber each other's
+    fire/clear state — the state key is scoped by valve id, not name.
+    """
+    now = datetime.now()
+    _seed_valve_row(db, connected=False, updated_at=now, valve_id="a")
+    _seed_valve_row(db, connected=False, updated_at=now, valve_id="b")
+    # Both already past their debounce windows.
+    db.set_metadata("offline::hose::a::since", (now - timedelta(hours=2)).isoformat())
+    db.set_metadata("offline::hose::b::since", (now - timedelta(hours=2)).isoformat())
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    offline = [r for r in results if r.get("rule") == _VALVE_OFFLINE]
+    # Same display name → one entry per valve, both firing, distinct state rows.
+    assert len(offline) == 2
+    assert all(r["action"] == AlertAction.FIRE.value for r in offline)
+    assert db.get_metadata("alert::offline::hose::a::state") is not None
+    assert db.get_metadata("alert::offline::hose::b::state") is not None
+    assert engine.pushover.send_message.call_count == 2  # type: ignore[attr-defined]
 
 
 async def test_valve_offline_stale_roster_row_skipped(
