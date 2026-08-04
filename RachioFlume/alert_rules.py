@@ -121,6 +121,38 @@ def load_zone_thresholds_from_config() -> dict[str, dict[str, ZoneThreshold]]:
     return out
 
 
+def resolve_hose_threshold(
+    thresholds: dict[str, ZoneThreshold],
+    valve_name: str,
+    logger: logging.Logger | None = None,
+) -> ZoneThreshold | None:
+    """Look up a hose valve's threshold, tolerating prefixed config keys.
+
+    Config keys historically use "Z13 FS - Upper Deck Planters" style while
+    the API valve name is just "Upper Deck Planters" — an exact .get() never
+    matched, silently disabling the valve's anomaly threshold. Exact match
+    wins; otherwise any key whose segment after " - " equals the valve name.
+    Returns None when nothing matches (caller falls back to absolute_gpm).
+    """
+    zt = thresholds.get(valve_name)
+    if zt is not None:
+        return zt
+    matches = [k for k in thresholds if k.split(" - ", 1)[-1].strip() == valve_name]
+    if not matches:
+        return None
+    if logger:
+        if len(matches) > 1:
+            logger.warning(
+                f"Multiple threshold keys match valve '{valve_name}': {matches}; "
+                f"using '{matches[0]}'"
+            )
+        else:
+            logger.info(
+                f"Threshold for valve '{valve_name}' resolved via prefixed key '{matches[0]}'"
+            )
+    return thresholds[matches[0]]
+
+
 def send_zone_outcome_pushover(
     *,
     pushover: Notifier,

@@ -9,12 +9,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from RachioFlume.alert_rules import ZoneThreshold
+from RachioFlume.alert_rules import ZoneThreshold, resolve_hose_threshold
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.hose_timer_processor import (
     _HOSE_LAST_ACTIVE_KEY,
     HoseTimerProcessor,
     _state_key,
+    hose_poll_key,
 )
 from RachioFlume.rachio_hose_client import HoseValve, RachioHoseClient
 
@@ -202,7 +203,71 @@ class TestHoseTimerProcessor:
         assert results[0]["action"] == "run_started"
         # No state persisted
         assert tmp_db.get_metadata(_state_key("valve-1")) is None
+        assert tmp_db.get_metadata(hose_poll_key("Hose Drip Jasmine")) is None
         pushover.send_message.assert_not_called()
+
+
+class TestPollHealthMetadata:
+    """The outage watchdog reads hose::poll::<label>::last_success."""
+
+    def test_successful_poll_writes_metadata(self, tmp_db: WaterTrackingDB) -> None:
+        valve = _valve(action=None)
+        proc, _ = _make_processor(tmp_db, valve)
+        now = datetime(2026, 6, 27, 7, 47, 0)
+        proc.evaluate(now=now)
+        assert tmp_db.get_metadata(hose_poll_key("Hose Drip Jasmine")) == now.isoformat()
+
+    def test_listvalves_failure_skips_metadata(self, tmp_db: WaterTrackingDB) -> None:
+        valve = _valve(action=None)
+        proc, _ = _make_processor(tmp_db, valve)
+        proc.client.list_valves.side_effect = RuntimeError("API down")  # type: ignore[attr-defined]
+        results = proc.evaluate(now=datetime(2026, 6, 27, 7, 47, 0))
+        assert results[0]["error"] == "API down"
+        assert tmp_db.get_metadata(hose_poll_key("Hose Drip Jasmine")) is None
+
+
+class TestThresholdResolution:
+    """Config keys may be the bare valve name or "<prefix> - <valve name>"."""
+
+    _zt = ZoneThreshold(zone_key="k", avg_gpm=0.5)
+
+    def test_exact_name_match(self) -> None:
+        assert resolve_hose_threshold({"Upper Deck Planters": self._zt}, "Upper Deck Planters") is (
+            self._zt
+        )
+
+    def test_prefixed_key_matches_bare_valve_name(self) -> None:
+        # The real-world planter bug: config keyed "Z13 FS - Upper Deck
+        # Planters" while the API valve name is "Upper Deck Planters".
+        thresholds = {"Z13 FS - Upper Deck Planters": self._zt}
+        assert resolve_hose_threshold(thresholds, "Upper Deck Planters") is self._zt
+
+    def test_unmatched_returns_none(self) -> None:
+        assert (
+            resolve_hose_threshold({"Z1 FS - Front Bed": self._zt}, "Upper Deck Planters") is None
+        )
+
+    def test_prefixed_key_applies_threshold_in_outcome(self, tmp_db: WaterTrackingDB) -> None:
+        """End-to-end: prefixed threshold key reaches the zone-end message."""
+        valve = _valve()
+        client = MagicMock(spec=RachioHoseClient)
+        client.label = "Hose Drip Jasmine"
+        client.list_valves.return_value = [valve]
+        pushover = MagicMock()
+        thresholds = {
+            "Z13 FS - Upper Deck Planters": ZoneThreshold(
+                zone_key="Z13 FS - Upper Deck Planters", avg_gpm=0.5
+            )
+        }
+        proc = HoseTimerProcessor(
+            client=client, pushover=pushover, db=tmp_db, thresholds=thresholds
+        )
+        proc._send_zone_outcome(
+            valve, duration_sec=600, avg_gpm=0.4, total_gal=4.0, flow_detected=False
+        )
+        msg = pushover.send_message.call_args[0][0]
+        # baseline 0.5 + max(0.5, 10%*0.5) = 1.00 — threshold resolved via prefix
+        assert "thresh 1.00" in msg
 
 
 class TestZoneOutcomeDispatch:

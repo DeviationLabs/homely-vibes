@@ -315,6 +315,30 @@ class FlumeOutageConfig:
 
 
 @dataclass
+class RachioOutageConfig:
+    """Watchdog for Rachio polling going silent (zone/hose tracking blind).
+
+    Controller and each hose-timer base station are watched independently via
+    their last-successful-poll timestamps.
+    """
+
+    stale_after_minutes: int  # P1 fires when no successful poll for this long
+    retrigger_minutes: int  # cadence for re-firing while still stale
+
+
+@dataclass
+class DeviceOfflineConfig:
+    """Health check for Rachio hardware reporting offline.
+
+    Covers the controller (device status OFFLINE) and hose-timer valves
+    (reportedState.connected false — dead battery / BLE out of range).
+    """
+
+    debounce_minutes: int  # must be offline this long before P1 fires
+    retrigger_minutes: int  # cadence for re-firing while still offline
+
+
+@dataclass
 class RachioFlumeAlertsConfig:
     """Usage alert configuration for RachioFlume.
 
@@ -322,8 +346,10 @@ class RachioFlumeAlertsConfig:
     - zone_anomaly: scoped to Rachio events (per-zone, at run end).
     - default_flow_rules: whole-house sustained-flow rules (Flume only);
       suppressed while any Rachio activity is recent.
-    - stale_zone_days: heads-up if an enabled zone hasn't run in N days.
+    - stale_zone_days: P1 if any zone/valve hasn't run in N days.
     - flume_outage: P2 watchdog when Flume readings stop entirely.
+    - rachio_outage: P1 watchdog when Rachio polling stops succeeding.
+    - device_offline: P1 when a controller/valve reports offline.
     """
 
     enabled: bool
@@ -332,6 +358,8 @@ class RachioFlumeAlertsConfig:
     default_flow_rules: list[AlertRuleConfig]
     stale_zone_days: int
     flume_outage: FlumeOutageConfig
+    rachio_outage: RachioOutageConfig
+    device_offline: DeviceOfflineConfig
 
 
 @dataclass

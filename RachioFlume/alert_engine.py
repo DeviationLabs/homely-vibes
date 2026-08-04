@@ -24,6 +24,7 @@ from lib.notifications import Notifier
 from RachioFlume.alert_rules import AlertRule, ZoneThreshold, send_zone_outcome_pushover
 from RachioFlume.data_storage import WaterTrackingDB
 from RachioFlume.flume_client import FlumeClient, WaterReading
+from RachioFlume.hose_timer_processor import hose_poll_key
 from RachioFlume.rachio_client import RachioClient
 
 # Minutes to wait after Rachio reports inactive before sending the zone-end
@@ -36,6 +37,11 @@ _RACHIO_STATE_KEY = "alert::__rachio__::last_active"
 _REPORTED_ZONES_KEY = "reported::zones::{date}"
 _REPORTED_RULES_KEY = "reported::rules::{date}"
 _FLUME_OUTAGE_NAME = "Flume Data Outage"
+_RACHIO_OUTAGE_NAME = "Rachio Controller Data Outage"
+
+# Written by the collector after each successful controller poll; read here by
+# the device-offline check. JSON: {"status": "ONLINE"|"OFFLINE", "observed_at": iso}.
+CONTROLLER_STATUS_KEY = "rachio::controller::status"
 
 
 def _zone_name_matches(session_name: str, lookup_name: str) -> bool:
@@ -139,6 +145,11 @@ class AlertEngine:
         min_runtime_minutes: int = 5,
         flume_outage_stale_after_minutes: int = 60,
         flume_outage_retrigger_minutes: int = 360,
+        rachio_outage_stale_after_minutes: int = 180,
+        rachio_outage_retrigger_minutes: int = 360,
+        device_offline_debounce_minutes: int = 60,
+        device_offline_retrigger_minutes: int = 1440,
+        hose_device_labels: Optional[list[str]] = None,
     ) -> None:
         self.flume = flume_client
         self.rachio = rachio_client
@@ -151,6 +162,11 @@ class AlertEngine:
         self.min_runtime_minutes = min_runtime_minutes
         self.flume_outage_stale_after_minutes = flume_outage_stale_after_minutes
         self.flume_outage_retrigger_minutes = flume_outage_retrigger_minutes
+        self.rachio_outage_stale_after_minutes = rachio_outage_stale_after_minutes
+        self.rachio_outage_retrigger_minutes = rachio_outage_retrigger_minutes
+        self.device_offline_debounce_minutes = device_offline_debounce_minutes
+        self.device_offline_retrigger_minutes = device_offline_retrigger_minutes
+        self.hose_device_labels = hose_device_labels or []
         self.logger = get_logger(__name__)
 
     # ------------------------------------------------------------------ #
@@ -401,8 +417,66 @@ class AlertEngine:
         self.logger.info(f"Clear notification: {rule.name}")
 
     # ------------------------------------------------------------------ #
-    # Flume data-outage watchdog                                          #
+    # Watchdogs: data outages + device offline                            #
     # ------------------------------------------------------------------ #
+
+    def _run_watchdog(
+        self,
+        *,
+        rule_name: str,
+        is_active: bool,
+        retrigger_minutes: int,
+        fire_priority: int,
+        fire_message: str,
+        clear_message: str,
+        now: datetime,
+        dry_run: bool,
+        extra: Optional[dict] = None,
+    ) -> dict:
+        """Shared fire/retrigger/clear state machine for binary watchdogs.
+
+        Fires `fire_message` at `fire_priority` on clear→active and on the
+        retrigger cadence while active; P0 `clear_message` once on recovery.
+        Exempt from the once-per-day rule dedup: while a watchdog condition
+        holds, keep firing.
+        """
+        rule = AlertRule(
+            name=rule_name,
+            min_gpm=0.0,
+            duration_minutes=1,
+            retrigger_minutes=retrigger_minutes,
+        )
+        state = self._load_state(rule)
+        action = self._decide_action(is_active, state, rule, now)
+
+        entry: dict = {"rule": rule_name, "action": action.value, "is_active": is_active}
+        if extra:
+            entry.update(extra)
+        if dry_run:
+            return entry
+
+        if action == AlertAction.FIRE:
+            self.pushover.send_message(
+                fire_message, title=f"RachioFlume: {rule_name}", priority=fire_priority
+            )
+            self.logger.warning(f"FIRED P{fire_priority} alert: {rule_name}")
+            state.last_state = "active"
+            state.last_fired_at = now
+            self._save_state(rule, state)
+        elif action == AlertAction.FIRE_CLEAR:
+            self.pushover.send_message(
+                clear_message, title=f"RachioFlume: {rule_name} cleared", priority=0
+            )
+            self.logger.info(f"Clear notification: {rule_name}")
+            state.last_state = "clear"
+            self._save_state(rule, state)
+        else:
+            new_state = "active" if is_active else "clear"
+            if state.last_state != new_state:
+                state.last_state = new_state
+                self._save_state(rule, state)
+
+        return entry
 
     def _check_flume_outage(self, now: datetime, dry_run: bool) -> dict:
         """P2 when no Flume readings have landed for the configured window.
@@ -410,65 +484,205 @@ class AlertEngine:
         Healthy Flume meters produce a row every minute (even at 0.0 GPM), so
         a gap in `water_readings` means the pipeline is blind — expired auth,
         API outage, or collector bug — and every leak rule is silently dead.
-        Retriggers on its own cadence while stale; P0 once on recovery. Never
-        suppressed by irrigation activity, and exempt from the once-per-day
-        rule dedup: while blind, keep firing.
         """
-        rule = AlertRule(
-            name=_FLUME_OUTAGE_NAME,
-            min_gpm=0.0,
-            duration_minutes=1,
-            retrigger_minutes=self.flume_outage_retrigger_minutes,
-        )
         latest = self.db.get_last_data_timestamp("flume")
         is_stale = latest is None or (now - latest) >= timedelta(
             minutes=self.flume_outage_stale_after_minutes
         )
-        state = self._load_state(rule)
-        action = self._decide_action(is_stale, state, rule, now)
-
-        entry: dict = {
-            "rule": rule.name,
-            "action": action.value,
-            "is_active": is_stale,
-            "last_reading_at": latest.isoformat() if latest else None,
-        }
-        if dry_run:
-            return entry
-
-        if action == AlertAction.FIRE:
-            if latest:
-                age_min = (now - latest).total_seconds() / 60
-                detail = f"Last reading {latest:%Y-%m-%d %H:%M} ({age_min:.0f} min ago)."
-            else:
-                detail = "No readings recorded at all."
-            self.pushover.send_message(
+        if latest:
+            age_min = (now - latest).total_seconds() / 60
+            detail = f"Last reading {latest:%Y-%m-%d %H:%M} ({age_min:.0f} min ago)."
+            restored = f"Flume water readings restored (latest: {latest:%Y-%m-%d %H:%M})."
+        else:
+            detail = "No readings recorded at all."
+            restored = "Flume water readings restored."
+        return self._run_watchdog(
+            rule_name=_FLUME_OUTAGE_NAME,
+            is_active=is_stale,
+            retrigger_minutes=self.flume_outage_retrigger_minutes,
+            fire_priority=2,
+            fire_message=(
                 f"No Flume water readings for over "
                 f"{self.flume_outage_stale_after_minutes} min. {detail}\n"
-                f"Leak detection is BLIND — check Flume auth, API, or collector.",
-                title=f"RachioFlume: {_FLUME_OUTAGE_NAME}",
-                priority=2,
-            )
-            self.logger.warning(f"FIRED P2 alert: {_FLUME_OUTAGE_NAME} (last reading: {latest})")
-            state.last_state = "active"
-            state.last_fired_at = now
-            self._save_state(rule, state)
-        elif action == AlertAction.FIRE_CLEAR:
-            self.pushover.send_message(
-                f"Flume water readings restored (latest: {latest:%Y-%m-%d %H:%M}).",
-                title=f"RachioFlume: {_FLUME_OUTAGE_NAME} cleared",
-                priority=0,
-            )
-            self.logger.info(f"Clear notification: {_FLUME_OUTAGE_NAME}")
-            state.last_state = "clear"
-            self._save_state(rule, state)
-        else:
-            new_state = "active" if is_stale else "clear"
-            if state.last_state != new_state:
-                state.last_state = new_state
-                self._save_state(rule, state)
+                f"Leak detection is BLIND — check Flume auth, API, or collector."
+            ),
+            clear_message=restored,
+            now=now,
+            dry_run=dry_run,
+            extra={"last_reading_at": latest.isoformat() if latest else None},
+        )
 
-        return entry
+    def _check_rachio_outage(self, now: datetime, dry_run: bool) -> list[dict]:
+        """P1 when a Rachio feed stops polling successfully.
+
+        The controller feed and each hose-timer base station are watched
+        independently — either API path can fail on its own. Watches
+        last-successful-poll timestamps, not data timestamps: a zone that
+        simply hasn't watered is not an outage. Note this runs inside the
+        collector process, so a dead collector cannot self-report; that case
+        is covered by rfmanager's P2 fatal handler + run-one-constantly.
+        """
+        window = self.rachio_outage_stale_after_minutes
+        entries: list[dict] = []
+
+        def feed_entry(rule_name: str, latest: Optional[datetime], flavor: str) -> dict:
+            is_stale = latest is None or (now - latest) >= timedelta(minutes=window)
+            if latest:
+                age_min = (now - latest).total_seconds() / 60
+                detail = f"Last success {latest:%Y-%m-%d %H:%M} ({age_min:.0f} min ago)."
+            else:
+                detail = "No successful poll recorded at all."
+            return self._run_watchdog(
+                rule_name=rule_name,
+                is_active=is_stale,
+                retrigger_minutes=self.rachio_outage_retrigger_minutes,
+                fire_priority=1,
+                fire_message=(f"No successful poll for over {window} min. {detail}\n{flavor}"),
+                clear_message="Polling restored"
+                + (f" (last success {latest:%Y-%m-%d %H:%M})." if latest else "."),
+                now=now,
+                dry_run=dry_run,
+                extra={"last_poll_at": latest.isoformat() if latest else None},
+            )
+
+        entries.append(
+            feed_entry(
+                _RACHIO_OUTAGE_NAME,
+                self.db.get_last_collection_timestamp("rachio"),
+                "Zone tracking and stale-zone data are FROZEN — "
+                "check Rachio API, auth, or collector.",
+            )
+        )
+        for label in self.hose_device_labels:
+            entries.append(
+                feed_entry(
+                    f"Rachio Hose Data Outage ({label})",
+                    self._parse_metadata_timestamp(hose_poll_key(label)),
+                    "Hose runs during the outage are LOST (no history API) — "
+                    "check Rachio API, auth, or collector.",
+                )
+            )
+        return entries
+
+    def _parse_metadata_timestamp(self, key: str) -> Optional[datetime]:
+        blob = self.db.get_metadata(key)
+        if not blob:
+            return None
+        try:
+            return datetime.fromisoformat(blob)
+        except ValueError:
+            self.logger.warning(f"Corrupt timestamp in metadata key '{key}': {blob!r}")
+            return None
+
+    def _check_device_offline(self, now: datetime, dry_run: bool) -> list[dict]:
+        """P1 when Rachio hardware reports offline for the debounce window.
+
+        Controller: `status` from the device payload (recorded by the
+        collector under CONTROLLER_STATUS_KEY). Hose valves: `connected`
+        from the roster poll. Both debounced so transient WiFi/BLE dropouts
+        don't page. Observations older than the outage window are skipped —
+        when the feed itself is dead, the data-outage watchdog owns it.
+        """
+        obs_window = timedelta(minutes=self.rachio_outage_stale_after_minutes)
+        entries: list[dict] = []
+
+        blob = self.db.get_metadata(CONTROLLER_STATUS_KEY)
+        if blob:
+            try:
+                data = json.loads(blob)
+                observed_at = datetime.fromisoformat(data["observed_at"])
+                status = data.get("status")
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                self.logger.warning(f"Bad controller status blob, ignoring: {e}")
+            else:
+                rule_name = "Rachio Controller Offline"
+                if now - observed_at <= obs_window:
+                    entries.append(
+                        self._offline_watchdog(
+                            scope="controller",
+                            rule_name=rule_name,
+                            offline=status != "ONLINE",
+                            fire_detail="Check controller power / WiFi.",
+                            now=now,
+                            dry_run=dry_run,
+                        )
+                    )
+                else:
+                    entries.append(
+                        {"rule": rule_name, "action": "stale_observation", "is_active": False}
+                    )
+
+        for valve in self.db.get_hose_valves():
+            rule_name = f"Hose Valve Offline ({valve['name']})"
+            valve_seen: Optional[datetime] = None
+            if valve.get("updated_at"):
+                try:
+                    valve_seen = datetime.fromisoformat(valve["updated_at"])
+                except ValueError:
+                    pass
+            if valve_seen is None or now - valve_seen > obs_window:
+                entries.append(
+                    {"rule": rule_name, "action": "stale_observation", "is_active": False}
+                )
+                continue
+            entries.append(
+                self._offline_watchdog(
+                    scope=f"hose::{valve['id']}",
+                    rule_name=rule_name,
+                    offline=not valve["connected"],
+                    fire_detail="Check valve battery / BLE range to base station.",
+                    now=now,
+                    dry_run=dry_run,
+                )
+            )
+        return entries
+
+    def _offline_watchdog(
+        self,
+        *,
+        scope: str,
+        rule_name: str,
+        offline: bool,
+        fire_detail: str,
+        now: datetime,
+        dry_run: bool,
+    ) -> dict:
+        """Debounce one device's offline state, then run the shared watchdog.
+
+        First offline observation stamps `offline::<scope>::since`; the alert
+        only goes active once the state has persisted for the debounce window.
+        Any online observation clears the stamp.
+        """
+        since_key = f"offline::{scope}::since"
+        since = self._parse_metadata_timestamp(since_key)
+        if offline:
+            if since is None:
+                since = now
+                if not dry_run:
+                    self.db.set_metadata(since_key, now.isoformat())
+            is_active = (now - since) >= timedelta(minutes=self.device_offline_debounce_minutes)
+        else:
+            if since is not None and not dry_run:
+                self.db.delete_metadata(since_key)
+            since = None
+            is_active = False
+
+        offline_min = (now - since).total_seconds() / 60 if since else 0
+        return self._run_watchdog(
+            rule_name=rule_name,
+            is_active=is_active,
+            retrigger_minutes=self.device_offline_retrigger_minutes,
+            fire_priority=1,
+            fire_message=(
+                f"Offline since {since:%Y-%m-%d %H:%M} ({offline_min:.0f} min). {fire_detail}"
+                if since
+                else fire_detail
+            ),
+            clear_message="Back online.",
+            now=now,
+            dry_run=dry_run,
+            extra={"offline_since": since.isoformat() if since else None},
+        )
 
     # ------------------------------------------------------------------ #
     # Main evaluate loop                                                  #
@@ -616,11 +830,19 @@ class AlertEngine:
 
             results.append(entry)
 
-        # --- Flume data-outage watchdog (never suppressed by irrigation) ---
+        # --- Watchdogs (never suppressed by irrigation) ---
         try:
             results.append(self._check_flume_outage(now, dry_run))
         except Exception as e:
             self.logger.error(f"Flume outage check failed: {e}")
+        try:
+            results.extend(self._check_rachio_outage(now, dry_run))
+        except Exception as e:
+            self.logger.error(f"Rachio outage check failed: {e}")
+        try:
+            results.extend(self._check_device_offline(now, dry_run))
+        except Exception as e:
+            self.logger.error(f"Device offline check failed: {e}")
 
         return results
 

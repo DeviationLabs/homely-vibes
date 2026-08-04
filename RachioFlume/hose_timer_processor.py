@@ -14,6 +14,7 @@ from typing import Optional
 from RachioFlume.alert_rules import (
     ZoneThreshold,
     compact_zone_label,
+    resolve_hose_threshold,
     send_zone_outcome_pushover,
 )
 from RachioFlume.data_storage import WaterTrackingDB
@@ -25,6 +26,15 @@ from lib.logger import get_logger
 
 def _state_key(valve_id: str) -> str:
     return f"hose::valve::{valve_id}::last_action"
+
+
+def hose_poll_key(label: str) -> str:
+    """Metadata key stamped on each successful roster poll for a base station.
+
+    AlertEngine's Rachio data-outage watchdog reads this to detect a hose
+    feed that has silently stopped polling.
+    """
+    return f"hose::poll::{label}::last_success"
 
 
 # Cross-component key: AlertEngine reads this to suppress Flume rule alerts
@@ -61,6 +71,7 @@ class HoseTimerProcessor:
         self.percent_above = percent_above
         self.min_runtime_minutes = min_runtime_minutes
         self.logger = get_logger(__name__)
+        self._warned_unmatched = False
 
     def evaluate(self, *, dry_run: bool = False, now: Optional[datetime] = None) -> list[dict]:
         if now is None:
@@ -73,9 +84,13 @@ class HoseTimerProcessor:
             self.logger.error(f"listValves failed for '{self.client.label}': {e}")
             return [{"error": str(e), "device": self.client.label}]
 
-        # Persist current valve roster for inventory + reporter joins.
-        if not dry_run and valves:
-            self.db.save_hose_valves([v.model_dump() for v in valves])
+        # Persist current valve roster for inventory + reporter joins, and
+        # stamp the feed-health timestamp the outage watchdog reads.
+        if not dry_run:
+            if valves:
+                self.db.save_hose_valves([v.model_dump() for v in valves])
+            self.db.set_metadata(hose_poll_key(self.client.label), now.isoformat())
+        self._warn_unmatched_thresholds(valves)
 
         any_active = False
         for valve in valves:
@@ -213,6 +228,27 @@ class HoseTimerProcessor:
 
         return entry
 
+    def _warn_unmatched_thresholds(self, valves: list[HoseValve]) -> None:
+        """One-time WARN for configured threshold keys that match no live
+        valve under either the exact or the "<prefix> - <name>" rule —
+        surfaces config typos that would otherwise silently fall back to the
+        generic absolute_gpm threshold.
+        """
+        if self._warned_unmatched or not self.thresholds:
+            return
+        self._warned_unmatched = True
+        names = {v.name for v in valves}
+        unmatched = [
+            k
+            for k in self.thresholds
+            if k not in names and k.split(" - ", 1)[-1].strip() not in names
+        ]
+        if unmatched:
+            self.logger.warning(
+                f"Threshold keys matching no live valve on '{self.client.label}': {unmatched} "
+                f"(live valves: {sorted(names)})"
+            )
+
     def _flume_window_flow(self, start_dt: datetime, end_dt: datetime) -> tuple[float, float]:
         """Sum Flume per-minute readings over the run window.
 
@@ -248,7 +284,7 @@ class HoseTimerProcessor:
         path. The trimmed header clusters visually with controller Pushover
         entries.
         """
-        zt = self.thresholds.get(valve.name)
+        zt = resolve_hose_threshold(self.thresholds, valve.name, self.logger)
         baseline = zt.avg_gpm if zt else 0.0
         threshold = (
             zt.compute_threshold(self.absolute_gpm, self.percent_above) if zt else self.absolute_gpm

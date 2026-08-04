@@ -73,12 +73,18 @@ class RachioClient:
         self.logger = get_logger(__name__)
         self.logger.info(f"Rachio client initialized for device {self.device_id}")
 
+        # Device status ("ONLINE"/"OFFLINE") from the most recent
+        # get_device_info call — lets callers reuse the payload already
+        # fetched by get_zones without an extra API call (1700/day cap).
+        self.last_device_status: Optional[str] = None
+
     def get_device_info(self) -> Dict[str, Any]:
         """Get device information including zones."""
         url = f"{self.BASE_URL}/device/{self.device_id}"
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         device_info: Dict[str, Any] = response.json()
+        self.last_device_status = device_info.get("status")
         self.logger.info(f"Retrieved device info for {device_info.get('name', 'Unknown Device')}")
         return device_info
 

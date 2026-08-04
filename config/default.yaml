@@ -273,7 +273,9 @@ rachio_flume:
       # Outer key = device label (matches rachio.devices[].label).
       # Inner key = zone identifier:
       #   - Controllers: stringified zone_number (e.g. "1")
-      #   - Hose timers: raw valve name (e.g. "Z13 FS - Upper Deck Planters")
+      #   - Hose timers: bare valve name as returned by the API (e.g.
+      #     "Upper Deck Planters"), or "<prefix> - <valve name>" (e.g.
+      #     "Z13 FS - Upper Deck Planters") — suffix after " - " must match.
       # Value: {avg_gpm: <float>}. Display labels derive from the raw key via
       # compact_zone_label(); no display `name:` field needed.
       zone_thresholds: {}
@@ -287,9 +289,9 @@ rachio_flume:
       - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
 
     # === Stale-zone monitoring ===
-    # Fire a P-1 heads-up if any enabled controller zone or connected
-    # hose-timer valve hasn't run within this many days.
-    stale_zone_days: 15
+    # Fire a P1 alert if any enabled controller zone or known hose-timer
+    # valve (connected or not) hasn't run within this many days.
+    stale_zone_days: 10
 
     # === Flume data-outage watchdog ===
     # Healthy Flume meters report a row every minute (even at 0.0 GPM).
@@ -299,6 +301,29 @@ rachio_flume:
     flume_outage:
       stale_after_minutes: 60
       retrigger_minutes: 360
+
+    # === Rachio data-outage watchdog ===
+    # Controller and each hose base station are watched separately via their
+    # last-successful-poll timestamps (MAX(event_date) is useless — no
+    # watering ≠ outage). P1 when a feed has had no successful poll for
+    # stale_after_minutes (180 ≈ 36 failed 5-min polls, well past transient
+    # cloud blips; hose runs during an outage are unrecoverable — no history
+    # API — so don't go longer). Re-fires every retrigger_minutes; P0 on
+    # recovery.
+    rachio_outage:
+      stale_after_minutes: 180
+      retrigger_minutes: 360
+
+    # === Device-offline health check ===
+    # P1 when the controller reports status OFFLINE or a hose valve reports
+    # disconnected (dead battery / BLE out of range) for debounce_minutes
+    # straight — the debounce absorbs transient dropouts. Re-fires daily
+    # while offline; P0 once on recovery. Skipped when the underlying
+    # observation is older than rachio_outage.stale_after_minutes (the
+    # outage watchdog owns feed death).
+    device_offline:
+      debounce_minutes: 60
+      retrigger_minutes: 1440
 
 # === PersonalCalSync (Google Apps Script) ===
 personal_cal_sync:
