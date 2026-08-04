@@ -1,10 +1,11 @@
 """Data collection service that polls Rachio and Flume APIs."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
-from RachioFlume.alert_engine import AlertEngine
+from RachioFlume.alert_engine import CONTROLLER_STATUS_KEY, AlertEngine
 from RachioFlume.hose_timer_processor import HoseTimerProcessor
 from RachioFlume.rachio_client import RachioClient
 from RachioFlume.flume_client import FlumeClient
@@ -58,6 +59,19 @@ class WaterTrackingCollector:
             zones = self.rachio_client.get_zones()
             self.db.save_zones(zones)
             self.logger.info(f"Collected {len(zones)} zones from Rachio")
+
+            # Record controller online/offline status for the device-offline
+            # check (status rides along on the device payload get_zones fetched).
+            if self.rachio_client.last_device_status is not None:
+                self.db.set_metadata(
+                    CONTROLLER_STATUS_KEY,
+                    json.dumps(
+                        {
+                            "status": self.rachio_client.last_device_status,
+                            "observed_at": datetime.now().isoformat(),
+                        }
+                    ),
+                )
 
             # Collect recent events (last 24 hours)
             if not self.last_rachio_collection:

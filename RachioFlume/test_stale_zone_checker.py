@@ -44,15 +44,32 @@ def _seed_zone_session(db: WaterTrackingDB, zone_number: int, start: datetime) -
         conn.commit()
 
 
-def _seed_valve(db: WaterTrackingDB, valve_id: str, valve_name: str, base_label: str) -> None:
+def _seed_valve(
+    db: WaterTrackingDB,
+    valve_id: str,
+    valve_name: str,
+    base_label: str,
+    connected: bool = True,
+    updated_at: datetime | None = None,
+) -> None:
     with db.get_connection() as conn:
-        conn.execute(
-            """INSERT OR REPLACE INTO hose_valves
-               (id, base_station_id, base_station_label, name,
-                default_runtime_seconds, detect_flow, battery_status, connected)
-               VALUES (?, 'bs1', ?, ?, 600, 1, 'GOOD', 1)""",
-            (valve_id, base_label, valve_name),
-        )
+        if updated_at is None:
+            conn.execute(
+                """INSERT OR REPLACE INTO hose_valves
+                   (id, base_station_id, base_station_label, name,
+                    default_runtime_seconds, detect_flow, battery_status, connected)
+                   VALUES (?, 'bs1', ?, ?, 600, 1, 'GOOD', ?)""",
+                (valve_id, base_label, valve_name, 1 if connected else 0),
+            )
+        else:
+            conn.execute(
+                """INSERT OR REPLACE INTO hose_valves
+                   (id, base_station_id, base_station_label, name,
+                    default_runtime_seconds, detect_flow, battery_status,
+                    connected, updated_at)
+                   VALUES (?, 'bs1', ?, ?, 600, 1, 'GOOD', ?, ?)""",
+                (valve_id, base_label, valve_name, 1 if connected else 0, updated_at),
+            )
         conn.commit()
 
 
@@ -100,7 +117,7 @@ class TestStaleZoneChecker:
         pushover.send_message.assert_called_once()
         call = pushover.send_message.call_args
         assert "Stale Zone" in call[1]["title"]
-        assert call[1]["priority"] == -1
+        assert call[1]["priority"] == 1
         body = call[0][0]
         assert "Z1 FS - Sergio Outer" in body
         assert "7+ days" in body
@@ -137,6 +154,87 @@ class TestStaleZoneChecker:
         body = pushover.send_message.call_args[0][0]
         assert "Upper Deck Planters" in body
         assert "@ Hose Drip Jasmine" in body
+
+    def test_disconnected_valve_still_alerts(self, tmp_db: WaterTrackingDB) -> None:
+        """A disconnected valve is exactly the failure mode that stops it
+        running — it must never drop out of the stale check (the planter bug).
+        """
+        now = datetime(2026, 6, 28, 8, 0, 0)
+        _seed_valve(
+            tmp_db,
+            "v1",
+            "Upper Deck Planters",
+            "Hose Drip Jasmine",
+            connected=False,
+            updated_at=now,
+        )
+        _seed_hose_session(
+            tmp_db, "v1", "Upper Deck Planters", "Hose Drip Jasmine", now - timedelta(days=14)
+        )
+        pushover = MagicMock()
+        checker = StaleZoneChecker(tmp_db, pushover, stale_zone_days=10)
+        results = checker.evaluate(now=now)
+        assert any(r["source"] == "hose" and r["notified"] for r in results)
+        call = pushover.send_message.call_args
+        assert call[1]["priority"] == 1
+        body = call[0][0]
+        assert "Upper Deck Planters" in body
+        assert "DISCONNECTED" in body
+
+    def test_disconnected_but_fresh_valve_no_alert(self, tmp_db: WaterTrackingDB) -> None:
+        now = datetime(2026, 6, 28, 8, 0, 0)
+        _seed_valve(
+            tmp_db,
+            "v1",
+            "Upper Deck Planters",
+            "Hose Drip Jasmine",
+            connected=False,
+            updated_at=now,
+        )
+        _seed_hose_session(
+            tmp_db, "v1", "Upper Deck Planters", "Hose Drip Jasmine", now - timedelta(days=2)
+        )
+        pushover = MagicMock()
+        checker = StaleZoneChecker(tmp_db, pushover, stale_zone_days=10)
+        results = checker.evaluate(now=now)
+        assert len(results) == 0
+        pushover.send_message.assert_not_called()
+
+    def test_roster_stale_valve_alerts_with_note(self, tmp_db: WaterTrackingDB) -> None:
+        now = datetime(2026, 6, 28, 8, 0, 0)
+        _seed_valve(
+            tmp_db,
+            "v1",
+            "Upper Deck Planters",
+            "Hose Drip Jasmine",
+            connected=True,
+            updated_at=now - timedelta(days=5),
+        )
+        # No session ever
+        pushover = MagicMock()
+        checker = StaleZoneChecker(tmp_db, pushover, stale_zone_days=10)
+        results = checker.evaluate(now=now)
+        assert results[0]["notified"] is True
+        body = pushover.send_message.call_args[0][0]
+        assert "Not seen in valve roster since" in body
+
+    def test_ten_day_boundary(self, tmp_db: WaterTrackingDB) -> None:
+        now = datetime(2026, 6, 28, 8, 0, 0)
+        pushover = MagicMock()
+        checker = StaleZoneChecker(tmp_db, pushover, stale_zone_days=10)
+
+        # Exactly at the cutoff → still fresh (>= cutoff).
+        _seed_controller_zone(tmp_db, 1, "Z1")
+        _seed_zone_session(tmp_db, 1, now - timedelta(days=10))
+        assert len(checker.evaluate(now=now)) == 0
+
+        # One minute past the cutoff → stale.
+        _seed_controller_zone(tmp_db, 2, "Z2")
+        _seed_zone_session(tmp_db, 2, now - timedelta(days=10, minutes=1))
+        results = checker.evaluate(now=now)
+        assert len(results) == 1
+        assert results[0]["zone"] == "Z2"
+        assert "10+ days" in pushover.send_message.call_args[0][0]
 
     def test_daily_dedup_blocks_second_notification(self, tmp_db: WaterTrackingDB) -> None:
         now = datetime(2026, 6, 28, 8, 0, 0)

@@ -170,6 +170,11 @@ def _build_alert_engine() -> AlertEngine:
         min_runtime_minutes=za_cfg.min_runtime_minutes,
         flume_outage_stale_after_minutes=cfg.rachio_flume.alerts.flume_outage.stale_after_minutes,
         flume_outage_retrigger_minutes=cfg.rachio_flume.alerts.flume_outage.retrigger_minutes,
+        rachio_outage_stale_after_minutes=cfg.rachio_flume.alerts.rachio_outage.stale_after_minutes,
+        rachio_outage_retrigger_minutes=cfg.rachio_flume.alerts.rachio_outage.retrigger_minutes,
+        device_offline_debounce_minutes=cfg.rachio_flume.alerts.device_offline.debounce_minutes,
+        device_offline_retrigger_minutes=cfg.rachio_flume.alerts.device_offline.retrigger_minutes,
+        hose_device_labels=[d.label for d in cfg.rachio.devices if d.type == "hose_timer"],
     )
 
 

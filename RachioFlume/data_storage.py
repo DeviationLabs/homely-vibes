@@ -576,6 +576,13 @@ class WaterTrackingDB:
                 )
             conn.commit()
 
+    def get_hose_valves(self) -> List[Dict[str, Any]]:
+        """All known hose-timer valve roster rows (connected or not)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM hose_valves ORDER BY base_station_label, name")
+            return [dict(row) for row in cursor.fetchall()]
+
     def save_hose_watering_event(self, event: Dict[str, Any]) -> None:
         """Insert a hose-timer event (idempotent on (valve_id, event_date, event_type))."""
         with self.get_connection() as conn:
