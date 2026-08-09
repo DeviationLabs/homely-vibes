@@ -344,6 +344,15 @@ prod_controller:
   ssh_host: ""          # e.g. "user@host"
   db_path: ""           # e.g. "~/logs/water_tracking.db"
 
+# === AppleNotesBackup — export Apple Notes into a private git repo ===
+apple_notes_backup:
+  # Dedicated PRIVATE git repo (must be `git init`-ed already). Note content is
+  # PII — never a public repo. Override the path in config/local.yaml.
+  backup_repo_dir: "~/AppleNotesBackup"
+  git_remote: "origin"        # remote to push to after commit; "" skips push
+  git_branch: "main"          # branch to commit/push
+  osascript_timeout_seconds: 300   # Notes.app export can be slow with many notes
+
 # === Constants ===
 my_external_ip: "hoiboi.tplinkdns.com"
 seconds_in_day: 86400

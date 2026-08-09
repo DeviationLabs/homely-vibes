@@ -418,6 +418,22 @@ class ProdControllerConfig:
 
 
 @dataclass
+class AppleNotesBackupConfig:
+    """Apple Notes backup configuration.
+
+    Exports every note via AppleScript into a dedicated *private* git repo
+    (backup_repo_dir). Note content is PII — never point this at a public repo.
+    Each run mirrors current Notes state into the repo and commits; git history
+    is the recovery mechanism for accidentally-deleted notes.
+    """
+
+    backup_repo_dir: str  # dedicated private git repo (already `git init`-ed)
+    git_remote: str  # remote name to push to; empty string skips push
+    git_branch: str  # branch to commit/push
+    osascript_timeout_seconds: int
+
+
+@dataclass
 class Config:
     """Root configuration for homely-vibes"""
 
@@ -441,6 +457,7 @@ class Config:
     personal_cal_sync: PersonalCalSyncConfig
     voice_notes: VoiceNotesConfig
     prod_controller: ProdControllerConfig
+    apple_notes_backup: AppleNotesBackupConfig
     my_external_ip: str
     seconds_in_day: int
 
