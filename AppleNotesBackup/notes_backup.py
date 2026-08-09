@@ -201,6 +201,24 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout
 
 
+def _push_if_ahead(repo: Path, branch: str, remote: str) -> None:
+    """Push any local commits the remote is missing.
+
+    Covers the case where a prior run committed but its push failed: on a later
+    run with no note changes the tree is clean, so without this the unpushed
+    commit would never be retried and the off-machine backup would silently stall.
+    """
+    if not remote:
+        return
+    try:
+        ahead = _git(repo, "rev-list", "--count", f"{remote}/{branch}..HEAD").strip()
+    except RuntimeError:
+        ahead = "1"  # no remote-tracking ref yet (never pushed) → push
+    if ahead != "0":
+        _git(repo, "push", remote, branch)
+        logger.info("pushed %s pending commit(s) to %s/%s", ahead, remote, branch)
+
+
 def commit_and_push(repo: Path, branch: str, remote: str) -> str | None:
     """Stage all changes and commit if anything changed; push when `remote` is set.
 
@@ -210,6 +228,7 @@ def commit_and_push(repo: Path, branch: str, remote: str) -> str | None:
     status = _git(repo, "status", "--porcelain")
     if not status.strip():
         logger.info("no changes to back up")
+        _push_if_ahead(repo, branch, remote)  # retry a prior run's unpushed commit
         return None
 
     added = changed = deleted = 0

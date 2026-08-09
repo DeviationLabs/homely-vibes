@@ -153,6 +153,37 @@ def test_commit_counts_and_skips_push_without_remote(repo: Path) -> None:
     assert msg.split(":")[0] in log or "backup" in log
 
 
+def test_clean_tree_retries_unpushed_commit(tmp_path: Path) -> None:
+    # A prior run committed but its push failed; a later clean-tree run must push it.
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True
+    )
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", str(remote), str(work)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "t@t.io"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "Test"], check=True)
+
+    write_notes([_note()], work)
+    commit_and_push(work, "main", "origin")  # first backup: commit + push
+
+    # Simulate a run that committed but whose push failed (local-only commit):
+    (work / "later.html").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "commit", "-m", "local only"], check=True, capture_output=True
+    )
+    local_head = subprocess.run(
+        ["git", "-C", str(work), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+
+    assert commit_and_push(work, "main", "origin") is None  # clean tree, but ahead
+    remote_head = subprocess.run(
+        ["git", "-C", str(remote), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    assert remote_head == local_head  # pending commit got pushed
+
+
 # ── run_export (injected runner, no patching) ─────────────────────────────────
 
 
