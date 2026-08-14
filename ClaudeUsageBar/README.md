@@ -38,8 +38,13 @@ can be launched from Finder/Spotlight/login items like a normal app.
   further fields (per-channel overage, upgrade paths) not surfaced yet.
 - **UI**: `NSStatusItem` menu bar title (`5h 42% · 7d 18%`), dropdown shows
   the full breakdown with reset times, usage-credit spend against its limit,
-  a link to raise that limit, a manual refresh, and a quit item.
-  Polls every minute.
+  a link to raise that limit, a manual refresh, a refresh-interval picker,
+  and a quit item.
+- **Refresh cadence**: 180s by default, changeable from the dropdown
+  (30s / 1 / 3 / 5 / 10 / 30 min) and persisted in `UserDefaults`, so the
+  choice survives relaunch. The default is deliberately slow: the 5-hour bar
+  moves ~0.5%/min even at a heavy sustained pace and the 7-day bar far less,
+  so polling faster mostly spends requests redrawing an unchanged number.
 
 ## Build & run
 

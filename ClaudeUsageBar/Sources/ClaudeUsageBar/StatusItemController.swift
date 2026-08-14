@@ -5,7 +5,6 @@ final class StatusItemController {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var refreshTimer: Timer?
     private var lastGoodSnapshot: UsageSnapshot?
-    private let refreshInterval: TimeInterval = 60
     private let spendSettingsURL = URL(string: "https://claude.ai/admin-settings/usage#settings/usage")!
 
     private enum State {
@@ -18,7 +17,14 @@ final class StatusItemController {
     func start() {
         render(.loading)
         Task { await refresh() }
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
+        scheduleTimer()
+    }
+
+    private func scheduleTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(
+            withTimeInterval: RefreshInterval.current, repeats: true
+        ) { [weak self] _ in
             Task { await self?.refresh() }
         }
     }
@@ -94,6 +100,7 @@ final class StatusItemController {
         let refreshItem = NSMenuItem(title: "Refresh Now", action: #selector(refreshNow), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
+        menu.addItem(intervalMenuItem())
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -156,5 +163,35 @@ final class StatusItemController {
 
     @objc private func openSpendSettings() {
         NSWorkspace.shared.open(spendSettingsURL)
+    }
+
+    private func intervalMenuItem() -> NSMenuItem {
+        let current = RefreshInterval.current
+        let parent = NSMenuItem(
+            title: "Refresh Every: \(RefreshInterval.label(for: current))", action: nil, keyEquivalent: ""
+        )
+        let submenu = NSMenu()
+        for seconds in RefreshInterval.choices {
+            let item = NSMenuItem(
+                title: RefreshInterval.label(for: seconds),
+                action: #selector(setRefreshInterval(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = seconds
+            item.state = (seconds == current) ? .on : .off
+            submenu.addItem(item)
+        }
+        parent.submenu = submenu
+        return parent
+    }
+
+    @objc private func setRefreshInterval(_ sender: NSMenuItem) {
+        guard let seconds = sender.representedObject as? TimeInterval else { return }
+        RefreshInterval.current = seconds
+        scheduleTimer()
+        // Rebuild so the parent title and checkmark reflect the new choice
+        // without waiting for the next poll to redraw the menu.
+        render(lastGoodSnapshot.map { State.ok($0) } ?? .loading)
     }
 }
