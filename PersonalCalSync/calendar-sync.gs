@@ -230,6 +230,22 @@ function isTentativeEvent(block) {
   return myPartstatIs(block, 'TENTATIVE');
 }
 
+// Whether an override block carries the fields isTentativeEvent() reads (STATUS or my
+// ATTENDEE line). If it declares none, it's a sparse override and should inherit the
+// master's tentative state instead of being reset to non-tentative.
+function overrideDeclaresRsvp(block) {
+  if (extractICSField(block, 'STATUS')) return true;
+  var myEmail = getMyEmail();
+  if (!myEmail) return false;
+  var lines = block.split(/\r?\n/);
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf('ATTENDEE') === 0 && lines[i].toLowerCase().indexOf(myEmail) !== -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function myPartstatIs(block, partstat) {
   var myEmail = getMyEmail();
   if (!myEmail) return false;
@@ -308,8 +324,11 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
           }
           var ovTitle = extractICSField(override, 'SUMMARY');
           if (ovTitle) instanceTitle = BLOCKER_PREFIX + ovTitle;
-          instanceFree = isFreeEvent(override);
-          instanceTentative = isTentativeEvent(override);
+          // Google emits complete overrides, but a sparse override (RFC 5545 lets it
+          // omit unchanged props) must inherit the master's intent rather than reset to
+          // Busy. Only adopt the override's value when it actually declares the property.
+          if (extractICSField(override, 'TRANSP')) instanceFree = isFreeEvent(override);
+          if (overrideDeclaresRsvp(override)) instanceTentative = isTentativeEvent(override);
         }
 
         instances.push({
