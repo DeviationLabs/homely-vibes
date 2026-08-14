@@ -30,8 +30,11 @@ var SYNC_DAYS_AHEAD = 180;
 
 // Enterprise calendar the blockers live on. 'primary' == the account running the script.
 var CAL_ID = 'primary';
-// Tomato/red in Google's colorId scheme.
-var BLOCKER_COLOR_ID = '11';
+// Genuinely-busy blockers: Tomato (colorId 11) — strong red.
+var BUSY_COLOR_ID = '11';
+// Free/Tentative (non-blocking) blockers: Banana (colorId 5) — yellow.
+// Yellow separates cleanly from Tomato red on the red-green color-blindness axis.
+var NONBUSY_COLOR_ID = '5';
 
 var BATCH_SIZE = 10;
 var BATCH_PAUSE_MS = 2000;
@@ -568,12 +571,15 @@ function extractPersonalEventId(description) {
 // can't set free/busy transparency or tentative status, which is why we use Calendar.Events.
 function buildBlockerResource(pe) {
   var tz = Session.getScriptTimeZone();
+  // Free AND Tentative are both non-blocking: coworkers may book over them, so we
+  // mark them transparent (not busy) and give them the lighter, colorblind-safe color.
+  var isBusy = !(pe.isFree || pe.isTentative);
   var resource = {
     summary: pe.title,
     description: BLOCKER_TAG + pe.uid + ']',
     visibility: 'private',
-    colorId: BLOCKER_COLOR_ID,
-    transparency: pe.isFree ? 'transparent' : 'opaque',
+    colorId: isBusy ? BUSY_COLOR_ID : NONBUSY_COLOR_ID,
+    transparency: isBusy ? 'opaque' : 'transparent',
     status: pe.isTentative ? 'tentative' : 'confirmed',
     reminders: {useDefault: false, overrides: []}
   };
@@ -597,12 +603,13 @@ function createBlocker(pe) {
 }
 
 // Debug suffix flagging source events that carry Free/Tentative intent, so the
-// Executions log shows when a blocker is anything other than plain Busy.
+// Executions log shows when a blocker is non-blocking rather than plain Busy.
+// Both Free and Tentative render transparent + lavender; the flag says which drove it.
 function statusDebug(pe) {
   var flags = [];
-  if (pe.isFree) flags.push('FREE (transparent)');
+  if (pe.isFree) flags.push('FREE');
   if (pe.isTentative) flags.push('TENTATIVE');
-  return flags.length ? ' [' + flags.join(' + ') + ']' : '';
+  return flags.length ? ' [non-busy: ' + flags.join(' + ') + ']' : '';
 }
 
 function updateBlockerIfNeeded(blocker, pe) {
