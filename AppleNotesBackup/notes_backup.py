@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -42,6 +43,20 @@ _N_FIELDS = 6  # id, folder, name, modified, attachment_count, body
 
 _APPLESCRIPT = Path(__file__).with_name("export_notes.applescript")
 _FILENAME_MAXLEN = 80  # cap the readable portion of a filename
+
+# Git exports these into any hook it runs, and they outrank both `cwd` and `-C`.
+# Inherited from a hook (or any git-invoked parent), they would silently redirect
+# every call below at the invoking repo instead of the backup repo.
+_GIT_ENV_OVERRIDES = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_PREFIX",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CEILING_DIRECTORIES",
+)
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -195,7 +210,10 @@ def prune_stale(repo: Path, keep: set[Path]) -> list[Path]:
 
 
 def _git(repo: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=120)
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_OVERRIDES}
+    result = subprocess.run(
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=120, env=env
+    )
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
