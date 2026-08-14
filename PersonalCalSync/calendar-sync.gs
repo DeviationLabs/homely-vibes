@@ -592,8 +592,17 @@ function buildBlockerResource(pe) {
 
 function createBlocker(pe) {
   var created = Calendar.Events.insert(buildBlockerResource(pe), CAL_ID);
-  Logger.log('Created blocker: ' + pe.title + ' @ ' + pe.start);
+  Logger.log('Created blocker: ' + pe.title + ' @ ' + pe.start + statusDebug(pe));
   return created;
+}
+
+// Debug suffix flagging source events that carry Free/Tentative intent, so the
+// Executions log shows when a blocker is anything other than plain Busy.
+function statusDebug(pe) {
+  var flags = [];
+  if (pe.isFree) flags.push('FREE (transparent)');
+  if (pe.isTentative) flags.push('TENTATIVE');
+  return flags.length ? ' [' + flags.join(' + ') + ']' : '';
 }
 
 function updateBlockerIfNeeded(blocker, pe) {
@@ -626,7 +635,10 @@ function updateBlockerIfNeeded(blocker, pe) {
 
   if (changed) {
     Calendar.Events.patch(patch, CAL_ID, blocker.id);
-    Logger.log('Updated blocker: ' + pe.title + ' @ ' + pe.start);
+    var flippedFree = (blocker.transparency || 'opaque') !== desired.transparency;
+    var flippedTentative = (blocker.status || 'confirmed') !== desired.status;
+    var transition = (flippedFree || flippedTentative) ? ' <- status changed' : '';
+    Logger.log('Updated blocker: ' + pe.title + ' @ ' + pe.start + statusDebug(pe) + transition);
   }
 }
 
