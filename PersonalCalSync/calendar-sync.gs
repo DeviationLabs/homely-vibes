@@ -1,23 +1,40 @@
 // ============================================================
-// Personal → Enterprise Calendar Busy Blocker Sync (v3 - RRULE)
+// Personal → Enterprise Calendar Busy Blocker Sync (v4)
 // ============================================================
 // Uses private iCal URL to bypass enterprise restrictions.
 // Expands recurring events (RRULE) into individual instances.
+// Mirrors "free" (TRANSP:TRANSPARENT) and "maybe" (tentative) so
+// blockers show as Free / Tentative instead of always Busy — this
+// requires the advanced Calendar service (Calendar.Events), enabled
+// in appsscript.json.
 //
 // Setup:
 // 1. Get your personal calendar's secret iCal URL:
 //    Personal Gmail → Calendar Settings → your calendar → Integrate calendar
 //    → Copy "Secret address in iCal format"
 // 2. Set PERSONAL_ICAL_URL in Project Settings → Script Properties
-// 3. Run initialSync() once to grant permissions
-// 4. Add time-driven trigger: syncCalendar every 15 minutes
+// 3. Set MY_EMAIL (your personal email) in Script Properties — used to
+//    match your own RSVP; kept out of source to avoid committing PII.
+// 4. Run initialSync() once to grant permissions
+// 5. Add time-driven trigger: syncCalendar every 15 minutes
 // ============================================================
 var ICAL_URL_KEY = 'PERSONAL_ICAL_URL';
+// My personal email, used to match my own RSVP (PARTSTAT) in attendee lines.
+// Stored in Script Properties — never hardcoded — to keep PII out of source.
+var MY_EMAIL_KEY = 'MY_EMAIL';
 
 var BLOCKER_TAG = '[PERSONAL_SYNC:';
 var BLOCKER_PREFIX = '[P] ';
 var BLOCKER_TITLE_FALLBACK = 'Personal (Busy)';
-var SYNC_DAYS_AHEAD = 30;
+var SYNC_DAYS_AHEAD = 180;
+
+// Enterprise calendar the blockers live on. 'primary' == the account running the script.
+var CAL_ID = 'primary';
+// Genuinely-busy blockers: Tomato (colorId 11) — strong red.
+var BUSY_COLOR_ID = '11';
+// Free/Tentative (non-blocking) blockers: Banana (colorId 5) — yellow.
+// Yellow separates cleanly from Tomato red on the red-green color-blindness axis.
+var NONBUSY_COLOR_ID = '5';
 
 var BATCH_SIZE = 10;
 var BATCH_PAUSE_MS = 2000;
@@ -38,8 +55,7 @@ function syncCalendar() {
 
   Logger.log('Found ' + personalEvents.length + ' personal events in window.');
 
-  var enterpriseCal = CalendarApp.getDefaultCalendar();
-  var existingBlockers = getExistingBlockers(enterpriseCal, startDate, endDate);
+  var existingBlockers = getExistingBlockers(startDate, endDate);
 
   var created = 0;
   var updated = 0;
@@ -53,7 +69,7 @@ function syncCalendar() {
       updated++;
       delete existingBlockers[pe.uid];
     } else {
-      createBlocker(enterpriseCal, pe);
+      createBlocker(pe);
       created++;
       if (created % BATCH_SIZE === 0) {
         Logger.log('Created ' + created + ' blockers, pausing...');
@@ -63,7 +79,7 @@ function syncCalendar() {
   }
 
   for (var staleId in existingBlockers) {
-    existingBlockers[staleId].deleteEvent();
+    Calendar.Events.remove(CAL_ID, existingBlockers[staleId].id);
     deleted++;
     if (deleted % BATCH_SIZE === 0) {
       Utilities.sleep(BATCH_PAUSE_MS);
@@ -145,10 +161,12 @@ function parseICS(icsText, startDate, endDate) {
 
     var rrule = extractICSField(block, 'RRULE');
     var exdates = extractAllEXDATEs(block);
+    var isFree = isFreeEvent(block);
+    var isTentative = isTentativeEvent(block);
 
     if (rrule) {
       var masterTitle = extractICSField(block, 'SUMMARY');
-      var instances = expandRRule(rrule, dtStart, duration, isAllDay, exdates, startDate, endDate, uid, overridesByUid[uid] || {}, masterTitle);
+      var instances = expandRRule(rrule, dtStart, duration, isAllDay, exdates, startDate, endDate, uid, overridesByUid[uid] || {}, masterTitle, isFree, isTentative);
       for (var j = 0; j < instances.length; j++) {
         events.push(instances[j]);
       }
@@ -163,7 +181,9 @@ function parseICS(icsText, startDate, endDate) {
           title: title ? BLOCKER_PREFIX + title : BLOCKER_TITLE_FALLBACK,
           start: dtStart,
           end: dtEnd,
-          isAllDay: isAllDay
+          isAllDay: isAllDay,
+          isFree: isFree,
+          isTentative: isTentative
         });
       }
     }
@@ -194,20 +214,67 @@ function extractAllEXDATEs(block) {
 }
 
 function isDeclinedEvent(block) {
+  return myPartstatIs(block, 'DECLINED');
+}
+
+// "Mark time as free" in Google Calendar exports as TRANSP:TRANSPARENT (default OPAQUE = busy).
+function isFreeEvent(block) {
+  var transp = extractICSField(block, 'TRANSP');
+  return !!(transp && transp.toUpperCase() === 'TRANSPARENT');
+}
+
+// "Maybe" = either an event-level tentative status, or my own RSVP being tentative.
+function isTentativeEvent(block) {
+  var status = extractICSField(block, 'STATUS');
+  if (status && status.toUpperCase() === 'TENTATIVE') return true;
+  return myPartstatIs(block, 'TENTATIVE');
+}
+
+// Whether an override block carries the fields isTentativeEvent() reads (STATUS or my
+// ATTENDEE line). If it declares none, it's a sparse override and should inherit the
+// master's tentative state instead of being reset to non-tentative.
+function overrideDeclaresRsvp(block) {
+  if (extractICSField(block, 'STATUS')) return true;
+  var myEmail = getMyEmail();
+  if (!myEmail) return false;
   var lines = block.split(/\r?\n/);
   for (var i = 0; i < lines.length; i++) {
-    if (lines[i].indexOf('ATTENDEE') !== 0) continue;
-    if (lines[i].indexOf('PARTSTAT=DECLINED') !== -1 &&
-        lines[i].toLowerCase().indexOf('abutala@gmail.com') !== -1) {
+    if (lines[i].indexOf('ATTENDEE') === 0 && lines[i].toLowerCase().indexOf(myEmail) !== -1) {
       return true;
     }
   }
   return false;
 }
 
+function myPartstatIs(block, partstat) {
+  var myEmail = getMyEmail();
+  if (!myEmail) return false;
+  var needle = 'PARTSTAT=' + partstat;
+  var lines = block.split(/\r?\n/);
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf('ATTENDEE') !== 0) continue;
+    if (lines[i].indexOf(needle) !== -1 &&
+        lines[i].toLowerCase().indexOf(myEmail) !== -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+var _myEmailCache = null;
+function getMyEmail() {
+  if (_myEmailCache === null) {
+    _myEmailCache = (PropertiesService.getScriptProperties().getProperty(MY_EMAIL_KEY) || '').toLowerCase();
+    if (!_myEmailCache) {
+      Logger.log('MY_EMAIL script property not set — declined/tentative RSVP detection disabled.');
+    }
+  }
+  return _myEmailCache;
+}
+
 // --- RRULE Expansion ---
 
-function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, windowEnd, uid, overrides, masterTitle) {
+function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, windowEnd, uid, overrides, masterTitle, masterFree, masterTentative) {
   var parts = parseRRuleParts(rrule);
   var freq = parts['FREQ'];
   var interval = parseInt(parts['INTERVAL'] || '1');
@@ -242,19 +309,26 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
 
         // Check for override (modified instance)
         var instanceTitle = masterTitle ? BLOCKER_PREFIX + masterTitle : null;
+        var instanceFree = masterFree;
+        var instanceTentative = masterTentative;
         var override = overrides[candidate.getTime()];
         if (override) {
-          var ovStart = extractICSDateTime(override, 'DTSTART');
-          var ovEnd = extractICSDateTime(override, 'DTEND');
           var ovStatus = extractICSField(override, 'STATUS');
           if (ovStatus && ovStatus.toUpperCase() === 'CANCELLED') continue;
           if (isDeclinedEvent(override)) continue;
+          var ovStart = extractICSDateTime(override, 'DTSTART');
+          var ovEnd = extractICSDateTime(override, 'DTEND');
           if (ovStart) {
             candidate = ovStart;
             instanceEnd = ovEnd || new Date(ovStart.getTime() + duration);
           }
           var ovTitle = extractICSField(override, 'SUMMARY');
           if (ovTitle) instanceTitle = BLOCKER_PREFIX + ovTitle;
+          // Google emits complete overrides, but a sparse override (RFC 5545 lets it
+          // omit unchanged props) must inherit the master's intent rather than reset to
+          // Busy. Only adopt the override's value when it actually declares the property.
+          if (extractICSField(override, 'TRANSP')) instanceFree = isFreeEvent(override);
+          if (overrideDeclaresRsvp(override)) instanceTentative = isTentativeEvent(override);
         }
 
         instances.push({
@@ -262,7 +336,9 @@ function expandRRule(rrule, dtStart, duration, isAllDay, exdates, windowStart, w
           title: instanceTitle || BLOCKER_TITLE_FALLBACK,
           start: candidate,
           end: instanceEnd,
-          isAllDay: isAllDay
+          isAllDay: isAllDay,
+          isFree: instanceFree,
+          isTentative: instanceTentative
         });
       }
     }
@@ -474,17 +550,29 @@ function isAllDayEvent(block) {
 
 // --- Enterprise Calendar Operations ---
 
-function getExistingBlockers(calendar, startDate, endDate) {
-  var events = calendar.getEvents(startDate, endDate, {search: BLOCKER_TAG});
+function getExistingBlockers(startDate, endDate) {
   var blockerMap = {};
+  var pageToken = null;
 
-  for (var i = 0; i < events.length; i++) {
-    var desc = events[i].getDescription();
-    var id = extractPersonalEventId(desc);
-    if (id) {
-      blockerMap[id] = events[i];
+  do {
+    var resp = Calendar.Events.list(CAL_ID, {
+      timeMin: startDate.toISOString(),
+      timeMax: endDate.toISOString(),
+      q: BLOCKER_TAG,
+      singleEvents: true,
+      showDeleted: false,
+      maxResults: 2500,
+      pageToken: pageToken
+    });
+    var items = resp.items || [];
+    for (var i = 0; i < items.length; i++) {
+      var id = extractPersonalEventId(items[i].description);
+      if (id) {
+        blockerMap[id] = items[i];
+      }
     }
-  }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
 
   return blockerMap;
 }
@@ -498,55 +586,101 @@ function extractPersonalEventId(description) {
   return description.substring(startIdx + BLOCKER_TAG.length, endIdx);
 }
 
-function createBlocker(enterpriseCal, pe) {
-  var description = BLOCKER_TAG + pe.uid + ']';
-  var blocker;
+// Builds the advanced Calendar API event resource for a blocker. Classic CalendarApp
+// can't set free/busy transparency or tentative status, which is why we use Calendar.Events.
+function buildBlockerResource(pe) {
+  var tz = Session.getScriptTimeZone();
+  // Free AND Tentative are both non-blocking: coworkers may book over them, so we
+  // mark them transparent (not busy) and give them the lighter, colorblind-safe color.
+  var isBusy = !(pe.isFree || pe.isTentative);
+  var resource = {
+    summary: pe.title,
+    description: BLOCKER_TAG + pe.uid + ']',
+    visibility: 'private',
+    colorId: isBusy ? BUSY_COLOR_ID : NONBUSY_COLOR_ID,
+    transparency: isBusy ? 'opaque' : 'transparent',
+    status: pe.isTentative ? 'tentative' : 'confirmed',
+    reminders: {useDefault: false, overrides: []}
+  };
 
   if (pe.isAllDay) {
-    blocker = enterpriseCal.createAllDayEvent(pe.title, pe.start, pe.end);
+    // All-day events use exclusive end dates; ICS DTEND is already exclusive.
+    resource.start = {date: Utilities.formatDate(pe.start, tz, 'yyyy-MM-dd')};
+    resource.end = {date: Utilities.formatDate(pe.end, tz, 'yyyy-MM-dd')};
   } else {
-    blocker = enterpriseCal.createEvent(pe.title, pe.start, pe.end);
+    resource.start = {dateTime: Utilities.formatDate(pe.start, tz, "yyyy-MM-dd'T'HH:mm:ss"), timeZone: tz};
+    resource.end = {dateTime: Utilities.formatDate(pe.end, tz, "yyyy-MM-dd'T'HH:mm:ss"), timeZone: tz};
   }
 
-  blocker.setDescription(description);
-  blocker.setColor(CalendarApp.EventColor.RED);
-  blocker.setVisibility(CalendarApp.Visibility.PRIVATE);
-  blocker.removeAllReminders();
+  return resource;
+}
 
-  Logger.log('Created blocker: ' + pe.title + ' @ ' + pe.start);
-  return blocker;
+function createBlocker(pe) {
+  var created = Calendar.Events.insert(buildBlockerResource(pe), CAL_ID);
+  Logger.log('Created blocker: ' + pe.title + ' @ ' + pe.start + statusDebug(pe));
+  return created;
+}
+
+// Debug suffix flagging source events that carry Free/Tentative intent, so the
+// Executions log shows when a blocker is non-blocking rather than plain Busy.
+// Both Free and Tentative render transparent + lavender; the flag says which drove it.
+function statusDebug(pe) {
+  var flags = [];
+  if (pe.isFree) flags.push('FREE');
+  if (pe.isTentative) flags.push('TENTATIVE');
+  return flags.length ? ' [non-busy: ' + flags.join(' + ') + ']' : '';
 }
 
 function updateBlockerIfNeeded(blocker, pe) {
+  var desired = buildBlockerResource(pe);
+  var patch = {};
   var changed = false;
 
-  if (pe.isAllDay) {
-    if (blocker.getAllDayStartDate().getTime() !== pe.start.getTime() ||
-        blocker.getAllDayEndDate().getTime() !== pe.end.getTime()) {
-      blocker.setAllDayDates(pe.start, pe.end);
-      changed = true;
-    }
-  } else {
-    if (blocker.getStartTime().getTime() !== pe.start.getTime() ||
-        blocker.getEndTime().getTime() !== pe.end.getTime()) {
-      blocker.setTime(pe.start, pe.end);
-      changed = true;
-    }
-  }
-
-  if (blocker.getTitle() !== pe.title) {
-    blocker.setTitle(pe.title);
+  if (!sameInstant(blocker.start, desired.start) || !sameInstant(blocker.end, desired.end)) {
+    patch.start = desired.start;
+    patch.end = desired.end;
     changed = true;
   }
-
-  if (blocker.getColor() !== CalendarApp.EventColor.RED) {
-    blocker.setColor(CalendarApp.EventColor.RED);
+  if (blocker.summary !== desired.summary) {
+    patch.summary = desired.summary;
+    changed = true;
+  }
+  if (blocker.colorId !== desired.colorId) {
+    patch.colorId = desired.colorId;
+    changed = true;
+  }
+  // Google omits transparency when opaque (the default), so treat missing as opaque.
+  if ((blocker.transparency || 'opaque') !== desired.transparency) {
+    patch.transparency = desired.transparency;
+    changed = true;
+  }
+  if ((blocker.status || 'confirmed') !== desired.status) {
+    patch.status = desired.status;
     changed = true;
   }
 
   if (changed) {
-    Logger.log('Updated blocker: ' + pe.title + ' @ ' + pe.start);
+    Calendar.Events.patch(patch, CAL_ID, blocker.id);
+    var flippedFree = (blocker.transparency || 'opaque') !== desired.transparency;
+    var flippedTentative = (blocker.status || 'confirmed') !== desired.status;
+    var transition = (flippedFree || flippedTentative) ? ' <- status changed' : '';
+    Logger.log('Updated blocker: ' + pe.title + ' @ ' + pe.start + statusDebug(pe) + transition);
   }
+}
+
+// Compares two advanced-API event time objects as absolute instants, so the API's
+// offset-qualified dateTime (e.g. ...-07:00) matches our tz-qualified local dateTime.
+function sameInstant(t1, t2) {
+  var m1 = eventTimeMillis(t1);
+  var m2 = eventTimeMillis(t2);
+  return m1 !== null && m1 === m2;
+}
+
+function eventTimeMillis(t) {
+  if (!t) return null;
+  if (t.dateTime) return new Date(t.dateTime).getTime();
+  if (t.date) return new Date(t.date + 'T00:00:00').getTime();
+  return null;
 }
 
 // --- Entry Points ---
@@ -560,14 +694,16 @@ function initialSync() {
 function cleanupAllBlockers() {
   var now = new Date();
   var endDate = new Date(now.getTime() + SYNC_DAYS_AHEAD * 24 * 60 * 60 * 1000);
-  var enterpriseCal = CalendarApp.getDefaultCalendar();
-  var blockers = enterpriseCal.getEvents(now, endDate, {search: BLOCKER_TAG});
+  var blockers = getExistingBlockers(now, endDate);
 
-  for (var i = 0; i < blockers.length; i++) {
-    if (extractPersonalEventId(blockers[i].getDescription())) {
-      blockers[i].deleteEvent();
+  var count = 0;
+  for (var id in blockers) {
+    Calendar.Events.remove(CAL_ID, blockers[id].id);
+    count++;
+    if (count % BATCH_SIZE === 0) {
+      Utilities.sleep(BATCH_PAUSE_MS);
     }
   }
 
-  Logger.log('Cleaned up ' + blockers.length + ' blocker events.');
+  Logger.log('Cleaned up ' + count + ' blocker events.');
 }

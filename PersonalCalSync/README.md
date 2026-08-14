@@ -12,9 +12,12 @@ Enterprise Google Workspace often blocks external calendar access via `CalendarA
 - Parses ICS format including RRULE expansion for recurring events
 - Creates/updates/deletes blocker events on your enterprise calendar using the **real event title** from your personal calendar
 - Blocker events are marked `PRIVATE` — coworkers see "Busy", only you see the title
+- **Preserves free/busy + RSVP intent**: events you marked "Free" (`TRANSP:TRANSPARENT`) sync as **Free** (visible to you, but coworkers can still book over them); "Maybe"/tentative events sync as **Tentative**
 - Skips declined events and cancelled instances
 - Batches writes to avoid Google API rate limits
 - Runs every 15 minutes via Apps Script trigger
+
+> Because free/busy transparency and tentative status can't be set via the classic `CalendarApp` API, the script uses the **advanced Calendar service** (`Calendar.Events`). It's declared in `appsscript.json`, so a `clasp push` enables it automatically. If you paste the code in manually, add it via **Services (+)** → **Calendar API** in the Apps Script editor.
 
 ## Setup
 
@@ -39,7 +42,8 @@ The URL is stored in Apps Script's encrypted Script Properties — not in the co
 1. In the Apps Script editor → **Project Settings** (gear icon on left) → **Script Properties**
 2. Click **Add script property**
 3. Property: `PERSONAL_ICAL_URL` — Value: your secret iCal URL from step 1
-4. Click **Save script properties**
+4. Add a second property: `MY_EMAIL` — Value: your personal email address. Used to match your own RSVP (`PARTSTAT`) so declined events are skipped and "Maybe" events sync as Tentative. Kept in Script Properties rather than source code so no PII is committed to git.
+5. Click **Save script properties**
 
 Also save it in `config/local.yaml` (gitignored) so it's backed up locally:
 ```yaml
@@ -122,8 +126,9 @@ To trigger an immediate sync after pushing (instead of waiting for the 15-minute
 | Variable | Default | Description |
 |---|---|---|
 | `PERSONAL_ICAL_URL` | — | Secret iCal URL — stored in Script Properties, not source code |
+| `MY_EMAIL` | — | Your personal email — stored in Script Properties, not source code. Matches your own RSVP for declined/tentative handling |
 | `BLOCKER_TITLE_FALLBACK` | `Personal (Busy)` | Title used only if SUMMARY is missing from iCal |
-| `SYNC_DAYS_AHEAD` | `30` | How far ahead to sync |
+| `SYNC_DAYS_AHEAD` | `180` | How far ahead to sync |
 | `BATCH_SIZE` | `10` | Events created before pausing |
 | `BATCH_PAUSE_MS` | `2000` | Pause duration between batches (ms) |
 
@@ -148,4 +153,5 @@ The secret iCal URL grants read-only access to your personal calendar. Do not sh
 ## Known limitations
 
 - Timezone: `TZID`-qualified timestamps are parsed as local (Apps Script server) timezone. Events on personal calendars in different timezones may be off by one hour during DST transitions.
-- Sync window: only the next 30 days are checked. Events beyond `SYNC_DAYS_AHEAD` that were previously synced will not be cleaned up until they fall within the window.
+- Sync window: only the next `SYNC_DAYS_AHEAD` (180) days are checked. Events beyond that window that were previously synced will not be cleaned up until they fall within the window.
+- "Free" events are still created as blocker events (so you see them on your work calendar) but marked transparent, so coworkers **can** book over them — they don't reserve the time.
