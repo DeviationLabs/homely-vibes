@@ -84,10 +84,14 @@ enum KeychainTokenReader {
     /// the prompt recur every few minutes. The token only changes when the CLI
     /// refreshes it, so it is cached until its own `expiresAt`.
     ///
-    /// The primary item is read alone when it exists: a *denied* read must not
-    /// cascade into a separate prompt for every MCP sibling. The broad scan is
-    /// kept only for the case where the primary item is absent entirely, which
-    /// `candidateServices()` can determine without prompting.
+    /// When the primary item exists it is read alone, for *every* outcome —
+    /// including a successful read of an expired token. Falling back to the
+    /// siblings there would cascade one prompt per sibling on every token
+    /// expiry, which is routine, and could never succeed anyway: the
+    /// `Claude Code-credentials-<hash>` items hold `{"mcpOAuth": ...}` with no
+    /// `accessToken` at any level `parseToken` inspects, so they always parse to
+    /// nil. The broad scan is kept only for the primary item being absent
+    /// entirely, which `candidateServices()` determines without prompting.
     static func readValidToken() -> OAuthToken? {
         cacheLock.lock()
         defer { cacheLock.unlock() }
