@@ -48,7 +48,14 @@ enum UsageClient {
         if ProcessInfo.processInfo.environment["CLAUDE_USAGE_DEBUG"] != nil {
             FileHandle.standardError.write("UsageClient: status=\(http.statusCode) bytes=\(data.count) body=\(String(data: data, encoding: .utf8) ?? "<non-utf8>")\n".data(using: .utf8)!)
         }
-        if http.statusCode == 401 { throw UsageClientError.unauthorized }
+        // A 401 means the cached token is no longer good even if it hasn't hit
+        // its own expiry — the CLI rotates tokens on its own schedule. Drop it
+        // so the next tick re-reads the Keychain rather than replaying a token
+        // the server has already rejected.
+        if http.statusCode == 401 {
+            KeychainTokenReader.invalidateCache()
+            throw UsageClientError.unauthorized
+        }
         guard http.statusCode == 200 else { throw UsageClientError.badResponse(http.statusCode) }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
