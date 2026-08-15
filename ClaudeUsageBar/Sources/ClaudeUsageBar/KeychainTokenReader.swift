@@ -68,16 +68,56 @@ enum KeychainTokenReader {
         return OAuthToken(accessToken: accessToken, expiresAt: expiresAt)
     }
 
-    /// First `Claude Code-credentials-*` item that decodes to a non-expired
-    /// access token, trying each candidate in turn.
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cachedToken: OAuthToken?
+
+    private static func isUnexpired(_ token: OAuthToken) -> Bool {
+        guard let expiresAt = token.expiresAt else { return true }
+        return expiresAt > Date()
+    }
+
+    /// A non-expired access token, read from the Keychain at most once per
+    /// token lifetime.
+    ///
+    /// Every `secretData` call requests `kSecReturnData`, and that is what
+    /// triggers the macOS consent prompt — so reading on each refresh tick made
+    /// the prompt recur every few minutes. The token only changes when the CLI
+    /// refreshes it, so it is cached until its own `expiresAt`.
+    ///
+    /// When the primary item exists it is read alone, for *every* outcome —
+    /// including a successful read of an expired token. Falling back to the
+    /// siblings there would cascade one prompt per sibling on every token
+    /// expiry, which is routine, and could never succeed anyway: the
+    /// `Claude Code-credentials-<hash>` items hold `{"mcpOAuth": ...}` with no
+    /// `accessToken` at any level `parseToken` inspects, so they always parse to
+    /// nil. The broad scan is kept only for the primary item being absent
+    /// entirely, which `candidateServices()` determines without prompting.
     static func readValidToken() -> OAuthToken? {
-        for service in candidateServices() {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+
+        if let cached = cachedToken, isUnexpired(cached) { return cached }
+
+        let services = candidateServices()
+        let ordered = services.contains(primaryService) ? [primaryService] : services
+        for service in ordered {
             guard let data = secretData(forService: service),
-                  let token = parseToken(from: data) else { continue }
-            if let expiresAt = token.expiresAt, expiresAt <= Date() { continue }
+                  let token = parseToken(from: data),
+                  isUnexpired(token) else { continue }
+            cachedToken = token
             return token
         }
+        cachedToken = nil
         return nil
+    }
+
+    /// Drops the cached token so the next read goes back to the Keychain.
+    /// Called when the API rejects the token, since the CLI may have rotated it
+    /// before the copy we hold reached its own expiry.
+    static func invalidateCache() {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        cachedToken = nil
     }
 
     /// Prints the *keys* (never values) of each matching Keychain item so
