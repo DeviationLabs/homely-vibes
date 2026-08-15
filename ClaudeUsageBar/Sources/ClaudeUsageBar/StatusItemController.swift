@@ -5,7 +5,8 @@ final class StatusItemController {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var refreshTimer: Timer?
     private var lastGoodSnapshot: UsageSnapshot?
-    private let spendSettingsURL = URL(string: "https://claude.ai/admin-settings/usage#settings/usage")!
+    private let spendSettingsURL = URL(string: "https://claude.ai/new#settings/usage")!
+    private static let fullFiveHourWindow = "5h"
 
     private enum State {
         case loading
@@ -67,15 +68,24 @@ final class StatusItemController {
         buildMenu(state: state)
     }
 
+    // Title reports what is *left* (budget and clock); the dropdown reports what
+    // was consumed. An absent five_hour window means nothing has been spent yet,
+    // so it reads as a full budget on a full clock — but only when the response
+    // is otherwise healthy, hence the guard.
     private func titleText(for snapshot: UsageSnapshot) -> String {
+        guard snapshot.fiveHour != nil || snapshot.sevenDay != nil else {
+            return "Claude: \u{2014}"
+        }
         var parts: [String] = []
         if let fiveHour = snapshot.fiveHour {
-            parts.append("5h \(Int(fiveHour.utilization.rounded()))%")
+            parts.append("\(remainingPercent(fiveHour))% \(timeLeft(fiveHour.resetsAt))")
+        } else {
+            parts.append("100% \(Self.fullFiveHourWindow)")
         }
         if let sevenDay = snapshot.sevenDay {
-            parts.append("7d \(Int(sevenDay.utilization.rounded()))%")
+            parts.append("\(remainingPercent(sevenDay))% \(timeLeft(sevenDay.resetsAt))")
         }
-        return parts.isEmpty ? "Claude: \u{2014}" : parts.joined(separator: " \u{00B7} ")
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     private func buildMenu(state: State) {
@@ -145,6 +155,21 @@ final class StatusItemController {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    // Largest non-zero unit only. Integer division floors, so this understates
+    // time left rather than overstating it, and max(0:) keeps a snapshot whose
+    // reset has already passed from rendering a negative. `now` is injected so
+    // this stays testable without mocking the clock.
+    private func timeLeft(_ date: Date, now: Date = Date()) -> String {
+        let seconds = Int(max(0, date.timeIntervalSince(now)))
+        if seconds >= 86400 { return "\(seconds / 86400)d" }
+        if seconds >= 3600 { return "\(seconds / 3600)h" }
+        return "\(seconds / 60)m"
+    }
+
+    private func remainingPercent(_ window: UsageWindow) -> Int {
+        Int((100 - window.utilization).rounded())
     }
 
     private func formatted(_ date: Date) -> String {

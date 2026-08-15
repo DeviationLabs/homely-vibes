@@ -36,10 +36,16 @@ can be launched from Finder/Spotlight/login items like a normal app.
   plans. `spend.used`/`spend.limit` are minor-unit integers (cents) plus an
   `exponent`, so divide by `10^exponent` for dollars. The response carries
   further fields (per-channel overage, upgrade paths) not surfaced yet.
-- **UI**: `NSStatusItem` menu bar title (`5h 42% · 7d 18%`), dropdown shows
-  the full breakdown with reset times, usage-credit spend against its limit,
-  a link to raise that limit, a manual refresh, a refresh-interval picker,
-  and a quit item.
+- **UI**: `NSStatusItem` menu bar title (`58% 2h · 82% 3d`) — 5-hour window
+  first, then 7-day. The title reports what is **left**, not what was consumed:
+  budget remaining (`100 - utilization`) and time until reset, shown as the
+  largest non-zero unit only (`3d` / `2h` / `47m`). Time is floored, so it
+  understates rather than overstates what's left; resolution sharpens to
+  minutes exactly as a window runs low. An absent `five_hour` window means
+  nothing has been spent yet and renders `100% 5h`. The dropdown keeps the
+  opposite convention — percent *consumed* plus a relative reset time — and
+  adds usage-credit spend against its limit, a link to raise that limit, a
+  manual refresh, a refresh-interval picker, and a quit item.
 - **Refresh cadence**: 180s by default, changeable from the dropdown
   (30s / 1 / 3 / 5 / 10 / 30 min) and persisted in `UserDefaults`, so the
   choice survives relaunch. The default is deliberately slow: the 5-hour bar
