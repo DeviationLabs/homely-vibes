@@ -10,21 +10,17 @@ can be launched from Finder/Spotlight/login items like a normal app.
 
 ## How it works
 
-- **Auth**: reads the OAuth access token the `claude` CLI already stores in
-  the macOS Keychain under the service name `Claude Code-credentials` (the
-  bare name, no hash suffix — the hash-suffixed siblings
-  `Claude Code-credentials-<hash>` are per-workspace MCP OAuth caches for
-  third-party integrations, not the Anthropic API token; confirmed via
-  `--probe-keychain`, see below). The payload is
-  `{"claudeAiOauth": {"accessToken": ..., "expiresAt": ..., ...}}`.
-  First read triggers a macOS Keychain consent prompt — choose "Always Allow".
-  The token is then cached in memory until its own `expiresAt`, so the Keychain
-  is read roughly once per token lifetime rather than on every refresh tick
-  (the `kSecReturnData` read is what triggers the prompt). A 401 from the API
-  drops the cache, since the CLI rotates tokens on its own schedule and a
-  cached token can go stale before its stated expiry. When the primary item
-  exists it is read alone — a denied read must not cascade into a separate
-  prompt for each MCP sibling.
+- **Auth**: the app **owns its own Keychain item**, `com.deviationlabs.ClaudeUsageBar`,
+  the way every well-behaved macOS app does (`Chrome Safe Storage`,
+  `Slack Safe Storage`, …). Reads go, in order: in-memory cache → own item →
+  bootstrap from the `claude` CLI's `Claude Code-credentials` item via
+  `/usr/bin/security`, whose result is then written into our own item. A 401
+  from the API drops *both* the memory cache and the own item, so the next tick
+  re-bootstraps rather than replaying a token the server already rejected.
+  See "Keychain access" below for why this shape is the only durable one.
+  The hash-suffixed siblings `Claude Code-credentials-<hash>` are per-workspace
+  MCP OAuth caches (`{"mcpOAuth": …}`) with no `accessToken` at any level, and
+  are never consulted.
 - **Data**: calls `GET https://api.anthropic.com/api/oauth/usage` with that
   bearer token — the same endpoint the CLI's `/usage` command calls
   (reverse-engineered from the installed `claude` binary via `strings`; not
@@ -49,9 +45,17 @@ can be launched from Finder/Spotlight/login items like a normal app.
   understates rather than overstates what's left; resolution sharpens to
   minutes exactly as a window runs low. An absent `five_hour` window means
   nothing has been spent yet and renders `100% 5h`. The dropdown keeps the
-  opposite convention — percent *consumed* plus a relative reset time — and
-  adds usage-credit spend against its limit, a link to raise that limit, a
-  manual refresh, a refresh-interval picker, and a quit item.
+  opposite convention — percent *consumed* plus a precise reset time: absolute
+  wall-clock with a two-unit countdown (`resets 11:20 PM (in 1h 43m)`,
+  weekday-prefixed when the reset falls on another day). The title stays coarse
+  because it competes for menu bar width; the dropdown is where there is room.
+  The dropdown also adds usage-credit spend against its limit, a link to raise
+  that limit, a manual refresh, a refresh-interval picker, and a quit item.
+- **Failure states**: a failed refresh never blanks a working display — the last
+  good numbers stay, marked `⚠︎`, with the reason in the dropdown. "Run `claude`
+  once to sign in" appears only when the credentials are genuinely absent or
+  expired; a *blocked* Keychain read says so instead and notes that it is
+  retrying, because telling you to sign in when you already are is a dead end.
 - **Refresh cadence**: 180s by default, changeable from the dropdown
   (30s / 1 / 3 / 5 / 10 / 30 min) and persisted in `UserDefaults`, so the
   choice survives relaunch. The default is deliberately slow: the 5-hour bar
@@ -68,17 +72,55 @@ swift build                      # debug build, for development
 open ClaudeUsageBar.app
 ```
 
+## Keychain access
+
+macOS gates a Keychain read through **two** independent lists: the item's ACL
+application list *and* its **partition list**. Both must admit the caller.
+
+Earlier versions read the CLI's `Claude Code-credentials` item directly and
+could never stop prompting, for two compounding reasons:
+
+1. Grants are recorded in the partition list against a `cdhash:` — which changes
+   on every rebuild. (Signing with a certificate stabilises the *designated
+   requirement*, which is the ACL half; it does nothing for the partition half.
+   That distinction is what the previous version of this document missed.)
+2. The `claude` CLI rewrites that item on every token rotation — its `mdat`
+   advances while `cdat` stays put — and each rewrite resets both lists. So no
+   grant could outlive a single token cycle.
+
+The fix is to stop borrowing someone else's item. Every clean item in a login
+keychain belongs to its reader:
+
+| Item | Partition list | ACL entries |
+|---|---|---|
+| `Chrome Safe Storage` | `teamid:EQHXZ8M8AV` | 1 |
+| `Slack Safe Storage` | `teamid:BQR82RBBHL` | 1 |
+| `com.deviationlabs.ClaudeUsageBar` | `teamid:656D6H7G24` | 1 |
+
+Because the app creates the item, macOS puts its **team ID** — stable across
+every rebuild — in the partition list, and nothing else ever rewrites it. The
+CLI's item is still the source of truth for the token, but it is only ever read
+through `/usr/bin/security`, which carries `apple-tool:` in the partition list
+of every one of these items and survives each rotation.
+
+Verify the shape with:
+
+```bash
+security dump-keychain -a 2>/dev/null | grep -A12 com.deviationlabs.ClaudeUsageBar
+```
+
+You want `teamid:` and **not** `cdhash:` in the partition list. A `cdhash:` there
+means the item was created by an ad-hoc-signed build (see below) and will
+re-prompt after the next rebuild; delete it with
+`security delete-generic-password -s com.deviationlabs.ClaudeUsageBar` and
+re-bootstrap from a signed build.
+
 ## Code signing
 
-`build_app.sh` signs the bundle. This is not about Gatekeeper — it's what stops
-macOS re-prompting for Keychain access.
-
-A Keychain ACL identifies a trusted app by its code-signing *designated
-requirement*. The Swift linker's automatic ad-hoc signature carries no
-certificate, so that requirement degrades to a bare `cdhash` pinned to the exact
-binary bytes — and every rebuild produces new bytes. "Always Allow" therefore
-grants trust to a binary that stops existing the moment you rebuild, and the
-prompt returns. Signed with a certificate, the requirement becomes stable:
+`build_app.sh` signs the bundle. This is not about Gatekeeper — an ad-hoc
+signature has no certificate and therefore no team ID, so an item created by
+such a build gets a `cdhash:` partition entry and the prompt comes back on every
+rebuild. A certificate gives both a stable designated requirement:
 
 ```
 designated => identifier "com.deviationlabs.ClaudeUsageBar"
@@ -86,8 +128,12 @@ designated => identifier "com.deviationlabs.ClaudeUsageBar"
   and certificate leaf[subject.CN] = "Apple Development: ..."
 ```
 
-No `cdhash`, so the grant survives rebuilds. Verify with
+and a stable `teamid:` partition entry. Verify with
 `codesign -d -r- ClaudeUsageBar.app`.
+
+Note that `swift build` alone produces an ad-hoc binary, so the debug executable
+and the signed `.app` do not share a grant. Develop with `--probe-keychain`;
+trust the `.app` for the durable behaviour.
 
 The script picks the first **Apple Development** identity in your keychain. With
 no Apple Developer account, create a self-signed certificate once — Keychain
@@ -102,17 +148,18 @@ consent prompt after the first signed build.
 ## Diagnostics
 
 ```bash
-.build/debug/ClaudeUsageBar --probe-keychain   # lists candidate Keychain items and their JSON *keys* only (never values)
+.build/debug/ClaudeUsageBar --probe-keychain   # reports which source served the token (cache / own item / bootstrap); never prints a secret
 .build/debug/ClaudeUsageBar --probe-usage      # one-shot fetch + print, no menu bar UI
 CLAUDE_USAGE_DEBUG=1 .build/debug/ClaudeUsageBar --probe-usage  # also dumps the raw response body to stderr
 ```
 
 ## Known limitations (v1)
 
-- If the access token is expired and needs a refresh, this app does not
-  reimplement the OAuth refresh flow — it just shows "Claude: —" with a
-  hint to run `claude` once (which refreshes it, since it owns the
-  Keychain item).
+- This app does not reimplement the OAuth refresh flow. If the CLI's token has
+  expired it shows "Claude: —" and a hint to run `claude` once, which refreshes
+  it. Running the refresh here was considered and rejected: Anthropic most
+  likely rotates refresh tokens on use, so a refresh from this app would
+  invalidate the copy the CLI holds and log your CLI out.
 - No auto-launch-at-login wiring yet — open the `.app` manually, or add it
   to System Settings → General → Login Items.
 - The signing identity is resolved at build time from whatever is in your

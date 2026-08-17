@@ -12,7 +12,8 @@ final class StatusItemController {
         case loading
         case ok(UsageSnapshot)
         case stale(UsageSnapshot, reason: String)
-        case noToken
+        case tokenUnavailable(TokenReadError)
+        case unavailable(String)
     }
 
     func start() {
@@ -30,18 +31,24 @@ final class StatusItemController {
         }
     }
 
+    /// A failed refresh must never blank a display that was working. The old
+    /// ordering checked `noToken` *before* `lastGoodSnapshot`, so a single
+    /// blocked Keychain read wiped good numbers and replaced them with a
+    /// sign-in prompt — while the token was still valid. Every failure now
+    /// prefers the last good snapshot; only a cold start falls through to an
+    /// error-only view.
     private func refresh() async {
         do {
             let snapshot = try await UsageClient.fetchSnapshot()
             lastGoodSnapshot = snapshot
             render(.ok(snapshot))
-        } catch UsageClientError.noToken {
-            render(.noToken)
         } catch {
             if let stale = lastGoodSnapshot {
                 render(.stale(stale, reason: describeError(error)))
+            } else if case UsageClientError.tokenUnavailable(let reason) = error {
+                render(.tokenUnavailable(reason))
             } else {
-                render(.noToken)
+                render(.unavailable(describeError(error)))
             }
         }
     }
@@ -50,6 +57,8 @@ final class StatusItemController {
         switch error {
         case UsageClientError.unauthorized: return "session expired"
         case UsageClientError.badResponse(let code): return "HTTP \(code)"
+        case UsageClientError.tokenUnavailable(let reason): return reason.menuDetail
+        case UsageClientError.decodeFailed: return "unexpected response"
         default: return "network error"
         }
     }
@@ -62,7 +71,7 @@ final class StatusItemController {
             statusItem.button?.title = titleText(for: snapshot)
         case .stale(let snapshot, _):
             statusItem.button?.title = titleText(for: snapshot) + " \u{26A0}\u{FE0E}"
-        case .noToken:
+        case .tokenUnavailable, .unavailable:
             statusItem.button?.title = "Claude: \u{2014}"
         }
         buildMenu(state: state)
@@ -78,12 +87,12 @@ final class StatusItemController {
         }
         var parts: [String] = []
         if let fiveHour = snapshot.fiveHour {
-            parts.append("\(remainingPercent(fiveHour))% \(timeLeft(fiveHour.resetsAt))")
+            parts.append("\(remainingPercent(fiveHour))% \(ResetFormatter.compactTimeLeft(fiveHour.resetsAt))")
         } else {
             parts.append("100% \(Self.fullFiveHourWindow)")
         }
         if let sevenDay = snapshot.sevenDay {
-            parts.append("\(remainingPercent(sevenDay))% \(timeLeft(sevenDay.resetsAt))")
+            parts.append("\(remainingPercent(sevenDay))% \(ResetFormatter.compactTimeLeft(sevenDay.resetsAt))")
         }
         return parts.joined(separator: " \u{00B7} ")
     }
@@ -94,9 +103,19 @@ final class StatusItemController {
         switch state {
         case .loading:
             menu.addItem(NSMenuItem(title: "Loading…", action: nil, keyEquivalent: ""))
-        case .noToken:
-            menu.addItem(NSMenuItem(title: "No Claude Code session found", action: nil, keyEquivalent: ""))
-            menu.addItem(NSMenuItem(title: "Run \u{2018}claude\u{2019} once to sign in", action: nil, keyEquivalent: ""))
+        case .tokenUnavailable(let reason):
+            menu.addItem(NSMenuItem(title: "\u{26A0}\u{FE0E} \(reason.menuDetail)", action: nil, keyEquivalent: ""))
+            // "Run claude to sign in" is only true advice when the credentials
+            // are absent or expired. Offering it for a *blocked* read sends the
+            // user chasing a sign-in they have already completed.
+            if reason.isFixedByRunningClaude {
+                menu.addItem(NSMenuItem(title: "Run \u{2018}claude\u{2019} once to sign in", action: nil, keyEquivalent: ""))
+            } else {
+                menu.addItem(NSMenuItem(title: retryNote(), action: nil, keyEquivalent: ""))
+            }
+        case .unavailable(let reason):
+            menu.addItem(NSMenuItem(title: "\u{26A0}\u{FE0E} Unavailable (\(reason))", action: nil, keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: retryNote(), action: nil, keyEquivalent: ""))
         case .ok(let snapshot):
             appendWindowItems(to: menu, snapshot: snapshot)
         case .stale(let snapshot, let reason):
@@ -128,7 +147,7 @@ final class StatusItemController {
         for (label, window) in rows {
             guard let window else { continue }
             let pct = Int(window.utilization.rounded())
-            let title = "\(label): \(pct)% \u{2014} resets \(relative(window.resetsAt))"
+            let title = "\(label): \(pct)% \u{2014} resets \(ResetFormatter.description(for: window.resetsAt))"
             menu.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
         }
 
@@ -151,21 +170,8 @@ final class StatusItemController {
         return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f %@", amount, currency)
     }
 
-    private func relative(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    // Largest non-zero unit only. Integer division floors, so this understates
-    // time left rather than overstating it, and max(0:) keeps a snapshot whose
-    // reset has already passed from rendering a negative. `now` is injected so
-    // this stays testable without mocking the clock.
-    private func timeLeft(_ date: Date, now: Date = Date()) -> String {
-        let seconds = Int(max(0, date.timeIntervalSince(now)))
-        if seconds >= 86400 { return "\(seconds / 86400)d" }
-        if seconds >= 3600 { return "\(seconds / 3600)h" }
-        return "\(seconds / 60)m"
+    private func retryNote() -> String {
+        "Retrying every \(RefreshInterval.label(for: RefreshInterval.current))"
     }
 
     private func remainingPercent(_ window: UsageWindow) -> Int {
