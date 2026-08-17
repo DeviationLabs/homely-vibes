@@ -68,12 +68,14 @@ final class KeychainTokenReaderTests: XCTestCase {
         )
     }
 
-    func testClassifiesDenialExitCodes() {
-        for status: Int32 in [51, 25293, 25308] {
-            let result = KeychainTokenReader.classifySecurityFailure(status: status, stderr: "")
-            guard case .accessDenied = result else {
-                return XCTFail("status \(status) should classify as accessDenied, got \(result)")
-            }
+    /// 51 is one of the small curated codes `security` emits; it must never read
+    /// as "signed out". The former 25xxx labels were unreachable through a real exit
+    /// status (a Unix status is 0-255) and were only ever reached via the message
+    /// fallback, so exercising them through the switch gave false confidence.
+    func testDeniedExitCodeIsAccessDenied() {
+        let result = KeychainTokenReader.classifySecurityFailure(status: 51, stderr: "")
+        guard case .accessDenied = result else {
+            return XCTFail("status 51 should classify as accessDenied, got \(result)")
         }
     }
 

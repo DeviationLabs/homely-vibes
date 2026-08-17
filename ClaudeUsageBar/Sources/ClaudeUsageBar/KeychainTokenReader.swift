@@ -210,15 +210,15 @@ enum KeychainTokenReader {
         return .success(data)
     }
 
-    /// `security` surfaces the underlying `OSStatus` as its exit code, but not
-    /// for every failure mode, so the message is checked too. Pure and
-    /// `internal` so it can be tested without invoking the Keychain.
+    /// `security` returns its *own* small exit codes, not the raw `OSStatus`, so
+    /// only a few map (observed on-host: 44 = item not found). The stderr message
+    /// is authoritative for the rest — a blocked read must land on `.accessDenied`,
+    /// never `.notFound`/`.expired`, or the UI tells a signed-in user to sign in.
+    /// Pure and `internal` so it can be tested without invoking the Keychain.
     static func classifySecurityFailure(status: Int32, stderr: String) -> TokenReadError {
         switch status {
-        case 44: return .notFound  // errSecItemNotFound
-        case 51: return .accessDenied("authorization denied")  // errSecAuthFailed
-        case 25293: return .accessDenied("keychain locked")  // errSecInteractionRequired
-        case 25308: return .accessDenied("interaction not allowed")  // errSecInteractionNotAllowed
+        case 44: return .notFound   // item not found
+        case 51: return .accessDenied("authorization denied")   // curated denial code
         default: break
         }
 
