@@ -153,6 +153,57 @@ consent prompt after the first signed build.
 CLAUDE_USAGE_DEBUG=1 .build/debug/ClaudeUsageBar --probe-usage  # also dumps the raw response body to stderr
 ```
 
+## Troubleshooting
+
+### The menu bar says "Claude: —"
+
+Read the dropdown — it now names the cause, and only one of them is fixed by
+signing in:
+
+| Dropdown says | Meaning | Fix |
+|---|---|---|
+| `no Claude Code credentials on this Mac` | No `Claude Code-credentials` item exists | Run `claude` once |
+| `credentials expired` | The CLI's token is past `expiresAt` and it has not refreshed | Run `claude` once |
+| `Keychain access denied` / `keychain locked` | The token exists and is fine; the *read* was refused | Unlock the login keychain; see below |
+| `credentials unreadable` | Payload did not parse | File a bug — the CLI's schema likely moved |
+
+A working display is never blanked by a failed refresh: the last good numbers
+stay with a `⚠︎` and the reason. So "Claude: —" means it has *never* succeeded
+since launch.
+
+### The Keychain prompt came back
+
+It should not. If it does, find out which build created our item:
+
+```bash
+security dump-keychain -a 2>/dev/null | grep -A12 com.deviationlabs.ClaudeUsageBar
+```
+
+- `partition: teamid:656D6H7G24` — correct, stable across rebuilds.
+- `partition: cdhash:…` — the item was created by an **ad-hoc** build (plain
+  `swift build`, no certificate, therefore no team ID). It will re-prompt after
+  every rebuild. Repair:
+
+  ```bash
+  security delete-generic-password -s com.deviationlabs.ClaudeUsageBar
+  ./Scripts/build_app.sh && open ClaudeUsageBar.app   # re-bootstrap from the signed app
+  ```
+
+### Debugging the original prompt loop
+
+Two facts are worth keeping, because they are not obvious and cost real time:
+
+- **A Keychain read is gated by two lists, not one.** The ACL application list
+  *and* the partition list. Fixing only the designated requirement (the ACL
+  half) leaves a `cdhash:` pinned in the partition half, and the prompt keeps
+  returning. `codesign -d -r-` tells you nothing about the partition list —
+  only `security dump-keychain -a` does.
+- **`cdat` vs `mdat` on an item tells you who is rewriting it.** On
+  `Claude Code-credentials`, `cdat` sits at the day you first signed in while
+  `mdat` tracks the present: the CLI rewrites it on every token rotation, and
+  each rewrite resets both access lists. That is why no grant against *that*
+  item could ever be durable, and why this app owns its own instead.
+
 ## Known limitations (v1)
 
 - This app does not reimplement the OAuth refresh flow. If the CLI's token has

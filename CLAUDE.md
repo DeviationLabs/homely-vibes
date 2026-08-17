@@ -201,6 +201,13 @@ uv run pytest NodeCheck
 - **Features**: RAG system with document indexing, conversational AI
 - **Optional Dependencies**: Uses streamlit extra (`uv sync --extra streamlit`)
 
+### ClaudeUsageBar Module (`ClaudeUsageBar/`)
+- **Stack**: Swift Package Manager executable wrapped into a `.app` bundle (NOT Python — no uv, no pytest). Menu bar widget (`LSUIElement`, no Dock icon) showing Claude Code plan usage.
+- **Build**: `swift build` for dev; `./Scripts/build_app.sh` for the signed `.app`. `swift test` runs the XCTest target.
+- **Keychain**: owns its own item `com.deviationlabs.ClaudeUsageBar`; bootstraps from the `claude` CLI's item via `/usr/bin/security`. Never read the CLI's item with `SecItem` — see "macOS Keychain" under Best Practices.
+- **Signing matters for correctness, not Gatekeeper**: `swift build` is ad-hoc (no team ID) so items it creates are `cdhash`-pinned and re-prompt; only the certificate-signed `.app` gets a stable `teamid:` partition entry.
+- **Diagnostics**: `--probe-keychain` (which source served the token), `--probe-usage` (one-shot fetch). Neither ever prints a secret.
+
 ### lib/ (shared library)
 - **Config**: All modules source configuration from `lib/config.py` (OmegaConf-based hierarchical YAML)
 - **Notifications**: Standardized via MyPushover, Mailer, MyTwilio classes
@@ -256,6 +263,12 @@ Non-obvious rules that repeat across modules. Adhere to these in new code and PR
 - **Never `open(path, "w")` for a secret**, and never `write_text()` + `chmod`. Both leave a TOCTOU window at 0o644 under a 0o022 umask. Use `lib.secure_io.write_secret_atomic()` — it opens with `O_CREAT|O_TRUNC|0o600` so the file is world-unreadable from birth.
 - If a **third-party library** writes the token (yalexs, SamsungTVWS, ring-client-api Node), immediately call `ensure_secret_perms(path)` after the call returns.
 - Config files themselves live in `config/local.yaml` (gitignored). Tokens live under `config/tokens/` (symlinked to `~/bin/Common-configs/tokens/`, also gitignored on the code side).
+
+### macOS Keychain (native apps)
+- **Own the item you read.** Reading a Keychain item another app writes cannot be made durable: the owner's rewrites reset both access lists. Create your own item (`com.deviationlabs.<App>`) and treat the foreign item as a one-time bootstrap source only. This is what Chrome/Slack/Cursor all do — one ACL entry, `teamid:` partition.
+- **A read is gated by TWO lists**: the ACL application list *and* the partition list. `codesign -d -r-` only tells you about the first. Inspect the second with `security dump-keychain -a`; `teamid:` is stable across rebuilds, `cdhash:` is not.
+- **`cdat` vs `mdat`** on an item reveals who rewrites it — a moving `mdat` under a fixed `cdat` means another process owns the write path.
+- To read a foreign item without a consent prompt, shell out to `/usr/bin/security`: it carries `apple-tool:`, which survives the owner's rewrites. Pipe the secret back — never through `argv`, never to disk.
 
 ### Alert priority discipline (Pushover)
 Convention: `P{N}` maps 1:1 to Pushover `priority=N`. Every module README uses this scheme — the number IS the priority value, not a semantic tier.
