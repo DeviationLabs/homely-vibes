@@ -22,7 +22,9 @@ struct UsageSnapshot {
 }
 
 enum UsageClientError: Error {
-    case noToken
+    /// Carries *why* the token could not be read, so the UI can distinguish a
+    /// signed-out Mac from one whose Keychain merely refused the read.
+    case tokenUnavailable(TokenReadError)
     case unauthorized
     case badResponse(Int)
     case decodeFailed
@@ -34,8 +36,10 @@ enum UsageClient {
     private static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     static func fetchSnapshot() async throws -> UsageSnapshot {
-        guard let token = KeychainTokenReader.readValidToken() else {
-            throw UsageClientError.noToken
+        let token: OAuthToken
+        switch KeychainTokenReader.readValidToken() {
+        case .success(let value): token = value
+        case .failure(let error): throw UsageClientError.tokenUnavailable(error)
         }
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
