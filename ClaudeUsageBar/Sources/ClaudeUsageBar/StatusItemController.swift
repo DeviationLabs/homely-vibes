@@ -1,4 +1,5 @@
 import AppKit
+import os.log
 
 @MainActor
 final class StatusItemController {
@@ -7,6 +8,15 @@ final class StatusItemController {
     private var lastGoodSnapshot: UsageSnapshot?
     private let spendSettingsURL = URL(string: "https://claude.ai/new#settings/usage")!
     private static let fullFiveHourWindow = "5h"
+
+    // Diagnostics for the "stuck on a stale error for hours" failure mode
+    // (seen 2026-08, fixed by a restart, root cause unconfirmed — could be
+    // App Nap throttling the repeating Timer, or something else). None of
+    // this changes behavior; it only makes the next occurrence diagnosable
+    // via `log show --predicate 'subsystem == "com.deviationlabs.ClaudeUsageBar"' --last 3d`.
+    private let logger = Logger(subsystem: "com.deviationlabs.ClaudeUsageBar", category: "refresh")
+    private var refreshTickCount = 0
+    private var lastRefreshFireDate: Date?
 
     private enum State {
         case loading
@@ -20,15 +30,40 @@ final class StatusItemController {
         render(.loading)
         Task { await refresh() }
         scheduleTimer()
+        observeSleepWake()
     }
 
     private func scheduleTimer() {
         refreshTimer?.invalidate()
+        let interval = RefreshInterval.current
+        logger.info("scheduleTimer: interval=\(interval, privacy: .public)s")
         refreshTimer = Timer.scheduledTimer(
-            withTimeInterval: RefreshInterval.current, repeats: true
+            withTimeInterval: interval, repeats: true
         ) { [weak self] _ in
             Task { await self?.refresh() }
         }
+    }
+
+    /// Log-only — correlates a stuck display with a sleep/wake cycle without
+    /// changing polling behavior. If the timer silently stops firing across a
+    /// sleep, the gap between `willSleep` and the next `refresh: tick=` entry
+    /// tells us so.
+    private func observeSleepWake() {
+        let center = NSWorkspace.shared.notificationCenter
+        // `queue: .main` guarantees these run on the main thread at runtime,
+        // but the closure type itself isn't statically MainActor-isolated —
+        // hence the explicit assumeIsolated to touch `self` state safely.
+        center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.logSleepWake(event: "willSleep") }
+        }
+        center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.logSleepWake(event: "didWake") }
+        }
+    }
+
+    private func logSleepWake(event: String) {
+        let last = lastRefreshFireDate?.description ?? "never"
+        logger.info("\(event, privacy: .public): lastRefreshFireDate=\(last, privacy: .public)")
     }
 
     /// A failed refresh must never blank a display that was working. The old
@@ -38,17 +73,27 @@ final class StatusItemController {
     /// prefers the last good snapshot; only a cold start falls through to an
     /// error-only view.
     private func refresh() async {
+        refreshTickCount += 1
+        let tick = refreshTickCount
+        let now = Date()
+        let gap = lastRefreshFireDate.map { now.timeIntervalSince($0) }
+        lastRefreshFireDate = now
+        logger.info("refresh: tick=\(tick, privacy: .public) gapSinceLastTick=\(gap.map { String(format: "%.0f", $0) } ?? "n/a", privacy: .public)s")
+
         do {
             let snapshot = try await UsageClient.fetchSnapshot()
             lastGoodSnapshot = snapshot
+            logger.info("refresh: tick=\(tick, privacy: .public) OK")
             render(.ok(snapshot))
         } catch {
+            let reason = describeError(error)
+            logger.error("refresh: tick=\(tick, privacy: .public) FAILED reason=\(reason, privacy: .public) hadLastGood=\(self.lastGoodSnapshot != nil, privacy: .public)")
             if let stale = lastGoodSnapshot {
-                render(.stale(stale, reason: describeError(error)))
+                render(.stale(stale, reason: reason))
             } else if case UsageClientError.tokenUnavailable(let reason) = error {
                 render(.tokenUnavailable(reason))
             } else {
-                render(.unavailable(describeError(error)))
+                render(.unavailable(reason))
             }
         }
     }

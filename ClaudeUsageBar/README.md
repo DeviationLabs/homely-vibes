@@ -153,6 +153,25 @@ consent prompt after the first signed build.
 CLAUDE_USAGE_DEBUG=1 .build/debug/ClaudeUsageBar --probe-usage  # also dumps the raw response body to stderr
 ```
 
+The running app also logs every poll tick (success/failure/reason) and sleep/wake
+events to the unified log, subsystem `com.deviationlabs.ClaudeUsageBar`,
+category `refresh`:
+
+```bash
+log show --predicate 'subsystem == "com.deviationlabs.ClaudeUsageBar"' --last 3d
+log stream --predicate 'subsystem == "com.deviationlabs.ClaudeUsageBar"'   # live
+```
+
+Added after a 2026-08 incident (DeviationLabs/homely-vibes#250) where the menu
+bar stayed stuck on `credentials expired` for 60+ hours despite the underlying
+CLI token being valid again — a restart fixed it, but the root cause (leading
+suspect: macOS App Nap throttling the repeating `Timer` on a long-lived,
+no-window accessory app) was never confirmed. If it recurs, `log show` now has
+the tick-by-tick history — specifically the gap between ticks
+(`gapSinceLastTick`) and whether a `willSleep`/`didWake` pair brackets the
+stall — to tell App Nap apart from a genuine, repeated backend/keychain
+failure. See the issue for the fix candidates once diagnosed.
+
 ## Troubleshooting
 
 ### The menu bar says "Claude: —"
