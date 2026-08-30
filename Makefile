@@ -13,17 +13,29 @@ RESET  := $(shell tput -Txterm sgr0)
 all: help
 
 ## Environment setup:
-setup:
+brew-deps: ## Install macOS Homebrew build deps (skipped off macOS)
+	@if [ "$$(uname -s)" != "Darwin" ]; then \
+		echo "${YELLOW}⏭  Not macOS — skipping Homebrew step${RESET}"; \
+	elif ! command -v brew >/dev/null 2>&1; then \
+		echo "${YELLOW}⏭  Homebrew not installed — skipping${RESET}"; \
+	else \
+		echo "🍺 Upgrading Homebrew packages"; \
+		brew upgrade || echo "${YELLOW}⚠️  brew upgrade reported errors on unrelated formulae — continuing${RESET}"; \
+		echo "🍺 Installing build dependencies"; \
+		brew install libomp pre-commit yamllint -q; \
+	fi
+
+setup: ## Set up the development environment
 	@echo "🚀 Setting up the development environment"
-	@brew upgrade
-	@brew install libomp pre-commit yamllint -q
+	@$(MAKE) --no-print-directory brew-deps
 	@echo "📥 Installing project dependencies..."
 	@uv sync --extra dev
 	@echo "📦 Initializing Git submodules..."
 	@git submodule update --init --recursive
 	@echo "🔧 Setting up git hooks..."
-	@make hooks
-	@echo "${GREEN}✨ Done! Activating the virtual environment with: source .venv/bin/activate${RESET}"
+	@$(MAKE) --no-print-directory hooks
+	@test -x .venv/bin/python || { echo "${RED}❌ setup failed: .venv/bin/python is missing${RESET}"; exit 1; }
+	@echo "${GREEN}✨ Done ($$(.venv/bin/python --version)). Activate with: source .venv/bin/activate${RESET}"
 
 colima: ## Start colima if not already running
 	@echo "🐳 Checking colima status..."
@@ -156,7 +168,7 @@ validate-jobs-yaml:
 	  || (echo "${RED}❌ Please fix errors in jobs yaml${RESET}" && exit 1)
 
 .PHONY: all \
-	setup \
+	setup brew-deps \
 	test coverage coverage-lcov coverage-html \
 	lint lint-fix codespell deptry \
 	ruff mypy vulture semgrep \
