@@ -24,7 +24,7 @@ cd homely-vibes
 make setup
 
 # Or manual setup:
-uv sync --extra dev
+uv sync
 pre-commit install
 ```
 
