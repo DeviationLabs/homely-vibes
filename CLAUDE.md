@@ -15,20 +15,22 @@ We use **GitHub Issues** for tracking bugs, enhancements, and tech debt. Claude 
 
 **Package Manager**: This project uses `uv` for fast Python dependency management.
 
-**Worktree venv**: Git worktrees share the main repo's `.venv` (in the primary
-checkout at `~/Documents/my-github/homely-vibes/.venv`). Worktrees don't
-get their own `.venv` (uv won't sync there due to cache permission issues and
-networkless sandboxes). To run tests from a worktree, use the main venv's
-interpreter directly:
+**Worktree venv**: Git worktrees share the primary checkout's `.venv`. Worktrees
+don't get their own `.venv` (uv won't sync there due to cache permission issues
+and networkless sandboxes), so tests run against the primary interpreter.
+
+Ask git where that checkout is instead of hardcoding a path — `--git-common-dir`
+resolves to the shared `.git` from the primary checkout *and* from any worktree,
+so the same two lines work on every machine:
 
 ```bash
+HV=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+
 # From any worktree:
-VIRTUAL_ENV=~/Documents/my-github/homely-vibes/.venv \
-  ~/Documents/my-github/homely-vibes/.venv/bin/python -m pytest [args]
+VIRTUAL_ENV="$HV/.venv" "$HV/.venv/bin/python" -m pytest [args]
 
 # NodeCheck runs in isolation (matches `make test`):
-VIRTUAL_ENV=~/Documents/my-github/homely-vibes/.venv \
-  ~/Documents/my-github/homely-vibes/.venv/bin/python -m pytest NodeCheck
+VIRTUAL_ENV="$HV/.venv" "$HV/.venv/bin/python" -m pytest NodeCheck
 ```
 
 If tests fail with `PermissionError` on the log directory, create a temporary
