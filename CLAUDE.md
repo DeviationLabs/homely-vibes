@@ -178,7 +178,7 @@ uv run pytest NodeCheck
 **Linting Pipeline**: Pre-commit hooks automatically run on every commit:
 - `make ruff` - Code formatting and linting
 - `make test` - Full test suite execution
-- `scripts/secret-scan.sh` - Secret scanning
+- `.github/scripts/secret-scan.sh` - Secret scanning
 - Conventional commit message format enforcement (e.g., `feat:`, `fix:`, `docs:`)
 
 **Type Checking**: mypy with strict configuration (Python 3.13 target)
@@ -296,7 +296,8 @@ Convention: `P{N}` maps 1:1 to Pushover `priority=N`. Every module README uses t
 
 ### Scheduling & deployment
 - **macOS scheduled jobs live in Claude Code routines**, not in this repo. The former `LaunchJobs/` module (macOS `launchd` plist generator, incl. WhatsApp daily summary) was removed — routines replace it. Don't reintroduce a launchd module here; if you need a new scheduled Mac job, add a Claude Code routine.
-- **Linux prod host** stores homely_vibes at `~/Code` — not the Mac checkout path. All prod-host cron entries `cd ~/Code`.
+- **`$HOMELY_VIBES` is the documented placeholder for the checkout root.** Docs and cron examples reference it rather than baking in one machine's path, because the checkout lives somewhere different on every host. Readers set it themselves, or derive it: `HOMELY_VIBES=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`. Never "fix" a placeholder by substituting a concrete path.
+- **Linux prod host** stores homely_vibes at `~/Code` — so there `HOMELY_VIBES=~/Code`. That is the value, not a replacement for the variable; host-specific dirs that are *not* the checkout (`~/logs/`, `~/bin/Common-configs/`) stay literal.
 - Cron entries redirect stdout+stderr to a file: `>> ~/logs/<script>.log 2>&1`. Never `> /dev/null` — you'd lose pre-logger crashes (import errors, `uv` failures, missing binaries).
 - `lib.logger.get_logger()` sets up dual handlers (stdout + per-script log file under `cfg.paths.logging_dir`). Cron file redirection is the safety net for anything that happens before the logger initializes.
 - Cron env needs `PATH` set for non-standard binaries (`node`, `uv`). Prepend `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin` at the top of the crontab, or use absolute paths in commands.

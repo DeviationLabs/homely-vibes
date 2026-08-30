@@ -31,7 +31,9 @@ a normal week.
 
 The simulator solves this by:
 
-- Encoding scenarios as **plain YAML** ([config/synthetic_alerts.yaml](../config/synthetic_alerts.yaml))
+- Encoding scenarios as **composable Python dataclasses** (`Event` and `SyntheticDataset` in
+  [synthetic_data.py](synthetic_data.py)), which stack — e.g. a household shower running
+  during a slow leak
 - Generating per-minute `WaterReading`s and Rachio active-zone responses on
   the fly from the scenario
 - Stepping the AlertEngine through simulated time at the same 5-min cadence

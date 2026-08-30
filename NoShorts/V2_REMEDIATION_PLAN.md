@@ -115,7 +115,7 @@ Ran D0 (Web Inspector via `isInspectable`, branch `abutala/noshorts-diag-inspect
 A1 alone fixed it — no player-surface change (A2), no off-device proxy (A3), no extractor (A4) needed.
 Root cause confirmed: YouTube stream attestation reacting to the fake iOS-17 UA + BotGuard-visible JS
 tampering, not any iOS networking change. `V2_PRD.md §8` amended accordingly.
-Follow-up: [#232](https://github.com/DeviationLabs/homely-vibes/issues/232) — restore /shorts SPA guard
+Follow-up: [#6](https://github.com/abutala/homely-vibes/issues/6) — restore /shorts SPA guard
 + autoplay gesture-gate Swift-side (attestation-safe), and the sign-in `window.webkit` hide if a fresh
 login ever needs it.
 
@@ -200,7 +200,7 @@ page-JS prototype/history tampering — §3a). Parts ordered by priority; 2 and 
 
 - [`V2_PRD.md`](V2_PRD.md) (esp. §7 fail-fast ladder, §8 outcome — to be amended per §3a)
 - [`V2_SCOPING_ARCHIVE.md`](V2_SCOPING_ARCHIVE.md) (pre-PRD scoping draft, preserved for history)
-- PR [#230](https://github.com/DeviationLabs/homely-vibes/pull/230) (PRD), PR [#231](https://github.com/DeviationLabs/homely-vibes/pull/231) (V2 rewrite + on-device test log)
+- PR `homely-vibes-archived#230` (PRD), PR `homely-vibes-archived#231` (V2 rewrite + on-device test log)
 - Debug session transcript: local Claude Code session `8d0e15c8` (2026-07-06 → 07-09), incl. 16 device
   console screenshots; key frames: 2026-07-06T18:42 (V1 RST-mid-tunnel), 2026-07-08T22:07/22:09 (V2 failures)
 - Web Inspector evidence (2026-07-09): seg.ts 200-then-killed with `Server: gvs 1.0`, no `pot=`, `playerfallback/1`; protocol matrix h2/http1.1, no h3

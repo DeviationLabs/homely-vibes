@@ -78,7 +78,7 @@ The CLI's access token lives **8 hours** and is refreshed only when `claude`
 actually runs. Any longer gap — overnight, a quiet weekend — leaves the token
 expired, and the widget has nothing valid to call the API with. Diagnosed from
 the unified log in
-[#250](https://github.com/DeviationLabs/homely-vibes/issues/250): the poll
+`homely-vibes-archived#250` (closed; private archive): the poll
 timer was firing perfectly every 180s and correctly reporting an expired
 upstream token for ~25 hours, then recovered on its own the moment a `claude`
 session rotated it. No restart was ever the fix.
@@ -203,7 +203,7 @@ log show --predicate 'subsystem == "com.deviationlabs.ClaudeUsageBar"' --last 3d
 log stream --predicate 'subsystem == "com.deviationlabs.ClaudeUsageBar"'   # live
 ```
 
-Added after a 2026-08 incident (DeviationLabs/homely-vibes#250) where the menu
+Added after a 2026-08 incident (`homely-vibes-archived#250`) where the menu
 bar stayed stuck on `credentials expired` for 60+ hours despite the underlying
 CLI token being valid again — a restart fixed it, but the root cause (leading
 suspect: macOS App Nap throttling the repeating `Timer` on a long-lived,

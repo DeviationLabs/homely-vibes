@@ -3,7 +3,7 @@
 A comprehensive home automation and monitoring system with Python-based IoT integrations, ML-powered analytics, and smart device management.
 
 <div class="btn-group">
-  <a href="https://github.com/DeviationLabs/homely-vibes" class="btn-custom btn-secondary" title="View source code and contribute on GitHub">💻 View on GitHub</a>
+  <a href="https://github.com/abutala/homely-vibes" class="btn-custom btn-secondary" title="View source code and contribute on GitHub">💻 View on GitHub</a>
 </div>
 
 ## Quick Start
@@ -17,7 +17,7 @@ A comprehensive home automation and monitoring system with Python-based IoT inte
 
 ```bash
 # Clone the repository
-git clone https://github.com/DeviationLabs/homely-vibes.git
+git clone https://github.com/abutala/homely-vibes.git
 cd homely-vibes
 
 # Setup development environment (installs dependencies and git hooks)

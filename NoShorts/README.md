@@ -13,7 +13,7 @@ its diagnosis (Google stream attestation, not an OS network block), and the fix 
 - **Auto-rotate to landscape on video play**: JS reports `<video>` `play`/`pause`/`ended` events; a 400ms debounce coalesces buffering-driven pause↔play blips before flipping orientation. Portrait when not playing.
 - **Fullscreen on play**: a fresh video start (content or ad, `currentTime < 1s`) calls the element's native `webkitEnterFullscreen()`, with a retry on `playing` if media wasn't loaded yet. Resume-from-pause does *not* re-enter — a manual fullscreen exit isn't fought. Fullscreen exits automatically when the video ends. See the fullscreen gotcha below for why it's done exactly this way.
 - **Autoplay gated natively**: `mediaTypesRequiringUserActionForPlayback = .video`. The former JS `video.play()` wrapper was removed 2026-07-09 — prototype tampering tripped YouTube's stream attestation and killed playback (see [V2_REMEDIATION_PLAN.md](V2_REMEDIATION_PLAN.md) §3a).
-- **Shorts navigation guard**: full-page navigations to `/shorts` are cancelled in `WKNavigationDelegate`; SPA (`pushState`) navigations are caught Swift-side by the KVO observer on `webView.url`, which bounces back (`goBack()`, else Playlists). The old JS `pushState` wrapper is gone for good — page-JS tampering trips attestation ([#232](https://github.com/DeviationLabs/homely-vibes/issues/232) P1).
+- **Shorts navigation guard**: full-page navigations to `/shorts` are cancelled in `WKNavigationDelegate`; SPA (`pushState`) navigations are caught Swift-side by the KVO observer on `webView.url`, which bounces back (`goBack()`, else Playlists). The old JS `pushState` wrapper is gone for good — page-JS tampering trips attestation ([#6](https://github.com/abutala/homely-vibes/issues/6) P1).
 - **Session timer**: 30-minute countdown badge (top-right); turns orange at 5min, red at 1min, exits at 0.
 - **Top toolbar**: 4 destination shortcuts — Playlists, Liked Videos, All Subscriptions, Account/Login.
 - **Bottom toolbar**: back, forward, search (expands inline), home, reload. Back/forward mirror `WKWebView.canGoBack`/`canGoForward` via KVO — refreshed live rather than only at `didFinish` so the chevrons stay accurate through cancelled navs.
@@ -117,7 +117,7 @@ Injecting CSS before paint prevents the Shorts shelf from flickering in before t
 `setInterval` at 800ms caused page freezes on YouTube's heavy SPA. A debounced (300ms) `MutationObserver` fires only when the DOM actually changes and doesn't block the main thread.
 
 ### Google sign-in in WKWebView
-Google detects WKWebView via `window.webkit` and can block sign-in with a "browser not supported" error. The old workaround (removing `window.webkit` on `accounts.google.com`) was stripped with the 2026-07-09 attestation fix. Existing sessions persist in the default data store's cookie jar, so this only matters for *fresh* sign-ins — if one hits the block, revisit under [#232](https://github.com/DeviationLabs/homely-vibes/issues/232) (the hide was scoped to accounts.google.com and may be safe to restore alone; verify playback with Web Inspector after).
+Google detects WKWebView via `window.webkit` and can block sign-in with a "browser not supported" error. The old workaround (removing `window.webkit` on `accounts.google.com`) was stripped with the 2026-07-09 attestation fix. Existing sessions persist in the default data store's cookie jar, so this only matters for *fresh* sign-ins — if one hits the block, revisit under [#6](https://github.com/abutala/homely-vibes/issues/6) (the hide was scoped to accounts.google.com and may be safe to restore alone; verify playback with Web Inspector after).
 
 ### Discovering actual mobile YouTube element names
 YouTube's mobile DOM uses custom elements not documented anywhere (`ytm-shorts-lockup-view-model`, `ytm-pivot-bar-renderer`, etc.). To discover them, inject `document.querySelectorAll('*')` filtered to custom elements via `evaluateJavaScript` with a Swift completion handler — `console.log` output is not accessible from Swift.
@@ -153,7 +153,7 @@ Established empirically via simulator probe, 2026-07-09:
   YouTube's DOM overlay.
 
 ### Autoplay interception
-Native-only: `mediaTypesRequiringUserActionForPlayback = .video`. The earlier claim that a JS-level `HTMLVideoElement.prototype.play()` override was "the reliable fix" dated from the broken-proxy era and is disproven — the wrapper itself was tripping stream attestation. If autoplay leaks through the native gate, solve it Swift-side ([#232](https://github.com/DeviationLabs/homely-vibes/issues/232)), never by re-tampering with the prototype.
+Native-only: `mediaTypesRequiringUserActionForPlayback = .video`. The earlier claim that a JS-level `HTMLVideoElement.prototype.play()` override was "the reliable fix" dated from the broken-proxy era and is disproven — the wrapper itself was tripping stream attestation. If autoplay leaks through the native gate, solve it Swift-side ([#6](https://github.com/abutala/homely-vibes/issues/6)), never by re-tampering with the prototype.
 
 ## Block-YouTube-in-Chrome Setup (DNS bypass)
 

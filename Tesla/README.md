@@ -53,12 +53,12 @@ This is a **one-time** setup. Once complete, day-to-day usage doesn't need any o
 ### Step 1: Generate keypair
 
 ```bash
-openssl ecparam -name prime256v1 -genkey -noout -out lib/tokens/tesla_fleet_private.pem
-openssl ec -in lib/tokens/tesla_fleet_private.pem -pubout -out lib/tokens/tesla_fleet_public.pem
-chmod 600 lib/tokens/tesla_fleet_private.pem
+openssl ecparam -name prime256v1 -genkey -noout -out config/tokens/tesla_fleet_private.pem
+openssl ec -in config/tokens/tesla_fleet_private.pem -pubout -out config/tokens/tesla_fleet_public.pem
+chmod 600 config/tokens/tesla_fleet_private.pem
 ```
 
-`lib/tokens/` is gitignored, so the private key never leaves your machine.
+`config/tokens/` is gitignored, so the private key never leaves your machine.
 
 ### Step 2: Host the public key
 
@@ -70,7 +70,7 @@ https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem
 
 For GitHub Pages (this repo's choice):
 
-1. Add the contents of `lib/tokens/tesla_fleet_public.pem` to your Pages repo at `.well-known/appspecific/com.tesla.3p.public-key.pem`.
+1. Add the contents of `config/tokens/tesla_fleet_public.pem` to your Pages repo at `.well-known/appspecific/com.tesla.3p.public-key.pem`.
 2. Add an empty `.nojekyll` file at the repo root (Jekyll otherwise strips `.`-prefixed directories).
 3. Wait ~30s for the Pages deploy, then verify:
 
@@ -134,7 +134,7 @@ What happens:
 2. Sign in, complete MFA + hCaptcha
 3. Approve the consent (Energy Product Information / Commands)
 4. Tesla redirects to `http://localhost:8585/callback` — the script catches it
-5. Tokens save to `lib/tokens/tesla_tokens.json` with 0o600 perms
+5. Tokens save to `config/tokens/tesla_tokens.json` with 0o600 perms
 
 ### Step 7: Smoke test
 
@@ -172,7 +172,7 @@ Configured in `config/default.yaml` under `tesla.decision_points`. Each entry:
 
 ### Token file shape
 
-`lib/tokens/tesla_tokens.json` (0o600, gitignored):
+`config/tokens/tesla_tokens.json` (0o600, gitignored):
 
 ```json
 {

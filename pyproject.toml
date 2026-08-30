@@ -64,6 +64,18 @@ voice = [
 packages = ["lib", "Tesla", "BimpopAI", "August", "RingSecurity", "RingBeams", "Rheem"]
 
 [tool.uv]
+# Dependency cooldown: ignore releases published in the last 7 days when
+# resolving, so a compromised or broken fresh upload cannot land here the day it
+# ships. This is a moving window applied at LOCK time only -- installs follow the
+# committed uv.lock, so CI stays reproducible and this never shifts under a build.
+# Relative durations need uv >= 0.9.17.
+# https://docs.astral.sh/uv/concepts/resolution/#dependency-cooldowns
+#
+# KEEP THIS KEY ABOVE constraint-dependencies. TOML key order is meaningless to
+# uv, but semgrep's uv-missing-dependency-cooldown rule anchors on
+# constraint-dependencies and only sees keys declared before it -- move this
+# below and the rule reports the cooldown as missing even though it is set.
+exclude-newer = "7 days"
 # semgrep exact-pins mcp; older semgrep pulls opentelemetry ~=1.25 -> protobuf <5,
 # which breaks tesla-fleet-api's gencode/runtime check. Floor protobuf so the
 # resolver cannot backtrack into that corner. See PR #241, #249.
