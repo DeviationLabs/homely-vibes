@@ -1,0 +1,257 @@
+"""Tests for the Rachio-Flume water tracking integration."""
+
+import pytest
+import tempfile
+from datetime import datetime
+from unittest.mock import Mock, patch
+import os
+
+from RachioFlume.rachio_client import RachioClient, Zone, WateringEvent
+from RachioFlume.flume_client import WaterReading
+from RachioFlume.data_storage import WaterTrackingDB
+from RachioFlume.collector import WaterTrackingCollector
+from RachioFlume.reporter import WeeklyReporter
+
+
+class TestRachioClient:
+    """Test Rachio API client."""
+
+    def test_init_with_env_vars(self) -> None:
+        """Test initialization with provided credentials."""
+        client = RachioClient(api_key="test_key", device_id="test_device")  # nosecret
+        assert client.api_key == "test_key"  # nosecret
+        assert client.device_id == "test_device"
+
+    @patch("RachioFlume.rachio_client.get_config")
+    def test_init_missing_credentials(self, mock_config: Mock) -> None:
+        """Test initialization fails without credentials."""
+        # Mock config: empty api_key, but one controller device so we exercise
+        # the api_key check rather than the no-devices path.
+        mock_config.return_value = Mock(
+            rachio=Mock(
+                api_key="",
+                devices=[Mock(id="dev1", label="Test", type="controller")],
+            )
+        )
+        with pytest.raises(ValueError, match="Rachio API key required"):
+            RachioClient()
+
+    @patch("RachioFlume.rachio_client.requests.get")
+    def test_get_zones(self, mock_get: Mock) -> None:
+        """Test getting zones from device."""
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "zones": [
+                {
+                    "id": "zone1",
+                    "zoneNumber": 1,
+                    "name": "Front Yard",
+                    "enabled": True,
+                },
+                {
+                    "id": "zone2",
+                    "zoneNumber": 2,
+                    "name": "Back Yard",
+                    "enabled": False,
+                },
+            ]
+        }
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+
+        client = RachioClient(api_key="test_key", device_id="test_device")  # nosecret
+        zones = client.get_zones()
+
+        assert len(zones) == 2
+        assert zones[0].name == "Front Yard"
+        assert zones[0].zone_number == 1
+        assert zones[0].enabled is True
+        assert zones[1].name == "Back Yard"
+        assert zones[1].enabled is False
+
+
+# FlumeClient tests live in test_flume_client.py (injected-session pattern,
+# no patch()) — including the auth/refresh flow and get_devices/get_usage
+# parsing formerly covered by a patch-based TestFlumeClient class here.
+
+
+class TestWaterTrackingDB:
+    """Test database operations."""
+
+    def test_init_creates_tables(self) -> None:
+        """Test database initialization creates required tables."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db = WaterTrackingDB(tmp.name)
+
+            # Check that tables exist
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name IN ('zones', 'watering_events', 'water_readings', 'zone_sessions')
+                """
+                )
+                tables = [row[0] for row in cursor.fetchall()]
+
+                assert "zones" in tables
+                assert "watering_events" in tables
+                assert "water_readings" in tables
+                assert "zone_sessions" in tables
+
+            os.unlink(tmp.name)
+
+    def test_save_and_retrieve_zones(self) -> None:
+        """Test saving and retrieving zones."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db = WaterTrackingDB(tmp.name)
+
+            zones = [
+                Zone(id="zone1", zone_number=1, name="Front Yard", enabled=True),
+                Zone(id="zone2", zone_number=2, name="Back Yard", enabled=False),
+            ]
+
+            db.save_zones(zones)
+
+            # Retrieve and verify
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM zones ORDER BY zone_number")
+                rows = cursor.fetchall()
+
+                assert len(rows) == 2
+                assert rows[0]["name"] == "Front Yard"
+                assert rows[0]["enabled"] == 1  # SQLite stores as integer
+                assert rows[1]["name"] == "Back Yard"
+                assert rows[1]["enabled"] == 0
+
+            os.unlink(tmp.name)
+
+    def test_compute_zone_sessions(self) -> None:
+        """Test computing zone sessions from events."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db = WaterTrackingDB(tmp.name)
+
+            # Create sample events
+            start_time = datetime(2023, 1, 1, 10, 0)
+            end_time = datetime(2023, 1, 1, 10, 30)
+
+            events = [
+                WateringEvent(
+                    event_date=start_time,
+                    zone_name="Front Yard",
+                    zone_number=1,
+                    event_type="ZONE_STARTED",
+                ),
+                WateringEvent(
+                    event_date=end_time,
+                    zone_name="Front Yard",
+                    zone_number=1,
+                    event_type="ZONE_COMPLETED",
+                    duration_seconds=1800,
+                ),
+            ]
+
+            db.save_watering_events(events)
+            db.compute_zone_sessions()
+
+            # Check computed sessions
+            sessions = db.get_zone_sessions(datetime(2023, 1, 1), datetime(2023, 1, 2))
+
+            assert len(sessions) == 1
+            assert sessions[0]["zone_name"] == "Front Yard"
+            assert sessions[0]["duration_seconds"] == 1800
+
+            os.unlink(tmp.name)
+
+
+class TestWeeklyReporter:
+    """Test weekly reporting functionality."""
+
+    def test_generate_weekly_report(self) -> None:
+        """Test generating a weekly report."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db = WaterTrackingDB(tmp.name)
+            reporter = WeeklyReporter(tmp.name)
+
+            # Create sample data
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO zone_sessions 
+                    (zone_name, zone_number, start_time, end_time, duration_seconds, total_water_used, average_flow_rate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        "Front Yard",
+                        1,
+                        "2023-01-02 10:00:00",
+                        "2023-01-02 10:30:00",
+                        1800,
+                        50.0,
+                        1.67,
+                    ),
+                )
+                conn.commit()
+
+            # Generate report
+            period_start = datetime(2023, 1, 2)  # Monday
+            period_end = datetime(2023, 1, 9)  # Next Monday
+            report = reporter.generate_period_report_with_dates(period_start, period_end)
+
+            assert report.summary.total_watering_sessions == 1
+            assert report.summary.total_duration_minutes == 30.0
+            assert report.summary.total_water_used_gallons == 50.0
+            assert len(report.zones) == 1
+            assert report.zones[0].zone_name == "Front Yard"
+
+            os.unlink(tmp.name)
+
+
+class TestWaterTrackingCollector:
+    """Test the data collection service."""
+
+    @patch("RachioFlume.collector.RachioClient")
+    @patch("RachioFlume.collector.FlumeClient")
+    def test_collector_initialization(self, mock_flume: Mock, mock_rachio: Mock) -> None:
+        """Test collector initializes correctly."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            collector = WaterTrackingCollector(tmp.name)
+
+            assert collector.db is not None
+            assert collector.poll_interval == 300  # Default 5 minutes
+
+            os.unlink(tmp.name)
+
+    @pytest.mark.asyncio
+    @patch("RachioFlume.collector.RachioClient")
+    @patch("RachioFlume.collector.FlumeClient")
+    async def test_collect_once(self, mock_flume_class: Mock, mock_rachio_class: Mock) -> None:
+        """Test single collection cycle."""
+        # Setup mocks
+        mock_rachio = Mock()
+        mock_rachio.get_zones.return_value = [
+            Zone(id="zone1", zone_number=1, name="Test Zone", enabled=True)
+        ]
+        mock_rachio.get_recent_events.return_value = []
+        mock_rachio_class.return_value = mock_rachio
+
+        mock_flume = Mock()
+        mock_flume.get_usage.return_value = [WaterReading(timestamp=datetime.now(), value=1.0)]
+        mock_flume_class.return_value = mock_flume
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            collector = WaterTrackingCollector(tmp.name)
+
+            await collector.collect_once()
+
+            # Verify methods were called
+            mock_rachio.get_zones.assert_called_once()
+            mock_flume.get_usage.assert_called()
+
+            os.unlink(tmp.name)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

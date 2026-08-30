@@ -1,0 +1,54 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+*.py[cod]
+# C extensions
+*.so
+
+# Large files
+*.pickle
+*.h5
+
+# hardcoded constants
+lib/tuya_switch_config_cli.json
+token_file
+cache.json
+*config.json
+!tsconfig.json
+!**/tsconfig.json
+
+# Hydra local config (secrets)
+config/local.yaml
+
+# Misc
+.DS_Store
+backups/
+nohup.out
+report.html
+ext_lib*
+.env
+*.db
+
+# Token storage
+lib/tokens
+
+# Samsung upload history
+config/samsung_upload_history.json
+
+# Claude Code
+.claude/
+.cloud/
+
+# clasp (Google Apps Script CLI) — script ID is local, not shared
+PersonalCalSync/.clasp.json
+sidebar-notes.md
+
+# Xcode / iOS build artifacts (NoShorts unsigned IPA output)
+build/
+config/tokens
+
+# Node dependencies (per-project, e.g. RingBeams/node_modules, VSCodeSidebarNotes/node_modules)
+node_modules/
+
+# Editor
+.vscode/

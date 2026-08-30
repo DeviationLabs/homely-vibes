@@ -1,0 +1,185 @@
+name: Security Scan
+
+# Gate on secrets, PII, and disclosure regressions before they reach the
+# default branch. This repo is public: content that lands here is cloneable
+# forever, and deleting a file later does NOT remove it from history. The
+# cheapest place to stop a leak is the PR.
+on:
+  pull_request:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: the secret scan itself only sees the working tree, but
+      # the incoming-history check below needs the commits the PR adds.
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Secret and PII scan
+        run: |
+          set -euo pipefail
+          bash .github/scripts/secret-scan.sh
+
+      # The scan above reads the working tree. A PR can still introduce a
+      # sensitive file and delete it in a later commit of the same PR: the
+      # tree ends clean while the blob is permanently in history. Scan the
+      # blobs the PR actually adds, not just its end state.
+      - name: Scan blobs added by this PR
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet origin "$BASE_SHA" 2>/dev/null || true
+
+          # If the base is still unreachable (force-pushed base, transient
+          # fetch failure), rev-list below would die under `set -e` with a
+          # misleading "bad revision" rather than the real cause. Say so and
+          # skip: the working-tree gates still ran, and this range scan is
+          # additive. Failing the PR on a network blip would train people to
+          # ignore this job.
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "::warning::Base commit $BASE_SHA is unreachable; skipping the added-blob scan."
+            exit 0
+          fi
+
+          PAT='sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}'
+          PAT="$PAT"'|xox[baprs]-[A-Za-z0-9-]{20,}|AIza[0-9A-Za-z_-]{30,}'
+          PAT="$PAT"'|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+          # Personal inboxes. Placeholders must use example.com/.org/.net.
+          PAT="$PAT"'|[A-Za-z0-9._%+-]+@(gmail|yahoo|hotmail|outlook|icloud)\.[A-Za-z]{2,}'
+
+          fail=0
+          # Every blob introduced anywhere in the PR's commit range.
+          for sha in $(git rev-list --objects "$BASE_SHA..$HEAD_SHA" \
+                       | awk 'NF>=2 {print $1}' | sort -u); do
+            [ "$(git cat-file -t "$sha" 2>/dev/null)" = "blob" ] || continue
+            if git cat-file blob "$sha" 2>/dev/null \
+                 | grep -aEq "$PAT"; then
+              echo "::error::Blob $sha introduced by this PR matches a secret/PII pattern."
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -ne 0 ]; then
+            echo "A commit in this PR adds sensitive content. Deleting it in a"
+            echo "follow-up commit is NOT enough — rewrite the branch history"
+            echo "(git rebase -i / git commit --amend) so the blob never lands."
+            exit 1
+          fi
+          echo "No secret/PII patterns in blobs added by this PR."
+
+      # Bulk data and credential files are almost never meant to be published.
+      # The predecessor repo leaked a 62-row CSV of third-party PII and a
+      # 2,903-line log this way — neither contained a credential pattern, so
+      # no regex scanner would have flagged them. The file extension is the
+      # signal. Add deliberate exceptions to .github/allowed-data-files.txt.
+      - name: Block data and credential file types
+        run: |
+          set -euo pipefail
+          BLOCKED='\.(csv|tsv|xlsx|xls|parquet|sqlite|sqlite3|db|log|pem|key|p12|pfx|jks|keystore|ppk|env)$'
+
+          git ls-files | grep -iE "$BLOCKED" | sort -u > /tmp/blocked_hits.txt || true
+          if [ -f .github/allowed-data-files.txt ]; then
+            grep -vE '^\s*(#|$)' .github/allowed-data-files.txt | sort -u > /tmp/allowed.txt || true
+          else
+            : > /tmp/allowed.txt
+          fi
+          comm -23 /tmp/blocked_hits.txt /tmp/allowed.txt > /tmp/blocked_final.txt
+
+          if [ -s /tmp/blocked_final.txt ]; then
+            echo "::error::Data/credential file types are not allowed in this repo:"
+            cat /tmp/blocked_final.txt
+            echo "If one is genuinely safe to publish, add its exact path to"
+            echo ".github/allowed-data-files.txt in the same PR, with a comment saying why."
+            exit 1
+          fi
+          echo "No blocked file types tracked."
+
+      # Prose leaks — a Wi-Fi SSID or a household name dropped into a sentence
+      # — are invisible to pattern-based scanning: there is no regex for a word
+      # you have never seen. This is the only gate that knows what THIS repo's
+      # sensitive strings actually are.
+      #
+      # PII_DENYLIST is a secret, not a variable: variables are plaintext,
+      # unmasked in logs, and readable by fork pull requests, so on a public
+      # repo a fork could simply print the list. Secrets are withheld from fork
+      # PRs, hence the skip below rather than a failure.
+      #
+      # This step never prints a matched term or line content — only the file
+      # and line number — so the log cannot leak what it is protecting.
+      - name: Denylisted term scan
+        env:
+          PII_DENYLIST: ${{ secrets.PII_DENYLIST }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PII_DENYLIST:-}" ]; then
+            echo "::warning::PII_DENYLIST is not set (or unavailable to a fork PR); skipping prose scan."
+            exit 0
+          fi
+
+          printf '%s\n' "$PII_DENYLIST" | grep -vE '^\s*(#|$)' > /tmp/denylist.txt || true
+          echo "Loaded $(wc -l < /tmp/denylist.txt) denylisted terms."
+
+          fail=0
+          n=0
+          while IFS= read -r term; do
+            [ -n "$term" ] || continue
+            n=$((n+1))
+            # -F: terms are literal, not patterns. A term like an email
+            # local-part contains '.', which as a regex would match any
+            # character and fire on unrelated text.
+            # -w: whole-word, so a short given name does not match inside
+            # every longer word that happens to contain it.
+            # Only path:lineno is emitted; content is cut away.
+            if git grep -IFinw -- "$term" 2>/dev/null \
+                 | cut -d: -f1,2 > /tmp/hit.txt && [ -s /tmp/hit.txt ]; then
+              echo "::error::Denylisted term #$n appears at:"
+              cat /tmp/hit.txt
+              fail=1
+            fi
+          done < /tmp/denylist.txt
+
+          if [ "$fail" -ne 0 ]; then
+            echo "A denylisted term is present. Terms are withheld from this log"
+            echo "on purpose — check the listed file:line locally against your"
+            echo "denylist master copy."
+            exit 1
+          fi
+          echo "No denylisted terms found."
+
+      # The Jekyll exclude list drifted once, silently publishing four module
+      # dirs to the Pages site where search engines indexed them. Treat the
+      # invariant as testable rather than as a comment nobody rechecks.
+      - name: Jekyll exclude list covers every code dir
+        run: |
+          set -euo pipefail
+          git ls-files | grep / | cut -d/ -f1 | sort -u > /tmp/tracked_dirs.txt
+          sed -n '/^exclude:/,$p' _config.yml \
+            | grep -oE '^- [^ ]+/' | sed 's/^- //; s|/$||' | sort -u > /tmp/excluded.txt
+
+          # _layouts and assets are the site's own content and belong on the page.
+          printf '_layouts\nassets\n' | sort > /tmp/site_dirs.txt
+          comm -23 /tmp/tracked_dirs.txt /tmp/excluded.txt \
+            | comm -23 - /tmp/site_dirs.txt > /tmp/unexcluded.txt
+
+          if [ -s /tmp/unexcluded.txt ]; then
+            echo "::error::These tracked dirs are not excluded in _config.yml and would be published to the Pages site:"
+            cat /tmp/unexcluded.txt
+            exit 1
+          fi
+          echo "Jekyll exclude list is complete."

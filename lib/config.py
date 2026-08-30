@@ -1,0 +1,621 @@
+#!/usr/bin/env python3
+"""
+OmegaConf-based configuration system for homely-vibes.
+
+Replaces the old Constants.py pattern with hierarchical YAML configs:
+- config/default.yaml: Safe defaults (checked into git)
+- config/local.yaml: Secrets and overrides (gitignored)
+
+Usage:
+    from lib.config import get_config
+
+    cfg = get_config()
+    email = cfg.tesla.tesla_email
+    tokens = cfg.pushover.tokens
+"""
+
+import os
+from dataclasses import dataclass, is_dataclass
+from enum import StrEnum
+from typing import Dict, get_origin, get_args
+
+from omegaconf import OmegaConf
+
+
+class NodeType(StrEnum):
+    """Node type enumeration"""
+
+    FOSCAM = "foscam"
+    WINDOWS = "windows"
+    GENERIC = "generic"
+    MYLINK = "mylink"
+    ARP = "arp"
+
+
+class OpMode(StrEnum):
+    """Tesla Powerwall operation mode"""
+
+    AUTONOMOUS = "autonomous"
+    SELF_CONSUMPTION = "self_consumption"
+
+
+@dataclass
+class PathsConfig:
+    """File paths and directories"""
+
+    home: str
+    logging_dir: str
+
+
+@dataclass
+class EmailConfig:
+    """Email configuration"""
+
+    from_addr: str
+    to_addr: str
+    gmail_username: str
+    gmail_password: str
+
+
+@dataclass
+class TwilioConfig:
+    """Twilio SMS configuration"""
+
+    sid: str
+    auth_token: str
+    sms_from: str
+
+
+@dataclass
+class PushoverConfig:
+    """Pushover notification configuration"""
+
+    user: str
+    delivery_group: str
+    default_token: str
+    tokens: Dict[str, str]
+
+
+@dataclass
+class NodeConfig:
+    """Individual node configuration"""
+
+    ip: str
+    node_type: NodeType
+    username: str | None = None
+    password: str | None = None
+    # API-authenticated nodes (e.g. Somfy myLink) use auth_token; port overrides default API port
+    auth_token: str | None = None
+    port: int | None = None
+
+
+@dataclass
+class FoscamConfig:
+    """Foscam camera configuration"""
+
+    username: str
+    password: str
+    foscam_dir: str
+    purge_after_days: int
+
+
+@dataclass
+class WindowsConfig:
+    """Windows node credentials"""
+
+    username: str
+    password: str
+
+
+@dataclass
+class NodeCheckConfig:
+    """Node monitoring configuration"""
+
+    foscam: FoscamConfig
+    windows: WindowsConfig
+    node_configs: Dict[str, NodeConfig]
+    nodes: Dict[str, dict]
+
+
+@dataclass
+class WaterMonitorConfig:
+    """Water monitoring and alerting thresholds"""
+
+    max_zones: int
+    max_new_files: int
+    logrotate_per_day: int
+    days_lookback: int
+    start_from_epoch: int
+    days_email_report: int
+    min_drip_zone_alert_time: int
+    min_drip_plot_time: int
+    min_misc_zone_alert_time: int
+    min_sprinkler_zone_alert_time: int
+    alert_thresh: float
+    pump_alert: int
+    pump_toggles_count: int
+
+
+@dataclass
+class OpModeConfig:
+    """Tesla Powerwall operation mode configuration"""
+
+    time_start: int
+    time_end: int
+    pct_gradient_per_hr: int
+    pct_thresh: int
+    iff_higher: bool
+    pct_min: int
+    pct_min_trail_stop: int
+    op_mode: OpMode
+    reason: str
+    always_notify: bool
+
+
+@dataclass
+class TeslaConfig:
+    """Tesla Powerwall configuration"""
+
+    powerwall_ip: str
+    powerwall_email: str
+    powerwall_password: str
+    powerwall_sms_rcpt: str
+    powerwall_poll_time: int
+    tesla_email: str
+    tesla_password: str
+    tesla_token_file: str
+    fleet_client_id: str
+    fleet_client_secret: str
+    fleet_redirect_uri: str
+    fleet_public_key_domain: str
+    fleet_region: str
+    decision_points: list[OpModeConfig]
+
+
+@dataclass
+class AugustConfig:
+    """August Smart Locks configuration"""
+
+    email: str
+    password: str
+    phone: str
+    token_file: str
+
+
+@dataclass
+class RheemConfig:
+    """Rheem EcoNet water heater configuration"""
+
+    email: str
+    password: str
+    poll_seconds: int
+    # Discrete tank levels: 0/33/66/100. Empty (<=empty) -> P2, low
+    # (<=low) -> P1, clear at >= mid.
+    empty_threshold: int
+    low_threshold: int
+    mid_threshold: int
+
+
+@dataclass
+class RingConfig:
+    """Ring devices configuration"""
+
+    username: str
+    password: str
+    token_file: str
+    battery_threshold_pct: int
+
+
+@dataclass
+class RingBeamsConfig:
+    """Ring Beams / Alarm sensor monitoring via Node sidecar"""
+
+    token_file: str
+    battery_threshold_pct: int
+    sidecar_timeout_seconds: int
+
+
+@dataclass
+class SamsungFrameConfig:
+    """Samsung Frame TV configuration"""
+
+    ip: str
+    mac: str
+    wol_password: str
+    smartthings_token: str
+    smartthings_device_id: str
+    port: int
+    token_file: str
+    default_matte: str
+    supported_formats: list[str]
+    max_image_size_mb: int
+    min_size_mb: float
+    min_images: int
+    slideshow_delay_seconds: int
+
+
+@dataclass
+class RachioDeviceConfig:
+    """One Rachio device.
+
+    `type` selects the API surface: 'controller' for traditional Rachio
+    Smart Sprinkler Controllers (api.rach.io/1/public/device/*), 'hose_timer'
+    for Smart Hose Timer base stations (cloud-rest.rach.io/valve/*).
+    `id` is the deviceId for controllers or the baseStationId for hose timers.
+    """
+
+    id: str
+    label: str
+    type: str  # "controller" | "hose_timer"
+
+
+@dataclass
+class RachioConfig:
+    """Rachio irrigation system configuration.
+
+    Single shared `api_key` works for both controller and hose-timer endpoints.
+    Add one entry per physical device in `devices`.
+    """
+
+    api_key: str
+    devices: list[RachioDeviceConfig]
+
+
+@dataclass
+class FlumeConfig:
+    """Flume water monitoring configuration"""
+
+    client_id: str
+    client_secret: str
+    user_email: str
+    password: str
+
+
+@dataclass
+class AlertRuleConfig:
+    """One usage alert rule"""
+
+    name: str
+    min_gpm: float
+    duration_minutes: int
+
+
+@dataclass
+class ZoneThresholdConfig:
+    """Per-zone flow threshold for anomaly detection"""
+
+    name: str
+    avg_gpm: float
+
+
+@dataclass
+class ZoneAnomalyConfig:
+    """Per-zone anomaly check for Rachio-sourced runs (controller + hose timer).
+
+    Fires at zone end when measured flow exceeds the configured baseline:
+      threshold = avg_gpm + max(absolute_gpm, percent_above/100 * avg_gpm)
+    """
+
+    threshold_mode: str  # "adaptive", "absolute", or "percent" (currently informational)
+    absolute_gpm: float  # min deviation above average (GPM)
+    percent_above: float  # min deviation above average (%)
+    min_runtime_minutes: int  # zone must run this long before anomaly fires
+    # device_label -> zone_key -> threshold.
+    # For controllers, zone_key is the integer zone_number (as a string for YAML).
+    # For hose timers, zone_key is the valve name (matches getValve.name).
+    zone_thresholds: Dict[str, Dict[str, ZoneThresholdConfig]]
+
+
+@dataclass
+class FlumeOutageConfig:
+    """Watchdog for Flume readings going silent (leak detection blind)."""
+
+    stale_after_minutes: int  # P2 fires when no readings land for this long
+    retrigger_minutes: int  # cadence for re-firing while still stale
+
+
+@dataclass
+class RachioOutageConfig:
+    """Watchdog for Rachio polling going silent (zone/hose tracking blind).
+
+    Controller and each hose-timer base station are watched independently via
+    their last-successful-poll timestamps.
+    """
+
+    stale_after_minutes: int  # P1 fires when no successful poll for this long
+    retrigger_minutes: int  # cadence for re-firing while still stale
+
+
+@dataclass
+class DeviceOfflineConfig:
+    """Health check for Rachio hardware reporting offline.
+
+    Covers the controller (device status OFFLINE) and hose-timer valves
+    (reportedState.connected false — dead battery / BLE out of range).
+    """
+
+    debounce_minutes: int  # must be offline this long before P1 fires
+    retrigger_minutes: int  # cadence for re-firing while still offline
+
+
+@dataclass
+class ValveBatteryConfig:
+    """Health check for hose-timer valve batteries.
+
+    Rachio exposes `batteryStatus` as an enum (GOOD / LOW / REPLACE /
+    UNKNOWN) and no percentage anywhere, so this is a status alert with no
+    threshold to tune -- only how often to repeat itself.
+    """
+
+    retrigger_minutes: int  # cadence for re-firing while the battery is low
+
+
+@dataclass
+class RachioFlumeAlertsConfig:
+    """Usage alert configuration for RachioFlume.
+
+    Independent alert paths share this block:
+    - zone_anomaly: scoped to Rachio events (per-zone, at run end).
+    - default_flow_rules: whole-house sustained-flow rules (Flume only);
+      suppressed while any Rachio activity is recent.
+    - stale_zone_days: P2 if any zone/valve hasn't run in N days.
+    - flume_outage: P2 watchdog when Flume readings stop entirely.
+    - rachio_outage: P1 watchdog when Rachio polling stops succeeding.
+    - device_offline: P1 when a controller/valve reports offline.
+    - valve_battery: P1 when a hose valve reports LOW / REPLACE.
+    """
+
+    enabled: bool
+    default_retrigger_minutes: int  # cadence for re-firing default_flow_rules
+    zone_anomaly: ZoneAnomalyConfig
+    default_flow_rules: list[AlertRuleConfig]
+    stale_zone_days: int
+    flume_outage: FlumeOutageConfig
+    rachio_outage: RachioOutageConfig
+    device_offline: DeviceOfflineConfig
+    valve_battery: ValveBatteryConfig
+
+
+@dataclass
+class RachioFlumeConfig:
+    """RachioFlume integration-level configuration"""
+
+    alerts: RachioFlumeAlertsConfig
+
+
+@dataclass
+class UplinkWatchdogConfig:
+    """Deco watchdog: detect a sustained fault and reboot the mesh.
+
+    Two symptoms feed one clock -- the WAN plane wedging while the switch
+    plane keeps working, and the radios dying while the wired uplink stays
+    healthy. Both are the same sick router, so both end in the same reboot.
+    """
+
+    enabled: bool
+    deco_host: str
+    deco_username: str
+    deco_password: str
+    probe_targets: list[str]
+    outage_threshold_secs: int
+    retry_interval_secs: int
+    # 0 means unlimited. A cap stops a multi-day ISP outage from becoming an
+    # all-night reboot loop; unlimited is safe while only the soft reboot runs.
+    max_actions_per_day: int
+    # Exercise the Deco credential on a healthy cycle. Only fires when the
+    # client census is off -- with it on, every healthy cycle already logs in
+    # and stamps the same clock. 0 disables.
+    auth_check_interval_secs: int
+    # Radio-plane check: reboot when the mesh reports fewer than this many
+    # wireless clients. An unreadable census counts as zero (fail closed).
+    # 0 disables; there is no safe default for someone else's house, so it
+    # ships off until the floor is measured with `uplink_watchdog clients`.
+    min_wireless_clients: int
+    # --- Upstream modem (optional second lever) ---
+    # Rebooted first, and only when the *internet* is down: on a radio fault
+    # the uplink is by definition working. Empty host disables the stage. A
+    # failure here is never fatal -- the Deco reboot follows regardless.
+    modem_host: str
+    modem_username: str
+    modem_password: str
+    state_file: str
+
+
+@dataclass
+class NetworkCheckConfig:
+    """Network bandwidth monitoring configuration"""
+
+    min_dl_bw: int
+    min_ul_bw: int
+    uplink_watchdog: UplinkWatchdogConfig
+
+
+@dataclass
+class BrowserAlertConfig:
+    """Browser activity monitoring configuration"""
+
+    refresh_delay: int
+    min_reporting_gap: int
+    hr_start_monitoring: int
+    hr_stop_monitoring: int
+    hr_email: int
+    blacklist: list[str]
+
+
+@dataclass
+class PersonalCalSyncConfig:
+    """PersonalCalSync Google Apps Script configuration"""
+
+    script_id: str
+
+
+@dataclass
+class VoiceNotesConfig:
+    """VoiceNotes local STT via whisper.cpp configuration"""
+
+    model_id: str
+    hotkey: str
+    notes_dir: str
+    sample_rate: int
+    channels: int
+    vad_aggressiveness: int
+    n_threads: int
+
+
+@dataclass
+class ProdControllerConfig:
+    """Prod controller remote DB host configuration"""
+
+    ssh_host: str
+    db_path: str
+
+
+@dataclass
+class AppleNotesBackupConfig:
+    """Apple Notes backup configuration.
+
+    Exports every note via AppleScript into a dedicated *private* git repo
+    (backup_repo_dir). Note content is PII — never point this at a public repo.
+    Each run mirrors current Notes state into the repo and commits; git history
+    is the recovery mechanism for accidentally-deleted notes.
+    """
+
+    backup_repo_dir: str  # dedicated private git repo (already `git init`-ed)
+    git_remote: str  # remote name to push to; empty string skips push
+    git_branch: str  # branch to commit/push
+    osascript_timeout_seconds: int
+
+
+@dataclass
+class Config:
+    """Root configuration for homely-vibes"""
+
+    paths: PathsConfig
+    email: EmailConfig
+    twilio: TwilioConfig
+    pushover: PushoverConfig
+    node_check: NodeCheckConfig
+    water_monitor: WaterMonitorConfig
+    tesla: TeslaConfig
+    august: AugustConfig
+    rheem: RheemConfig
+    ring: RingConfig
+    ring_beams: RingBeamsConfig
+    samsung_frame: SamsungFrameConfig
+    rachio: RachioConfig
+    flume: FlumeConfig
+    rachio_flume: RachioFlumeConfig
+    network_check: NetworkCheckConfig
+    browser_alert: BrowserAlertConfig
+    personal_cal_sync: PersonalCalSyncConfig
+    voice_notes: VoiceNotesConfig
+    prod_controller: ProdControllerConfig
+    apple_notes_backup: AppleNotesBackupConfig
+    my_external_ip: str
+    seconds_in_day: int
+
+
+# Singleton configuration instance
+_config: Config | None = None
+
+
+def get_config() -> Config:
+    """
+    Get application configuration singleton.
+
+    Loads from config/default.yaml with optional config/local.yaml overrides.
+    Config is cached after first load.
+
+    Returns:
+        Config: Application configuration
+    """
+    global _config
+    if _config is None:
+        config_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../config"))
+
+        # Load default config
+        default_path = os.path.join(config_dir, "default.yaml")
+        local_path = os.path.join(config_dir, "local.yaml")
+
+        # Load default configuration
+        cfg_omega = OmegaConf.load(default_path)
+
+        # Merge with local config if it exists
+        if os.path.exists(local_path):
+            local_cfg = OmegaConf.load(local_path)
+            cfg_omega = OmegaConf.merge(cfg_omega, local_cfg)
+
+        # Convert OmegaConf to Config dataclass
+        # We use to_container to get a dict, then instantiate the dataclass
+        cfg_dict = OmegaConf.to_container(cfg_omega, resolve=True)
+
+        # Create Config instance from dict
+        # Note: We need to manually construct nested dataclasses
+        _config = _dict_to_config(cfg_dict)
+
+    return _config
+
+
+def _dict_to_config(cfg_dict: dict) -> Config:  # type: ignore
+    """
+    Convert configuration dictionary to Config dataclass.
+
+    Handles nested dataclass construction.
+    """
+
+    # Helper to convert nested dicts to dataclasses
+    def build_nested(data: dict, cls: type) -> object:  # type: ignore
+        """Recursively build nested dataclasses"""
+        kwargs = {}
+        for field_name, field_type in cls.__annotations__.items():
+            if field_name not in data:
+                continue
+
+            value = data[field_name]
+
+            # Check if it's a generic type like list[OpModeConfig]
+            origin = get_origin(field_type)
+
+            if origin is list:
+                # Handle list[SomeDataclass]
+                args = get_args(field_type)
+                if args and is_dataclass(args[0]):
+                    # Convert each dict in the list to the dataclass
+                    item_class = args[0]
+                    kwargs[field_name] = [build_nested(item, item_class) for item in value]
+                else:
+                    # Plain list (e.g., list[str])
+                    kwargs[field_name] = value
+            elif origin is dict:
+                # Handle Dict[K, SomeDataclass] types
+                args = get_args(field_type)
+                if len(args) >= 2 and is_dataclass(args[1]):
+                    value_class: type = args[1]  # type: ignore[assignment]
+                    key_type = args[0]
+                    converted = {}
+                    for k, v in value.items():
+                        # Convert key type (e.g., str "1" -> int 1)
+                        ck = key_type(k) if key_type is not str and isinstance(k, str) else k
+                        converted[ck] = build_nested(v, value_class)
+                    kwargs[field_name] = converted
+                else:
+                    kwargs[field_name] = value
+            elif is_dataclass(field_type):
+                # Nested dataclass
+                kwargs[field_name] = build_nested(value, field_type)
+            elif isinstance(field_type, type) and issubclass(field_type, StrEnum):
+                # StrEnum - convert string to enum
+                kwargs[field_name] = field_type(value)
+            else:
+                # Primitive type
+                kwargs[field_name] = value
+
+        return cls(**kwargs)
+
+    return build_nested(cfg_dict, Config)  # type: ignore
+
+
+def reset_config() -> None:
+    """Reset configuration singleton (useful for testing)"""
+    global _config
+    _config = None

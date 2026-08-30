@@ -1,0 +1,1031 @@
+"""Tests for AlertEngine: predicate, state machine, Rachio suppression, mute."""
+
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+from unittest.mock import MagicMock
+
+import pytest
+
+from RachioFlume.alert_engine import AlertAction, AlertEngine, AlertState
+from RachioFlume.alert_rules import AlertRule, ZoneThreshold
+from RachioFlume.data_storage import WaterTrackingDB
+from RachioFlume.flume_client import WaterReading
+from RachioFlume.rachio_client import Zone
+
+
+def _readings(values: list[float], end: datetime | None = None) -> list[WaterReading]:
+    """Build a list of per-minute WaterReadings ending at `end` (default: now)."""
+    end = end or datetime.now()
+    return [
+        WaterReading(timestamp=end - timedelta(minutes=len(values) - 1 - i), value=v)
+        for i, v in enumerate(values)
+    ]
+
+
+@pytest.fixture
+def db(tmp_path: Path) -> WaterTrackingDB:
+    return WaterTrackingDB(str(tmp_path / "test.db"))
+
+
+@pytest.fixture
+def rule() -> AlertRule:
+    return AlertRule(name="Mid Flow", min_gpm=2.6, duration_minutes=4, retrigger_minutes=30)
+
+
+@pytest.fixture
+def engine(db: WaterTrackingDB, rule: AlertRule) -> AlertEngine:
+    # Seed a fresh reading + a fresh Rachio poll so the outage watchdogs stay
+    # quiet; outage behavior has its own test sections below. The huge Rachio
+    # stale window keeps time-travelling tests from tripping it — dedicated
+    # tests dial it back down.
+    db.save_water_readings([WaterReading(timestamp=datetime.now(), value=0.0)])
+    db.set_last_collection_timestamp("rachio", datetime.now())
+    flume = MagicMock()
+    rachio = MagicMock()
+    rachio.get_active_zone.return_value = None
+    pushover = MagicMock()
+    pushover.send_message.return_value = True
+    # Provide zone thresholds high enough that test flow rates don't trigger anomalies
+    zone_thresholds = {
+        1: ZoneThreshold(zone_key="1", avg_gpm=10.0),
+        2: ZoneThreshold(zone_key="2", avg_gpm=10.0),
+        3: ZoneThreshold(zone_key="3", avg_gpm=10.0),
+    }
+    return AlertEngine(
+        flume_client=flume,
+        rachio_client=rachio,
+        pushover=pushover,
+        db=db,
+        rules=[rule],
+        zone_thresholds=zone_thresholds,
+        rachio_outage_stale_after_minutes=100_000,
+    )
+
+
+# ---------------------------------------------------------------------- #
+# Predicate (Slot 1)                                                     #
+# ---------------------------------------------------------------------- #
+
+
+def test_predicate_fires_when_all_minutes_above_threshold(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    assert engine._rule_matches(_readings([3.0, 3.0, 3.0, 3.0]), rule) is True
+
+
+def test_predicate_does_not_fire_on_single_zero_minute(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    # mean([3.0, 0.0, 3.0, 3.0]) = 2.25 < 2.6 — zero drags mean below threshold
+    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 3.0]), rule) is False
+
+
+def test_predicate_accepts_sustained_flow_with_low_cv(engine: AlertEngine, rule: AlertRule) -> None:
+    # mean([3.0, 2.8, 3.0, 2.5]) = 2.825 >= 2.6, low CV → sustained flow accepted
+    assert engine._rule_matches(_readings([3.0, 2.8, 3.0, 2.5]), rule) is True
+
+
+def test_predicate_rejects_spiky_flow_even_if_mean_passes(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    # mean([3.0, 0.0, 3.0, 4.5]) = 2.625 >= 2.6 but CV ≈ 0.62 >> max_cv ≈ 0.25
+    assert engine._rule_matches(_readings([3.0, 0.0, 3.0, 4.5]), rule) is False
+
+
+def test_predicate_single_spike_among_zeros_does_not_fire() -> None:
+    # mean([8.0, 0.0, 0.0, 0.0]) = 2.0 < 8.0 — a momentary surge is not a pipe break
+    pipe_rule = AlertRule(name="Pipe Break", min_gpm=8.0, duration_minutes=4, retrigger_minutes=30)
+    engine = AlertEngine(
+        flume_client=MagicMock(),
+        rachio_client=MagicMock(),
+        pushover=MagicMock(),
+        db=MagicMock(),
+        rules=[pipe_rule],
+    )
+    assert engine._rule_matches(_readings([8.0, 0.0, 0.0, 0.0]), pipe_rule) is False
+
+
+def test_predicate_does_not_fire_with_insufficient_samples(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    # Only 3 readings for a 4-minute rule
+    assert engine._rule_matches(_readings([3.0, 3.0, 3.0]), rule) is False
+
+
+def test_predicate_low_flow_rule_fires_on_trickle() -> None:
+    """A 'Low Flow' rule (min_gpm=0.1) treats sustained low flow as active."""
+    low_rule = AlertRule(name="Low Flow", min_gpm=0.1, duration_minutes=3, retrigger_minutes=30)
+    readings = _readings([0.15, 0.12, 0.13])
+    engine = AlertEngine(
+        flume_client=MagicMock(),
+        rachio_client=MagicMock(),
+        pushover=MagicMock(),
+        db=MagicMock(),
+        rules=[low_rule],
+    )
+    assert engine._rule_matches(readings, low_rule) is True
+
+
+# ---------------------------------------------------------------------- #
+# State machine (Slot 2)                                                 #
+# ---------------------------------------------------------------------- #
+
+
+def test_state_machine_first_fire_on_active(engine: AlertEngine, rule: AlertRule) -> None:
+    now = datetime.now()
+    action = engine._decide_action(True, AlertState(), rule, now)
+    assert action == AlertAction.FIRE
+
+
+def test_state_machine_no_action_when_clear_and_no_history(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    now = datetime.now()
+    action = engine._decide_action(False, AlertState(), rule, now)
+    assert action == AlertAction.NOTHING
+
+
+def test_state_machine_re_fire_after_retrigger_window(engine: AlertEngine, rule: AlertRule) -> None:
+    now = datetime.now()
+    state = AlertState(last_state="active", last_fired_at=now - timedelta(minutes=31))
+    assert engine._decide_action(True, state, rule, now) == AlertAction.FIRE
+
+
+def test_state_machine_silent_within_retrigger_window(engine: AlertEngine, rule: AlertRule) -> None:
+    now = datetime.now()
+    state = AlertState(last_state="active", last_fired_at=now - timedelta(minutes=10))
+    assert engine._decide_action(True, state, rule, now) == AlertAction.NOTHING
+
+
+def test_state_machine_clear_on_active_to_clear(engine: AlertEngine, rule: AlertRule) -> None:
+    now = datetime.now()
+    state = AlertState(last_state="active", last_fired_at=now - timedelta(minutes=5))
+    assert engine._decide_action(False, state, rule, now) == AlertAction.FIRE_CLEAR
+
+
+def test_state_machine_mute_blocks_fire(engine: AlertEngine, rule: AlertRule) -> None:
+    now = datetime.now()
+    state = AlertState(mute_until=now + timedelta(hours=1))
+    assert engine._decide_action(True, state, rule, now) == AlertAction.NOTHING
+
+
+def test_state_machine_expired_mute_allows_fire(engine: AlertEngine, rule: AlertRule) -> None:
+    now = datetime.now()
+    state = AlertState(mute_until=now - timedelta(minutes=1))
+    assert engine._decide_action(True, state, rule, now) == AlertAction.FIRE
+
+
+# ---------------------------------------------------------------------- #
+# evaluate() — integration with Pushover, Flume, Rachio, DB              #
+# ---------------------------------------------------------------------- #
+
+
+async def test_evaluate_fires_priority_2_on_first_active(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+    results = await engine.evaluate()
+
+    # One entry per rule + Flume-outage + Rachio-controller-outage watchdogs
+    assert len(results) == 3
+    assert results[0]["action"] == AlertAction.FIRE.value
+    # Pushover called with priority=2 (emergency)
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 2
+    # State persisted as active
+    state = engine._load_state(rule)
+    assert state.last_state == "active"
+    assert state.last_fired_at is not None
+
+
+async def test_evaluate_suppressed_by_active_rachio_zone(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=3, name="Front Yard", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([9.0, 9.0, 9.0, 9.0])  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    assert results[0]["action"] == AlertAction.NOTHING.value
+    assert "suppressed_by" in results[0]
+    # No alert sent while irrigating (zone-end report fires later)
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    # State unchanged (no spurious "clear" later)
+    assert engine._load_state(rule).last_state is None
+
+
+async def test_evaluate_clear_emits_priority_neg1(engine: AlertEngine, rule: AlertRule) -> None:
+    # Seed state as if rule was active last cycle
+    engine._save_state(
+        rule,
+        AlertState(last_state="active", last_fired_at=datetime.now() - timedelta(minutes=5)),
+    )
+    engine.flume.get_usage.return_value = _readings([0.0, 0.0, 0.0, 0.0])  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    assert results[0]["action"] == AlertAction.FIRE_CLEAR.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == -1
+    assert engine._load_state(rule).last_state == "clear"
+
+
+async def test_evaluate_retrigger_after_window(engine: AlertEngine, rule: AlertRule) -> None:
+    engine._save_state(
+        rule,
+        AlertState(last_state="active", last_fired_at=datetime.now() - timedelta(minutes=45)),
+    )
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    assert results[0]["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+
+
+async def test_evaluate_silent_within_retrigger(engine: AlertEngine, rule: AlertRule) -> None:
+    engine._save_state(
+        rule,
+        AlertState(last_state="active", last_fired_at=datetime.now() - timedelta(minutes=10)),
+    )
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    assert results[0]["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_evaluate_dry_run_does_not_send_or_persist(
+    engine: AlertEngine, rule: AlertRule
+) -> None:
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+
+    results = await engine.evaluate(dry_run=True)
+
+    assert results[0]["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    # No state written
+    assert engine._load_state(rule).last_state is None
+
+
+# ---------------------------------------------------------------------- #
+# Mute / unmute                                                          #
+# ---------------------------------------------------------------------- #
+
+
+def test_mute_sets_mute_until(engine: AlertEngine, rule: AlertRule) -> None:
+    state = engine.mute("Mid Flow", hours=2.0)
+    assert state.mute_until is not None
+    assert state.mute_until > datetime.now()
+
+
+def test_unmute_clears_mute(engine: AlertEngine, rule: AlertRule) -> None:
+    engine.mute("Mid Flow", hours=2.0)
+    state = engine.unmute("Mid Flow")
+    assert state.mute_until is None
+
+
+def test_mute_unknown_rule_raises(engine: AlertEngine) -> None:
+    with pytest.raises(ValueError):
+        engine.mute("Nonexistent", hours=1.0)
+
+
+async def test_muted_rule_does_not_fire_in_evaluate(engine: AlertEngine, rule: AlertRule) -> None:
+    engine.mute("Mid Flow", hours=2.0)
+    engine.flume.get_usage.return_value = _readings([3.0, 3.0, 3.0, 3.0])  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    assert results[0]["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------- #
+# Zone-end reporting — zone transitions                                  #
+# ---------------------------------------------------------------------- #
+
+
+async def test_zone_transition_reports_previous_zone(engine: AlertEngine, rule: AlertRule) -> None:
+    """When zone A transitions to zone B, zone A should be reported."""
+    # Cycle 1: Zone A is active
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Lawn", enabled=True
+    )
+    # 7 minutes of active readings > min_runtime_minutes=5 → outcome fires
+    engine.flume.get_usage.return_value = _readings([5.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+    # Cycle 2: Zone A ended, Zone B started → report Zone A
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z2", zone_number=2, name="Back Lawn", enabled=True
+    )
+    # 7 minutes of active readings > min_runtime_minutes=5 → outcome fires
+    engine.flume.get_usage.return_value = _readings([5.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+
+    # Zone A should be reported
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    call_args = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert "Front Lawn" in call_args[0][0]
+    assert call_args[1]["priority"] == -2
+
+
+async def test_zone_transition_multiple_zones(engine: AlertEngine, rule: AlertRule) -> None:
+    """Multi-zone cycle: each zone gets reported when the next one starts."""
+    zones = [
+        Zone(id="z1", zone_number=1, name="Zone A", enabled=True),
+        Zone(id="z2", zone_number=2, name="Zone B", enabled=True),
+        Zone(id="z3", zone_number=3, name="Zone C", enabled=True),
+    ]
+
+    # Cycle 1: Zone A active
+    engine.rachio.get_active_zone.return_value = zones[0]  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 0  # type: ignore[attr-defined]
+
+    # Cycle 2: Zone A → Zone B transition → report Zone A
+    engine.rachio.get_active_zone.return_value = zones[1]  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
+    assert "Zone A" in engine.pushover.send_message.call_args_list[0][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 3: Zone B → Zone C transition → report Zone B
+    engine.rachio.get_active_zone.return_value = zones[2]  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 2  # type: ignore[attr-defined]
+    assert "Zone B" in engine.pushover.send_message.call_args_list[1][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 4: Zone C → idle → report Zone C
+    engine.rachio.get_active_zone.return_value = None  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([4.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 3  # type: ignore[attr-defined]
+    assert "Zone C" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+
+
+async def test_zone_report_each_cycle(engine: AlertEngine, rule: AlertRule) -> None:
+    """Each zone cycle should be reported with a cycle count."""
+    # Cycle 1: Zone A active
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Zone A", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+
+    # Cycle 2: Zone A → Zone B → report Zone A (Cycle 1)
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z2", zone_number=2, name="Zone B", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
+    # cycle 1 has no label
+    assert "Cycle" not in engine.pushover.send_message.call_args_list[0][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 3: Zone B → Zone A → report Zone B (Cycle 1)
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Zone A", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 2  # type: ignore[attr-defined]
+    assert "Zone B" in engine.pushover.send_message.call_args_list[1][0][0]  # type: ignore[attr-defined]
+
+    # Cycle 4: Zone A → Zone B → report Zone A (Cycle 2)
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z2", zone_number=2, name="Zone B", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([3.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 3  # type: ignore[attr-defined]
+    assert "Zone A" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+    assert "Cycle 2" in engine.pushover.send_message.call_args_list[2][0][0]  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------- #
+# Flume data-outage watchdog                                              #
+# ---------------------------------------------------------------------- #
+
+
+def _outage_entry(results: list[dict]) -> dict:
+    matches = [r for r in results if r.get("rule") == "Flume Data Outage"]
+    assert len(matches) == 1
+    return matches[0]
+
+
+async def test_flume_outage_fires_p2_when_db_has_no_readings(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    # Wipe the seeded reading so the DB looks like Flume never reported.
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 2
+    assert "Flume" in args[0]
+
+
+async def test_flume_outage_fires_when_readings_stale(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    stale_at = datetime.now() - timedelta(hours=2)
+    db.save_water_readings([WaterReading(timestamp=stale_at, value=1.0)])
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    assert entry["last_reading_at"] == stale_at.isoformat()
+
+
+async def test_flume_outage_silent_within_retrigger_window(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    await engine.evaluate()  # first evaluate fires
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    results = await engine.evaluate()  # still stale, within retrigger window
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_flume_outage_retriggers_after_cadence(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    await engine.evaluate()
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    # Past the retrigger cadence (default 360 min) → fires again
+    later = datetime.now() + timedelta(minutes=engine.flume_outage_retrigger_minutes + 1)
+    results = await engine.evaluate(now=later)
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+
+
+async def test_flume_outage_clears_p0_on_recovery(engine: AlertEngine, db: WaterTrackingDB) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    await engine.evaluate()  # fires: DB empty
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    db.save_water_readings([WaterReading(timestamp=datetime.now(), value=0.5)])
+    results = await engine.evaluate()  # recovered
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE_CLEAR.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 0
+
+
+async def test_flume_outage_quiet_with_fresh_readings(engine: AlertEngine) -> None:
+    # Fixture seeds a fresh reading → watchdog reports clear, sends nothing.
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.NOTHING.value
+    assert entry["is_active"] is False
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_flume_outage_dry_run_does_not_send_or_persist(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate(dry_run=True)
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    assert db.get_metadata("alert::Flume Data Outage::state") is None
+
+
+async def test_flume_outage_not_suppressed_by_active_zone(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """Irrigation suppression must not silence the outage watchdog."""
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM water_readings")
+        conn.commit()
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Yard", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+    results = await engine.evaluate()
+
+    entry = _outage_entry(results)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------- #
+# Rachio data-outage watchdog                                              #
+# ---------------------------------------------------------------------- #
+
+_RACHIO_OUTAGE = "Rachio Controller Data Outage"
+_HOSE_LABEL = "Hose Drip Jasmine"
+_HOSE_OUTAGE = f"Rachio Hose Data Outage ({_HOSE_LABEL})"
+
+
+def _entry(results: list[dict], rule_name: str) -> dict:
+    matches = [r for r in results if r.get("rule") == rule_name]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _quiet_flume(engine: AlertEngine) -> None:
+    engine.flume.get_usage.return_value = _readings([0.0] * 4)  # type: ignore[attr-defined]
+
+
+async def test_rachio_outage_fires_p1_when_never_polled(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    db.delete_metadata("last_rachio_collection")
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    entry = _entry(results, _RACHIO_OUTAGE)
+    assert entry["action"] == AlertAction.FIRE.value
+    assert entry["last_poll_at"] is None
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 1
+    assert "No successful poll" in args[0]
+
+
+async def test_rachio_outage_fires_when_controller_poll_stale(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    stale_at = datetime.now() - timedelta(hours=4)
+    db.set_last_collection_timestamp("rachio", stale_at)
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    entry = _entry(results, _RACHIO_OUTAGE)
+    assert entry["action"] == AlertAction.FIRE.value
+    assert entry["last_poll_at"] == stale_at.isoformat()
+
+
+async def test_rachio_outage_hose_feed_independent(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """Fresh controller feed + stale hose feed → only the hose rule fires."""
+    engine.rachio_outage_stale_after_minutes = 180
+    engine.hose_device_labels = [_HOSE_LABEL]
+    stale_at = datetime.now() - timedelta(hours=4)
+    db.set_metadata(f"hose::poll::{_HOSE_LABEL}::last_success", stale_at.isoformat())
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _RACHIO_OUTAGE)["action"] == AlertAction.NOTHING.value
+    hose = _entry(results, _HOSE_OUTAGE)
+    assert hose["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert _HOSE_LABEL in kwargs["title"]
+    assert "LOST" in args[0]
+
+
+async def test_rachio_outage_quiet_when_fresh(engine: AlertEngine) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    entry = _entry(results, _RACHIO_OUTAGE)
+    assert entry["action"] == AlertAction.NOTHING.value
+    assert entry["is_active"] is False
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_rachio_outage_silent_within_retrigger_window(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    db.delete_metadata("last_rachio_collection")
+    _quiet_flume(engine)
+
+    await engine.evaluate()  # first evaluate fires
+    engine.pushover.send_message.reset_mock()  # type: ignore[attr-defined]
+    results = await engine.evaluate()  # still stale, within retrigger window
+
+    assert _entry(results, _RACHIO_OUTAGE)["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_rachio_outage_retriggers_after_cadence(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    db.delete_metadata("last_rachio_collection")
+    # Seed state as if the rule fired past the retrigger cadence ago.
+    db.set_metadata(
+        f"alert::{_RACHIO_OUTAGE}::state",
+        AlertState(
+            last_state="active",
+            last_fired_at=datetime.now()
+            - timedelta(minutes=engine.rachio_outage_retrigger_minutes + 1),
+        ).to_json(),
+    )
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _RACHIO_OUTAGE)["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+
+
+async def test_rachio_outage_clears_p0_on_recovery(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    # Feed is fresh (fixture-seeded) but state says active → clear fires.
+    db.set_metadata(
+        f"alert::{_RACHIO_OUTAGE}::state",
+        AlertState(last_state="active", last_fired_at=datetime.now()).to_json(),
+    )
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _RACHIO_OUTAGE)["action"] == AlertAction.FIRE_CLEAR.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 0
+
+
+async def test_rachio_outage_dry_run_does_not_send_or_persist(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    db.delete_metadata("last_rachio_collection")
+    _quiet_flume(engine)
+
+    results = await engine.evaluate(dry_run=True)
+
+    assert _entry(results, _RACHIO_OUTAGE)["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    assert db.get_metadata(f"alert::{_RACHIO_OUTAGE}::state") is None
+
+
+async def test_rachio_outage_not_suppressed_by_active_zone(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180
+    db.delete_metadata("last_rachio_collection")
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Yard", enabled=True
+    )
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _RACHIO_OUTAGE)["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------- #
+# Device-offline health check                                              #
+# ---------------------------------------------------------------------- #
+
+_CONTROLLER_OFFLINE = "Rachio Controller Offline"
+_VALVE_OFFLINE = "Hose Valve Offline (Upper Deck Planters)"
+
+
+def _seed_controller_status(db: WaterTrackingDB, status: str, observed_at: datetime) -> None:
+    import json
+
+    db.set_metadata(
+        "rachio::controller::status",
+        json.dumps({"status": status, "observed_at": observed_at.isoformat()}),
+    )
+
+
+def _seed_valve_row(
+    db: WaterTrackingDB,
+    connected: bool,
+    updated_at: datetime,
+    valve_id: str = "v1",
+    battery: str = "GOOD",
+) -> None:
+    with db.get_connection() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO hose_valves
+               (id, base_station_id, base_station_label, name,
+                default_runtime_seconds, detect_flow, battery_status,
+                connected, updated_at)
+               VALUES (?, 'bs1', ?, 'Upper Deck Planters', 600, 1, ?, ?, ?)""",
+            (valve_id, _HOSE_LABEL, battery, 1 if connected else 0, updated_at),
+        )
+        conn.commit()
+
+
+async def test_controller_offline_debounce_then_fire(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    now = datetime.now()
+    _seed_controller_status(db, "OFFLINE", now)
+    _quiet_flume(engine)
+
+    # First observation stamps offline_since; not past debounce yet → quiet.
+    results = await engine.evaluate()
+    assert _entry(results, _CONTROLLER_OFFLINE)["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    assert db.get_metadata("offline::controller::since") is not None
+
+    # Backdate the stamp past the debounce window → fires P1.
+    db.set_metadata("offline::controller::since", (now - timedelta(hours=2)).isoformat())
+    results = await engine.evaluate()
+    entry = _entry(results, _CONTROLLER_OFFLINE)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 1
+    assert "WiFi" in args[0]
+
+
+async def test_controller_offline_clears_p0_and_since_key_on_recovery(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    now = datetime.now()
+    _seed_controller_status(db, "ONLINE", now)
+    db.set_metadata("offline::controller::since", (now - timedelta(hours=2)).isoformat())
+    db.set_metadata(
+        "alert::offline::controller::state",
+        AlertState(last_state="active", last_fired_at=now).to_json(),
+    )
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _CONTROLLER_OFFLINE)["action"] == AlertAction.FIRE_CLEAR.value
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 0
+    assert db.get_metadata("offline::controller::since") is None
+
+
+async def test_controller_offline_stale_observation_skipped(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """Observation older than the outage window → outage watchdog's problem."""
+    now = datetime.now()
+    _seed_controller_status(db, "OFFLINE", now - timedelta(hours=10))
+    engine.rachio_outage_stale_after_minutes = 180
+    db.set_last_collection_timestamp("rachio", now)  # keep outage rule quiet
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _CONTROLLER_OFFLINE)["action"] == "stale_observation"
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_valve_offline_fires_p1_after_debounce(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    now = datetime.now()
+    _seed_valve_row(db, connected=False, updated_at=now)
+    db.set_metadata("offline::hose::v1::since", (now - timedelta(hours=2)).isoformat())
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    entry = _entry(results, _VALVE_OFFLINE)
+    assert entry["action"] == AlertAction.FIRE.value
+    engine.pushover.send_message.assert_called_once()  # type: ignore[attr-defined]
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 1
+    assert "battery" in args[0]
+    assert "Upper Deck Planters" in kwargs["title"]
+
+
+async def test_valve_reconnect_clears_since_key(engine: AlertEngine, db: WaterTrackingDB) -> None:
+    now = datetime.now()
+    _seed_valve_row(db, connected=True, updated_at=now)
+    db.set_metadata("offline::hose::v1::since", (now - timedelta(hours=2)).isoformat())
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_OFFLINE)["action"] == AlertAction.NOTHING.value
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+    assert db.get_metadata("offline::hose::v1::since") is None
+
+
+async def test_two_same_named_valves_have_independent_state(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """Two valves sharing a user-set name must not clobber each other's
+    fire/clear state — the state key is scoped by valve id, not name.
+    """
+    now = datetime.now()
+    _seed_valve_row(db, connected=False, updated_at=now, valve_id="a")
+    _seed_valve_row(db, connected=False, updated_at=now, valve_id="b")
+    # Both already past their debounce windows.
+    db.set_metadata("offline::hose::a::since", (now - timedelta(hours=2)).isoformat())
+    db.set_metadata("offline::hose::b::since", (now - timedelta(hours=2)).isoformat())
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    offline = [r for r in results if r.get("rule") == _VALVE_OFFLINE]
+    # Same display name → one entry per valve, both firing, distinct state rows.
+    assert len(offline) == 2
+    assert all(r["action"] == AlertAction.FIRE.value for r in offline)
+    assert db.get_metadata("alert::offline::hose::a::state") is not None
+    assert db.get_metadata("alert::offline::hose::b::state") is not None
+    assert engine.pushover.send_message.call_count == 2  # type: ignore[attr-defined]
+
+
+async def test_valve_offline_stale_roster_row_skipped(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    engine.rachio_outage_stale_after_minutes = 180  # real observation window
+    now = datetime.now()
+    _seed_valve_row(db, connected=False, updated_at=now - timedelta(hours=10))
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_OFFLINE)["action"] == "stale_observation"
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------- #
+# Hose-valve battery health                                             #
+# --------------------------------------------------------------------- #
+
+_VALVE_BATTERY = "Hose Valve Battery (Upper Deck Planters)"
+
+
+@pytest.mark.parametrize("status", ["LOW", "REPLACE"])
+async def test_valve_battery_fires_p1(
+    engine: AlertEngine, db: WaterTrackingDB, status: str
+) -> None:
+    """Both actionable enum values page; a chore, so P1 and not P2."""
+    _seed_valve_row(db, connected=True, updated_at=datetime.now(), battery=status)
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    entry = _entry(results, _VALVE_BATTERY)
+    assert entry["action"] == AlertAction.FIRE.value
+    assert entry["battery_status"] == status
+    args, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 1
+    assert status in args[0]
+    assert "Upper Deck Planters" in kwargs["title"]
+
+
+async def test_good_battery_is_silent(engine: AlertEngine, db: WaterTrackingDB) -> None:
+    _seed_valve_row(db, connected=True, updated_at=datetime.now(), battery="GOOD")
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_BATTERY)["is_active"] is False
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("status", ["UNKNOWN", None])
+async def test_unknown_battery_never_fires(
+    engine: AlertEngine, db: WaterTrackingDB, status: Optional[str]
+) -> None:
+    """UNKNOWN is the valve saying it hasn't reported in — that is the offline
+    check's job. Paging on it would fire on every BLE dropout.
+    """
+    _seed_valve_row(db, connected=True, updated_at=datetime.now(), battery=status)  # type: ignore[arg-type]
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_BATTERY)["is_active"] is False
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_an_unrecognized_status_does_not_page(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """A new firmware enum shows up in the log, not on the phone at 2am."""
+    _seed_valve_row(db, connected=True, updated_at=datetime.now(), battery="DEPLETED")
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_BATTERY)["is_active"] is False
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_valve_battery_clears_p0_on_replacement(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    now = datetime.now()
+    _seed_valve_row(db, connected=True, updated_at=now, battery="GOOD")
+    db.set_metadata(
+        "alert::battery::hose::v1::state",
+        AlertState(last_state="active", last_fired_at=now).to_json(),
+    )
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_BATTERY)["action"] == AlertAction.FIRE_CLEAR.value
+    _, kwargs = engine.pushover.send_message.call_args  # type: ignore[attr-defined]
+    assert kwargs["priority"] == 0
+
+
+async def test_valve_battery_stale_roster_row_skipped(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    """A remembered battery level reported as current would be a lie."""
+    engine.rachio_outage_stale_after_minutes = 180
+    _seed_valve_row(
+        db, connected=True, updated_at=datetime.now() - timedelta(hours=10), battery="LOW"
+    )
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    assert _entry(results, _VALVE_BATTERY)["action"] == "stale_observation"
+    engine.pushover.send_message.assert_not_called()  # type: ignore[attr-defined]
+
+
+async def test_two_same_named_valves_have_independent_battery_state(
+    engine: AlertEngine, db: WaterTrackingDB
+) -> None:
+    now = datetime.now()
+    _seed_valve_row(db, connected=True, updated_at=now, valve_id="a", battery="LOW")
+    _seed_valve_row(db, connected=True, updated_at=now, valve_id="b", battery="LOW")
+    _quiet_flume(engine)
+
+    results = await engine.evaluate()
+
+    battery = [r for r in results if r.get("rule") == _VALVE_BATTERY]
+    assert len(battery) == 2
+    assert db.get_metadata("alert::battery::hose::a::state") is not None
+    assert db.get_metadata("alert::battery::hose::b::state") is not None
+
+
+async def test_rachio_idle_reports_last_zone(engine: AlertEngine, rule: AlertRule) -> None:
+    """When Rachio goes idle, the last active zone should be reported."""
+    # Cycle 1: Zone active
+    engine.rachio.get_active_zone.return_value = Zone(  # type: ignore[attr-defined]
+        id="z1", zone_number=1, name="Front Yard", enabled=True
+    )
+    engine.flume.get_usage.return_value = _readings([6.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 0  # type: ignore[attr-defined]
+
+    # Cycle 2: Rachio idle → report the zone
+    engine.rachio.get_active_zone.return_value = None  # type: ignore[attr-defined]
+    engine.flume.get_usage.return_value = _readings([6.0] * 7)  # type: ignore[attr-defined]
+    await engine.evaluate()
+    assert engine.pushover.send_message.call_count == 1  # type: ignore[attr-defined]
+    assert "Front Yard" in engine.pushover.send_message.call_args[0][0]  # type: ignore[attr-defined]

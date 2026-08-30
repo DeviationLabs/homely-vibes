@@ -1,0 +1,618 @@
+#!/usr/bin/env python3
+"""Tests for August smart lock client module."""
+
+import pytest
+from pathlib import Path
+from typing import Generator
+from unittest.mock import Mock, MagicMock, patch, AsyncMock
+from yalexs.lock import LockStatus, LockDoorStatus
+from lib.MyPushover import Pushover
+from August.august_client import (
+    AugustClient,
+    AugustMonitor,
+    LockState,
+    apply_working_api_key,
+    load_cached_install_id,
+)
+
+
+class TestLockState:
+    """Test LockState dataclass"""
+
+    def test_lock_state_creation(self) -> None:
+        """Test creating a LockState object"""
+        lock_state = LockState(
+            lock_id="abc123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.LOCKED,
+            battery_level=85.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        assert lock_state.lock_id == "abc123"
+        assert lock_state.lock_name == "Front Door"
+        assert lock_state.timestamp == 1234567890.0
+        assert lock_state.lock_status == LockStatus.LOCKED
+        assert lock_state.battery_level == 85.0
+        assert lock_state.door_state == LockDoorStatus.CLOSED
+
+
+class TestAugustClient:
+    """Test AugustClient functionality"""
+
+    @pytest.fixture
+    def client(self) -> AugustClient:
+        # Inject a fake Pushover — AugustClient.__init__ has an optional
+        # pushover= kwarg for exactly this. Tests that hit auth error paths
+        # (REQUIRES_VALIDATION / unknown state / exception) would otherwise
+        # push real notifications to the maintainer's phone via the production token.
+        return AugustClient(
+            "test@example.com",
+            "password123",
+            "+1234567890",
+            pushover=MagicMock(spec=Pushover),
+        )
+
+    def test_init(self, client: AugustClient) -> None:
+        """Test AugustClient initialization"""
+        assert client.email == "test@example.com"
+        assert client.password == "password123"
+        assert client.phone == "+1234567890"
+        assert client.session is None
+        assert client.api is None
+        assert client.authenticator is None
+        assert client.access_token is None
+        assert client.locks == {}
+
+    @pytest.mark.asyncio
+    async def test_ensure_session(self, client: AugustClient) -> None:
+        """Test session initialization"""
+        # Mock config
+        mock_config = MagicMock()
+        mock_config.august.token_file = "/tmp/august_auth_token.json"
+
+        with (
+            patch("August.august_client.aiohttp.ClientSession") as mock_session,
+            patch("August.august_client.ApiAsync") as mock_api,
+            patch("August.august_client.AuthenticatorAsync") as mock_auth,
+            patch("August.august_client.load_cached_install_id", return_value="cached-install-id"),
+            patch("August.august_client.get_config", return_value=mock_config),
+        ):
+            mock_session_instance = Mock()
+            mock_session.return_value = mock_session_instance
+            mock_auth_instance = AsyncMock()
+            mock_auth.return_value = mock_auth_instance
+
+            await client._ensure_session()
+
+            assert client.session == mock_session_instance
+            from yalexs.const import Brand
+
+            assert mock_api.call_count == 2
+            mock_api.assert_any_call(mock_session_instance, brand=Brand.AUGUST)
+            mock_api.assert_any_call(mock_session_instance, brand=Brand.YALE_AUGUST)
+            # The cached install_id is fed back through the constructor so
+            # re-auth after token expiry does not force 2FA.
+            mock_auth.assert_called_once()
+            assert mock_auth.call_args.kwargs["install_id"] == "cached-install-id"
+
+    @pytest.mark.asyncio
+    async def test_close_session(self, client: AugustClient) -> None:
+        """Test closing client session"""
+        mock_session = AsyncMock()
+        client.session = mock_session
+
+        await client.close()
+
+        mock_session.close.assert_called_once()
+        assert client.api is None
+        assert client.authenticator is None
+        assert client.session is None
+
+    @pytest.mark.asyncio
+    async def test_authenticate_success(self, client: AugustClient) -> None:
+        """Test successful authentication"""
+        mock_auth_result = Mock()
+        mock_auth_result.state = "AUTHENTICATED"
+        mock_auth_result.access_token = "token123"
+
+        with (
+            patch.object(client, "_ensure_session"),
+            patch("August.august_client.AuthenticationState") as mock_auth_state,
+        ):
+            mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
+            client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=False)
+            client.authenticator.async_authenticate.return_value = mock_auth_result
+
+            result = await client.authenticate()
+
+            assert result is True
+            assert client.access_token == "token123"
+
+    @pytest.mark.asyncio
+    async def test_authenticate_renews_proactively_when_in_renewal_window(
+        self, client: AugustClient
+    ) -> None:
+        """When the token is inside the renewal window, force a re-auth."""
+        mock_auth_result = Mock()
+        mock_auth_result.state = "AUTHENTICATED"
+        mock_auth_result.access_token = "fresh-token"
+
+        with (
+            patch.object(client, "_ensure_session"),
+            patch("August.august_client.AuthenticationState") as mock_auth_state,
+            patch("August.august_client.Authentication") as mock_auth_cls,
+        ):
+            mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
+            mock_auth_state.REQUIRES_AUTHENTICATION = "REQUIRES_AUTHENTICATION"
+            client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=True)
+            client.authenticator._authentication.install_id = "known-install-id"
+            client.authenticator.async_authenticate.return_value = mock_auth_result
+
+            result = await client.authenticate()
+
+            assert result is True
+            assert client.access_token == "fresh-token"
+            # State was reset to REQUIRES_AUTHENTICATION keeping the install_id
+            # so async_authenticate performs a password re-auth instead of
+            # returning the cached (soon-to-expire) token.
+            mock_auth_cls.assert_called_once_with(
+                mock_auth_state.REQUIRES_AUTHENTICATION,
+                install_id="known-install-id",
+            )
+            client.authenticator.async_authenticate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_authenticate_skips_renewal_when_token_fresh(self, client: AugustClient) -> None:
+        """When the token is well outside the renewal window, do not re-auth."""
+        mock_auth_result = Mock()
+        mock_auth_result.state = "AUTHENTICATED"
+        mock_auth_result.access_token = "token123"
+
+        with (
+            patch.object(client, "_ensure_session"),
+            patch("August.august_client.AuthenticationState") as mock_auth_state,
+            patch("August.august_client.Authentication") as mock_auth_cls,
+        ):
+            mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
+            client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=False)
+            client.authenticator.async_authenticate.return_value = mock_auth_result
+
+            result = await client.authenticate()
+
+            assert result is True
+            # No forced state reset.
+            mock_auth_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_authenticate_requires_validation(self, client: AugustClient) -> None:
+        """Test authentication requiring 2FA"""
+        mock_auth_result = Mock()
+        mock_auth_result.state = "REQUIRES_VALIDATION"
+
+        with (
+            patch.object(client, "_ensure_session"),
+            patch("August.august_client.AuthenticationState") as mock_auth_state,
+        ):
+            mock_auth_state.AUTHENTICATED = "AUTHENTICATED"
+            mock_auth_state.REQUIRES_VALIDATION = "REQUIRES_VALIDATION"
+            client.authenticator = AsyncMock()
+            client.authenticator.should_refresh = Mock(return_value=False)
+            client.authenticator.async_authenticate.return_value = mock_auth_result
+
+            result = await client.authenticate()
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_lock_status(self, client: AugustClient) -> None:
+        """Test getting lock status"""
+        mock_lock_detail = Mock()
+        mock_lock_detail.device_name = "Front Door"
+        mock_lock_detail.serial_number = "SN123456"
+        mock_lock_detail.battery_level = 75.0
+        mock_lock_detail.door_state = LockDoorStatus.CLOSED
+        mock_lock_detail.lock_status = LockStatus.LOCKED
+
+        with patch.object(client, "_ensure_session"):
+            client.api = AsyncMock()
+            client.access_token = "token123"
+            client.api.async_get_lock_detail.return_value = mock_lock_detail
+
+            result = await client.get_lock_status("lock123")
+
+            assert result is not None
+            assert result.lock_id == "lock123"
+            assert result.lock_name == "Front Door"
+            assert result.battery_level == 75.0
+            assert result.door_state == LockDoorStatus.CLOSED
+            assert result.lock_status == LockStatus.LOCKED
+
+    @pytest.mark.asyncio
+    async def test_get_all_lock_statuses(self, client: AugustClient) -> None:
+        """Test getting all lock statuses"""
+        mock_lock = Mock()
+        mock_lock.device_id = "lock123"
+        client.locks = {"lock123": mock_lock}
+
+        with patch.object(client, "get_lock_status") as mock_get_status:
+            mock_lock_state = LockState(
+                lock_id="lock123",
+                lock_name="Front Door",
+                timestamp=1234567890.0,
+                lock_status=LockStatus.LOCKED,
+                battery_level=75.0,
+                door_state=LockDoorStatus.CLOSED,
+            )
+            mock_get_status.return_value = mock_lock_state
+
+            result = await client.get_all_lock_statuses()
+
+            assert "lock123" in result
+            assert result["lock123"] == mock_lock_state
+
+
+class TestAugustMonitor:
+    """Test AugustMonitor functionality"""
+
+    @pytest.fixture
+    def monitor(self, tmp_path: Path) -> AugustMonitor:
+        # DI: pass fakes directly. No patch() on production symbols. The
+        # AugustClient is a bare Mock (we exercise Monitor behavior; the
+        # client is only touched by tests that reassign monitor.client).
+        return AugustMonitor(
+            "test@example.com",
+            "password123",
+            client=MagicMock(spec=AugustClient),
+            pushover=MagicMock(spec=Pushover),
+            state_file=str(tmp_path / "august_monitor_state.json"),
+        )
+
+    def test_init(self, monitor: AugustMonitor) -> None:
+        """Test AugustMonitor initialization"""
+        assert monitor.unlock_threshold == 5 * 60  # 5 minutes in seconds
+        assert monitor.ajar_threshold == 10 * 60  # 10 minutes in seconds
+        assert monitor.battery_threshold_pct == 20
+        assert monitor.unlock_start_times == {}
+        assert monitor.ajar_start_times == {}
+
+    def test_load_state_no_file(self, monitor: AugustMonitor) -> None:
+        """Test loading state when no file exists"""
+        # State should initialize as empty dicts
+        assert monitor.unlock_start_times == {}
+        assert monitor.ajar_start_times == {}
+        assert monitor.last_unlock_alerts == {}
+        assert monitor.last_ajar_alerts == {}
+
+    def test_load_state_with_file(self, tmp_path: Path) -> None:
+        """State file is read on construction."""
+        state_file = tmp_path / "state.json"
+        state_file.write_text(
+            '{"unlock_start_times": {"lock1": 1234567890.0}, '
+            '"ajar_start_times": {"lock2": 1234567900.0}, '
+            '"last_unlock_alerts": {"lock1": 1234567800.0}, '
+            '"last_ajar_alerts": {"lock2": 1234567850.0}, '
+            '"last_battery_alerts": {}, '
+            '"last_lock_failure_alerts": {}}'
+        )
+        monitor = AugustMonitor(
+            "test@example.com",
+            "password123",
+            client=MagicMock(spec=AugustClient),
+            pushover=MagicMock(spec=Pushover),
+            state_file=str(state_file),
+        )
+        assert monitor.unlock_start_times == {"lock1": 1234567890.0}
+        assert monitor.ajar_start_times == {"lock2": 1234567900.0}
+        assert monitor.last_unlock_alerts == {"lock1": 1234567800.0}
+        assert monitor.last_ajar_alerts == {"lock2": 1234567850.0}
+
+    @pytest.mark.asyncio
+    async def test_process_lock_status_locked(self, monitor: AugustMonitor) -> None:
+        """Test processing lock status when lock becomes locked"""
+        lock_state = LockState(
+            lock_id="lock123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.LOCKED,
+            battery_level=75.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        # Simulate lock was previously unlocked
+        monitor.unlock_start_times["lock123"] = 1234567800.0  # 90 seconds ago
+
+        with patch.object(monitor.pushover, "send_message") as mock_send:
+            await monitor._process_lock_status("lock123", lock_state, 1234567890.0)
+
+            # Should have removed from unlock_start_times and sent notification
+            assert "lock123" not in monitor.unlock_start_times
+            mock_send.assert_called_once()
+            # Check the message contains expected content
+            call_args = mock_send.call_args
+            assert "Front Door" in call_args[0][0]
+            assert "secured" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_process_lock_status_door_closed(self, monitor: AugustMonitor) -> None:
+        """Test processing lock status when door becomes closed"""
+        lock_state = LockState(
+            lock_id="lock123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.LOCKED,
+            battery_level=75.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        # Simulate door was previously ajar
+        monitor.ajar_start_times["lock123"] = 1234567800.0  # 90 seconds ago
+
+        with patch.object(monitor.pushover, "send_message") as mock_send:
+            await monitor._process_lock_status("lock123", lock_state, 1234567890.0)
+
+            # Should have removed from ajar_start_times and sent notification
+            assert "lock123" not in monitor.ajar_start_times
+            mock_send.assert_called_once()
+            # Check the message contains expected content
+            call_args = mock_send.call_args
+            assert "Front Door" in call_args[0][0]
+            assert "closed" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_check_battery_level_low(self, monitor: AugustMonitor) -> None:
+        """Test battery level check with low battery"""
+        lock_state = LockState(
+            lock_id="lock123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.LOCKED,
+            battery_level=15.0,  # Below threshold of 20%
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        with patch.object(monitor.pushover, "send_message") as mock_send:
+            await monitor._check_battery_level("lock123", lock_state, 1234567890.0)
+
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert "battery is low" in call_args[0][0].lower()
+            assert "15.0%" in call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_check_battery_level_good(self, monitor: AugustMonitor) -> None:
+        """Test battery level check with good battery"""
+        lock_state = LockState(
+            lock_id="lock123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.LOCKED,
+            battery_level=85.0,  # Above threshold
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        with patch.object(monitor.pushover, "send_message") as mock_send:
+            await monitor._check_battery_level("lock123", lock_state, 1234567890.0)
+
+            # Should not send notification for good battery
+            mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_initial(self, monitor: AugustMonitor) -> None:
+        """Test initial handling of unknown status."""
+        status = LockState(
+            lock_id="lock123",
+            lock_name="Front Door",
+            timestamp=1234567890.0,
+            lock_status=LockStatus.UNKNOWN,
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        await monitor._handle_unknown_status("lock123", status, 1234567890.0)
+
+        # Should start tracking unknown status
+        assert "lock123" in monitor.unknown_status_start_times
+        assert monitor.unknown_status_start_times["lock123"] == 1234567890.0
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_recovery_sequence(self, monitor: AugustMonitor) -> None:
+        """Test unknown status recovery after 30+ minutes."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (31 * 60)  # 31 minutes later
+
+        # Pre-populate unknown status start time
+        monitor.unknown_status_start_times[lock_id] = start_time
+
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.UNKNOWN,
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        with (
+            patch.object(
+                monitor.client, "lock_lock", new=AsyncMock(return_value=True)
+            ) as mock_lock,
+            patch.object(monitor.pushover, "send_message") as mock_pushover,
+            patch("asyncio.sleep"),
+        ):
+            await monitor._handle_unknown_status(lock_id, status, current_time)
+
+            # Should attempt recovery by sending lock command
+            mock_lock.assert_called_once_with(lock_id)
+            mock_pushover.assert_called_once()
+            # Tracking should be cleared after recovery attempt
+            assert lock_id not in monitor.unknown_status_start_times
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_resolved_after_recovery(
+        self, monitor: AugustMonitor
+    ) -> None:
+        """Test state reset after status resolves following recovery attempt."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (35 * 60)  # 35 minutes later
+
+        # Pre-populate state as if recovery was attempted
+        monitor.unknown_status_start_times[lock_id] = start_time
+
+        # Status is now resolved as LOCKED
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.LOCKED,  # Now resolved
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        await monitor._handle_unknown_status(lock_id, status, current_time)
+
+        # Should clear tracking state since status is resolved
+        assert lock_id not in monitor.unknown_status_start_times
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_resolved_no_recovery(self, monitor: AugustMonitor) -> None:
+        """Test state reset when status resolves before recovery attempt."""
+        lock_id = "lock123"
+        start_time = 1234567890.0
+        current_time = start_time + (10 * 60)  # 10 minutes later (< 30 min threshold)
+
+        # Pre-populate state as unknown but no recovery attempted yet
+        monitor.unknown_status_start_times[lock_id] = start_time
+
+        # Status is now resolved
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.LOCKED,  # Now resolved
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        await monitor._handle_unknown_status(lock_id, status, current_time)
+
+        # Should clear tracking state since status is resolved
+        assert lock_id not in monitor.unknown_status_start_times
+
+    @pytest.mark.asyncio
+    async def test_handle_unknown_status_no_duplicate_recovery(
+        self, monitor: AugustMonitor
+    ) -> None:
+        """Test that after recovery attempt, tracking restarts fresh."""
+        lock_id = "lock123"
+        current_time = 1234567890.0
+
+        # Don't pre-populate unknown_status_start_times to simulate that recovery was already attempted
+        # (it gets cleared after recovery attempt)
+
+        status = LockState(
+            lock_id=lock_id,
+            lock_name="Front Door",
+            timestamp=current_time,
+            lock_status=LockStatus.UNKNOWN,  # Still unknown
+            battery_level=50.0,
+            door_state=LockDoorStatus.CLOSED,
+        )
+
+        with (
+            patch.object(monitor.client, "lock_lock", new=AsyncMock()) as mock_lock,
+            patch.object(monitor.pushover, "send_message") as mock_pushover,
+        ):
+            await monitor._handle_unknown_status(lock_id, status, current_time)
+
+            # Should start fresh tracking (not attempt recovery yet since it just started tracking again)
+            mock_lock.assert_not_called()
+            mock_pushover.assert_not_called()
+            # Should have started tracking again
+            assert lock_id in monitor.unknown_status_start_times
+
+
+class TestLoadCachedInstallId:
+    """Test reading the persisted install_id from the token cache."""
+
+    def test_returns_install_id_when_present(self, tmp_path: Path) -> None:
+        cache = tmp_path / "token.json"
+        cache.write_text('{"install_id": "abc-123", "access_token": "x"}')
+
+        assert load_cached_install_id(str(cache)) == "abc-123"
+
+    def test_returns_none_when_file_missing(self, tmp_path: Path) -> None:
+        assert load_cached_install_id(str(tmp_path / "nope.json")) is None
+
+    def test_returns_none_when_invalid_json(self, tmp_path: Path) -> None:
+        cache = tmp_path / "token.json"
+        cache.write_text("not json")
+
+        assert load_cached_install_id(str(cache)) is None
+
+    def test_returns_none_when_no_install_id_key(self, tmp_path: Path) -> None:
+        cache = tmp_path / "token.json"
+        cache.write_text('{"access_token": "x"}')
+
+        assert load_cached_install_id(str(cache)) is None
+
+
+class TestApplyWorkingApiKey:
+    """Test the August API key fallback helper."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_brand_config(self) -> Generator[None, None, None]:
+        """Restore the real BRAND_CONFIG[Brand.AUGUST].api_key after each test."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        original = BRAND_CONFIG[Brand.AUGUST].api_key
+        yield
+        BRAND_CONFIG[Brand.AUGUST].api_key = original
+
+    def test_applies_fallback_when_revoked_key_present(self) -> None:
+        """When yalexs ships the known-revoked key, fall back to the legacy key."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        # Ensure the global starts at the revoked value (yalexs 9.0.1 ships it).
+        BRAND_CONFIG[Brand.AUGUST].api_key = "d9984f29-07a6-816e-e1c9-44ec9d1be431"
+
+        applied = apply_working_api_key()
+
+        assert applied is True
+        assert BRAND_CONFIG[Brand.AUGUST].api_key == "7cab4bbd-2693-4fc1-b99b-dec0fb20f9d4"
+
+    def test_does_not_clobber_unknown_key(self) -> None:
+        """If yalexs shipped a different (fixed) key, do not override it."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        fixed_key = "11111111-2222-3333-4444-555555555555"
+        BRAND_CONFIG[Brand.AUGUST].api_key = fixed_key
+
+        applied = apply_working_api_key()
+
+        assert applied is False
+        assert BRAND_CONFIG[Brand.AUGUST].api_key == fixed_key
+
+    def test_logs_warning_when_fallback_applied(self) -> None:
+        """A warning is logged when the fallback is applied."""
+        from yalexs.const import BRAND_CONFIG, Brand
+
+        BRAND_CONFIG[Brand.AUGUST].api_key = "d9984f29-07a6-816e-e1c9-44ec9d1be431"
+        logger = MagicMock()
+
+        apply_working_api_key(logger)
+
+        logger.warning.assert_called_once()
+        args = logger.warning.call_args.args
+        assert "d9984f29-07a6-816e-e1c9-44ec9d1be431" in args[1]
+        assert "7cab4bbd-2693-4fc1-b99b-dec0fb20f9d4" in args[2]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

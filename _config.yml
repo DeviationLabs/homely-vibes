@@ -1,0 +1,80 @@
+title: "Homely Vibes"
+description: "🏠 Smart IoT Home Automation & Monitoring System with ML-powered Analytics"
+url: "https://homely-vibes.deviationlabs.com"
+baseurl: ""
+
+# GitHub integration - ensure assets load from GitHub Pages
+github:
+  repository_url: "https://github.com/abutala/homely-vibes"
+  repository_name: "homely-vibes"
+  owner_name: "abutala"
+  owner_url: "https://github.com/abutala"
+  is_project_page: true
+
+# SEO and social
+author: "Amit Butala"
+twitter:
+  username: abutala
+social:
+  name: "Amit Butala"
+  links:
+    - "https://github.com/abutala"
+
+# Page metadata
+lang: en
+timezone: America/Los_Angeles
+
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+- jekyll-remote-theme
+- jekyll-seo-tag
+- jekyll-readme-index
+
+# Enable HTML in markdown for better styling
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+# Exclude directories that contain application code, not website content.
+#
+# This list must name EVERY tracked top-level dir except the website's own
+# (_layouts/, assets/). Anything omitted is not merely "still in the repo" —
+# Jekyll renders it at the site root and search engines index it. The list
+# silently drifted once when new modules landed, so when you add a top-level
+# module, add it here in the same commit. Verify with:
+#
+#   comm -23 <(git ls-files | grep / | cut -d/ -f1 | sort -u) \
+#            <(sed -n '/^exclude:/,$p' _config.yml | grep -oE '^- [^ ]+/' \
+#              | sed 's/^- //; s|/$||' | sort -u)
+#
+# Anything that prints (other than _layouts and assets) is unexcluded.
+exclude:
+- .github/
+- AppleNotesBackup/
+- August/
+- BimpopAI/
+- BrowserAlert/
+- ClaudeUsageBar/
+- config/
+- GarageCheck/
+- GPXParser/
+- lib/
+- NetworkCheck/
+- NodeCheck/
+- NoShorts/
+- PersonalCalSync/
+- RachioFlume/
+- Rheem/
+- RingBeams/
+- RingSecurity/
+- SamsungFrame/
+- scripts/
+- Tesla/
+- VoiceNotes/
+- VSCodeSidebarNotes/
+- backups/  # gitignored on disk; keep here as belt-and-suspenders vs. any accidental commit
+- Makefile
+- pyproject.toml
+- uv.lock
+- .python-version

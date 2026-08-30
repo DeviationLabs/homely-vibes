@@ -1,0 +1,50 @@
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 8px;
+  gap: 8px;
+}
+
+#status {
+  font-size: 11px;
+  color: #888888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+#editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  padding: 8px;
+  box-sizing: border-box;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  background: #ffffff;
+  color: #1a1a1a;
+  resize: none;
+  outline: none;
+}
+
+#editor:focus {
+  border-color: #aaaaaa;
+}

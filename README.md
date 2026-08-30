@@ -1,0 +1,99 @@
+# Homely Vibes - IoT Home Automation
+
+A comprehensive home automation and monitoring system with Python-based IoT integrations, ML-powered analytics, and smart device management.
+
+<div class="btn-group">
+  <a href="https://github.com/DeviationLabs/homely-vibes" class="btn-custom btn-secondary" title="View source code and contribute on GitHub">💻 View on GitHub</a>
+</div>
+
+## Quick Start
+
+### Prerequisites
+- Python 3.13+
+- [uv](https://docs.astral.sh/uv/) - Fast Python package manager
+- [pre-commit](https://pre-commit.com/) - Git hooks for code quality
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/DeviationLabs/homely-vibes.git
+cd homely-vibes
+
+# Setup development environment (installs dependencies and git hooks)
+make setup
+
+# Or manual setup:
+uv sync --extra dev
+pre-commit install
+```
+
+### Development
+
+```bash
+# Run all tests
+make test
+make lint           # Check code quality
+
+# Code formatting and linting
+make lint-fix        # Fix all linting issues
+
+# Run specific services (see individual folder READMEs for details)
+uv run python Tesla/manage_power_clean.py
+uv run python RachioFlume/rfmanager.py
+```
+
+## Configuration & Secrets
+
+All sensitive data (API keys, passwords, tokens, device IPs) must be stored in `config/local.yaml`, which is **gitignored** and never committed to the repository.
+
+### Setup
+
+1. Copy the template and fill in your values:
+   ```bash
+   cp config/local.yaml.example config/local.yaml
+   # Edit config/local.yaml with your actual credentials and device IPs
+   ```
+
+2. The `config/default.yaml` file contains safe placeholder values and is committed to git.
+
+3. **Never hardcode secrets or device IPs in source code or tests.** Always read from config:
+   ```python
+   from lib.config import get_config
+   cfg = get_config()
+   api_key = cfg.rachio.api_key  # ✅ Good
+   # api_key = "abc123..."        # ❌ Never do this
+   ```
+
+### What goes in local.yaml
+
+- API credentials (Rachio, Flume, Tesla, August, etc.)
+- Device IP addresses
+- Email/SMTP passwords
+- Pushover tokens
+- Any other sensitive data
+
+See `config/default.yaml` for the full structure and `config/local.yaml.example` for a template.
+
+## Project Components
+
+| Component | Description | Documentation |
+|:----------|:------------|:-------------:|
+| 🔐 **August** | August Smart Lock monitoring with automated unlock alerts and pushover notifications for home security. | [📖 README](August/README.md) |
+| 🤖 **BimpopAI** | RAG (Retrieval Augmented Generation) system with AI voice assistant, indexing, and Streamlit frontend. A startup concept for business intelligence in Mom-n-Pop stores. | [📖 README](BimpopAI/README.md) |
+| 🌐 **BrowserAlert** | Web usage monitoring and alerting system for tracking browsing activity and digital wellness. | [📖 README](BrowserAlert/README.md) |
+| 🚗 **GarageCheck** | Machine learning-based garage door status detection using image classification and computer vision. | [📖 README](GarageCheck/README.md) |
+| 🗺️ **GPXParser** | GPX track analysis and processing tools for GPS data visualization and route analysis. | [📖 README](GPXParser/README.md) |
+| 🛠️ **lib** | Shared utilities: OmegaConf config, Pushover / Mailer / Twilio, atomic secret I/O, POSIX file lock. Used by every module. | - |
+| 🌐 **NetworkCheck** | Network uplink speedtest with outcome-driven Pushover priority and external IP reporter. | [📖 README](NetworkCheck/README.md) |
+| 🖥️ **NodeCheck** | System node monitoring with continuous heartbeat tracking and automated device management. | [📖 README](NodeCheck/README.md) |
+| 📵 **NoShorts** | iOS app that wraps YouTube and strips all Shorts content via JS injection — clean YouTube without vertical video. | [📖 README](NoShorts/README.md) |
+| 📅 **PersonalCalSync** | Google Apps Script that syncs personal calendar events to enterprise calendar as private busy-blockers, preserving real event titles visible only to you. | [📖 README](PersonalCalSync/README.md) |
+| 💧 **RachioFlume** | Water usage tracking integration between Rachio irrigation systems and Flume water monitoring. | [📖 README](RachioFlume/README.md) |
+| 🚿 **Rheem** | Rheem/EcoNet water heater monitor — P2 when the tank is empty, P1 at 1/3rd full, silent clear at 2/3rds. Cron run-once via the unofficial pyeconet (ClearBlade) API. | [📖 README](Rheem/README.md) |
+| 🚨 **RingBeams** | Ring Beams motion sensors + Ring Alarm contact/motion sensors, via Node.js sidecar over socket.io (ring-client-api). P1 battery, P0 tamper. | [📖 README](RingBeams/README.md) |
+| 📸 **RingSecurity** | Ring cameras + doorbells daily health check via REST — P1 low-battery, P0 offline. | [📖 README](RingSecurity/README.md) |
+| 🖼️ **SamsungFrame** | Samsung Frame TV art manager with batch upload, HEIC conversion, and slideshow control. | [📖 README](SamsungFrame/README.md) |
+| ⚡ **Tesla** | Tesla Powerwall monitoring and intelligent power management automation for home energy optimization. | [📖 README](Tesla/README.md) |
+| 🎙️ **VoiceNotes** | Wispr Flow-style local push-to-talk voice transcription on macOS. Hold ⌥-right, speak, release — text streams to Markdown via whisper.cpp + Metal. No cloud. | [📖 README](VoiceNotes/README.md) |
+| 🗒️ **VSCodeSidebarNotes** | VS Code / Cursor extension: markdown sidebar that persists across restarts and is writable by Claude for live session summaries. | [📖 README](VSCodeSidebarNotes/README.md) |

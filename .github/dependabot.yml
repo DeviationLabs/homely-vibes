@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      # semgrep exact-pins mcp (==1.29.0 as of semgrep 1.174.0), so mcp has no
+      # independent degree of freedom. Bumping it alone is only satisfiable by
+      # downgrading semgrep, which drags protobuf/opentelemetry back and breaks
+      # CI. mcp moves when semgrep moves. See PR #241, #249.
+      - dependency-name: "mcp"

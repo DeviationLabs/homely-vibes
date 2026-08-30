@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+from typing import List, TYPE_CHECKING
+import argparse
+import sys
+import time
+from lib.config import get_config
+from lib.logger import SystemLogger
+from lib import Mailer
+from lib.MyPushover import Pushover
+from NodeCheck.nodes import GenericNode, FoscamNode, WindowsNode
+
+if TYPE_CHECKING:
+    pass
+
+cfg = get_config()
+logger = SystemLogger.get_logger(__name__)
+pushover = Pushover(cfg.pushover.user, cfg.pushover.tokens["NodeCheck"])
+
+
+class NodeChecker:
+    def __init__(self, mode: str):
+        cfg = get_config()
+        self.mode = mode
+        self.nodes: List[GenericNode] = []
+        self.messages: List[str] = []
+        self.reboot_failures: List[str] = []
+        self.recovery_failures: List[str] = []
+
+        # Create nodes based on mode
+        for name, config in cfg.node_check.node_configs.items():
+            if mode == "foscam" and config.node_type == "foscam":
+                self.nodes.append(FoscamNode(name, config))
+            elif mode == "windows" and config.node_type == "windows":
+                self.nodes.append(WindowsNode(name, config))
+
+    def log_message(self, msg: str) -> None:
+        """Log message and add to report"""
+        logger.info(msg)
+        self.messages.append(msg)
+
+    def check_connectivity(self) -> bool:
+        """Check connectivity of all nodes"""
+        self.log_message("Checking connectivity...")
+        all_healthy = True
+
+        for node in self.nodes:
+            if node.heartbeat():
+                self.log_message(f"   {self.mode}: {node.name} online.")
+            else:
+                self.log_message(f">> ERROR {self.mode}: {node.name} offline.")
+                all_healthy = False
+
+        return all_healthy
+
+    def reboot_nodes(self) -> bool:
+        """Reboot all nodes and verify they come back online"""
+        self.log_message("Rebooting now...")
+
+        # Reboot all nodes
+        for node in self.nodes:
+            if isinstance(node, WindowsNode):
+                # Do deep check before rebooting Windows nodes
+                node.heartbeat()
+            result = node.reboot_node()
+            logger.debug(result)
+
+        # Wait for nodes to go down
+        self.log_message("Waiting for nodes to go down...")
+        for node in self.nodes:
+            if node.check_state(desired_up=False, attempts=180):
+                self.log_message(f"   Confirmed node is down: {node.name}")
+            else:
+                self.log_message(f">> ERROR: Oops! Node did not reboot: {node.name}")
+                self.reboot_failures.append(node.name)
+
+        # Wait for nodes to come back up and pass the full (deep) heartbeat.
+        # Ping responds before SSH/services on a fresh Windows boot, so a ping-only
+        # recovery check followed by a deep connectivity check produces a false
+        # "offline" seconds after a successful reboot. Retry the deep heartbeat
+        # (ping + service-level probe) with backoff instead.
+        self.log_message("Waiting for nodes to recover...")
+        time.sleep(60)  # initial stabilization before probing
+        all_recovered = True
+        for node in self.nodes:
+            if self._wait_for_heartbeat(node, attempts=12, delay=15):
+                self.log_message(f"   {self.mode}: {node.name} back online.")
+            else:
+                self.log_message(f">> ERROR: {self.mode}: {node.name} failed online.")
+                self.recovery_failures.append(node.name)
+                all_recovered = False
+
+        return all_recovered
+
+    def _wait_for_heartbeat(self, node: GenericNode, attempts: int, delay: int) -> bool:
+        """Retry the deep heartbeat until it passes or attempts are exhausted."""
+        for attempt in range(attempts):
+            if node.heartbeat():
+                return True
+            if attempt < attempts - 1:
+                logger.debug(
+                    f"{node.name} heartbeat attempt {attempt + 1}/{attempts} failed; "
+                    f"retrying in {delay}s"
+                )
+                time.sleep(delay)
+        return False
+
+    def generate_report(
+        self, is_healthy: bool, always_email: bool = False, was_rebooted: bool = False
+    ) -> None:
+        """Generate and send final report"""
+        if not is_healthy:
+            self.log_message(">> ERROR: Node check failed!")
+            failed_nodes = [node.name for node in self.nodes if not node.is_online]
+            pushover.send_message(
+                f"{self.mode.title()} Node check failed for {', '.join(failed_nodes)}",
+                title="Node Check",
+                priority=2,
+            )
+        else:
+            self.log_message("All is well")
+            if was_rebooted:
+                pushover.send_message(
+                    f"{self.mode.title()} node reboot completed successfully",
+                    title=f"{self.mode.title()} Reboot Complete",
+                    priority=-2,
+                )
+
+        if self.reboot_failures:
+            pushover.send_message(
+                f"{self.mode.title()} nodes failed to reboot: {', '.join(self.reboot_failures)}",
+                title="Node Reboot Failed",
+                priority=1,
+            )
+        if self.recovery_failures:
+            pushover.send_message(
+                f"{self.mode.title()} nodes failed to recover: {', '.join(self.recovery_failures)}",
+                title="Node Recovery Failed",
+                priority=1,
+            )
+
+        Mailer.sendmail(
+            topic=f"[NodeCheck-{self.mode}]",
+            alert=not is_healthy,
+            message="\n".join(self.messages),
+            always_email=always_email,
+        )
+
+
+#### Main Routine ####
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Reboot Utility")
+    parser.add_argument(
+        "--type",
+        help="Foscams or Windows(i.e.:Alpha)",
+        choices=["foscam", "windows"],
+        default="foscam",
+    )
+    parser.add_argument(
+        "--reboot",
+        help="Reboot or check only",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--always_email",
+        help="Send email report",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument("-d", "--debug", action="store_true", help="set logging level to debug")
+    args = parser.parse_args()
+
+    logger.info("============")
+    logger.info("Invoked command: %s" % " ".join(sys.argv))
+
+    # Initialize node checker
+    checker = NodeChecker(args.type)
+
+    # Full connectivity check (includes heartbeat checks)
+    connectivity_ok = checker.check_connectivity()
+    system_healthy = connectivity_ok
+
+    # Reboot if requested. reboot_nodes verifies deep recovery (ping + service
+    # probe) with retries, so no separate post-reboot connectivity check is
+    # needed — that earlier check ran the deep probe too soon after boot and
+    # produced false "offline" alerts for a successful reboot.
+    if args.reboot:
+        reboot_ok = checker.reboot_nodes()
+        system_healthy = system_healthy and reboot_ok
+
+    # Generate final report
+    checker.generate_report(
+        is_healthy=system_healthy, always_email=args.always_email, was_rebooted=args.reboot
+    )
+    print("Done!")

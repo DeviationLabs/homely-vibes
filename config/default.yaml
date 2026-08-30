@@ -1,0 +1,417 @@
+# Default configuration for homely-vibes
+# Safe defaults checked into git. Override with config/local.yaml (gitignored)
+
+# === Paths and Directories ===
+paths:
+  home: ${oc.env:HOME}
+  logging_dir: ${paths.home}/logs
+
+# === Email Configuration ===
+email:
+  from_addr: user_from@gmail.com
+  to_addr: user_to@gmail.com
+  gmail_username: user_from
+  gmail_password: ""  
+
+# === Twilio SMS ===
+twilio:
+  sid: ""  
+  auth_token: ""  
+  sms_from: "+18001234567"
+
+# === Pushover Notifications ===
+pushover:
+  user: ""  
+  delivery_group: ""  
+  default_token: ""  
+  tokens:
+    August: ""
+    NetworkCheck: ""
+    NodeCheck: ""
+    Powerwall: ""
+    RachioFlume: ""
+    Ring Security: ""
+    SamsungFrame: ""
+    Rheem: ""
+    WhatsAppSummary: ""
+
+# === Node Monitoring ===
+node_check:
+  foscam:
+    username: ""  
+    password: ""  
+    foscam_dir: /mnt/IPCam_Data
+    purge_after_days: 90
+  windows:
+    username: ""  
+    password: ""  
+  # NODE_CONFIGS and NODES dicts - define in local.yaml
+  node_configs: {}
+  nodes: {}
+
+# === Water Monitoring ===
+water_monitor:
+  # Processing settings
+  max_zones: 16
+  max_new_files: 2
+  logrotate_per_day: 4
+  days_lookback: 90
+  start_from_epoch: 1539161991  # 2018-10-10-01-59-51
+
+  # Alerting thresholds
+  days_email_report: 14
+  min_drip_zone_alert_time: 1800
+  min_drip_plot_time: 189
+  min_misc_zone_alert_time: 86400
+  min_sprinkler_zone_alert_time: 600
+  alert_thresh: 1.18  # 18% higher than average
+  pump_alert: 22  # seconds
+  pump_toggles_count: 25
+
+# === Network Check ===
+network_check:
+  min_dl_bw: 150  # Mbps
+  min_ul_bw: 4    # Mbps
+
+  # Deco watchdog. Two symptoms of one sick router, one clock, one lever:
+  #   * the WAN plane wedges while the switch plane keeps working, so the Deco
+  #     stays reachable and can be rebooted over its own local admin API;
+  #   * the radios die while the wired uplink stays healthy, which no probe in
+  #     the uplink path can see.
+  # If either has held for outage_threshold_secs, reboot the mesh.
+  uplink_watchdog:
+    enabled: false
+    deco_host: "http://192.168.1.1"
+    deco_username: "admin"
+    deco_password: ""        # set in local.yaml
+    # Raw IPs on purpose: a DNS-based probe false-positives when only the
+    # Deco's DNS proxy has died, which is one of the failure modes we detect.
+    probe_targets:
+      - "1.1.1.1:443"
+      - "8.8.8.8:53"
+      - "9.9.9.9:443"
+    outage_threshold_secs: 7200   # 2h of confirmed fault before acting
+    retry_interval_secs: 7200     # wait this long between actions
+    max_actions_per_day: 0        # 0 = unlimited
+    # Verify the admin credential periodically. Only fires when the client
+    # census is off -- with it on, every healthy cycle already logs in.
+    auth_check_interval_secs: 86400
+    # Radio-plane check. The floor below which the mesh is considered to have
+    # stopped serving Wi-Fi; 0 disables. An unreadable census counts as zero
+    # (fail closed) so a permanently broken census cannot silently disable
+    # this half of the watchdog. Measure your own floor first:
+    #   uv run python -m NetworkCheck.uplink_watchdog clients
+    # and set it well under the overnight minimum, not the daytime average.
+    min_wireless_clients: 0
+    # Upstream modem, rebooted first and ONLY when the internet is down (on a
+    # radio fault the uplink is by definition working). Empty host disables
+    # the stage; any failure here is non-fatal and the Deco reboot follows.
+    modem_host: ""           # e.g. "http://10.0.0.1"
+    modem_username: "admin"
+    modem_password: ""       # set in local.yaml
+    state_file: "uplink_watchdog_state.json"
+
+# === Browser Alert ===
+browser_alert:
+  refresh_delay: 30  # seconds
+  min_reporting_gap: 6  # hours
+  hr_start_monitoring: 2
+  hr_stop_monitoring: 23
+  hr_email: 19
+  blacklist:
+    - pokemon
+    - surviv
+    - charmeleon
+    - dutrigo
+    - veekun
+    - github
+    - soraapp
+    - emulator
+    - gba
+    - garfield
+    - shellshock
+    - youtube
+    - scratch
+    - clashman2.github.io
+    - .io/
+    - dragapult
+
+# === Tesla Powerwall ===
+tesla:
+  powerwall_ip: "192.168.X.Y"
+  powerwall_email: ""  
+  powerwall_password: ""  
+  powerwall_sms_rcpt: "+18001234567"
+  powerwall_poll_time: 180
+
+  tesla_email: ""
+  tesla_password: ""
+  tesla_token_file: config/tokens/tesla_tokens.json
+
+  # Fleet API (Tesla developer-portal registered app). Set in local.yaml.
+  fleet_client_id: ""
+  fleet_client_secret: ""
+  fleet_redirect_uri: "http://localhost:8585/callback"
+  fleet_public_key_domain: "deviationlabs.com"
+  fleet_region: "na"
+
+  # Powerwall decision points
+  decision_points:
+    - time_start: 0
+      time_end: 100
+      pct_gradient_per_hr: 0
+      pct_thresh: 28
+      iff_higher: false
+      pct_min: 30
+      pct_min_trail_stop: 0
+      op_mode: autonomous
+      reason: "Prep for midnight recharge.."
+      always_notify: true
+
+    - time_start: 1300
+      time_end: 1455
+      pct_gradient_per_hr: 35
+      pct_thresh: 99
+      iff_higher: false
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: autonomous
+      reason: "Solar recharge insufficient. Drawdown before shoulder.."
+      always_notify: true
+
+    - time_start: 1455
+      time_end: 1900
+      pct_gradient_per_hr: 0
+      pct_thresh: 0
+      iff_higher: true
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: self_consumption
+      reason: "In Peak. Discharge.."
+      always_notify: false
+
+    - time_start: 0
+      time_end: 1500
+      pct_gradient_per_hr: 0
+      pct_thresh: 0
+      iff_higher: true
+      pct_min: 30
+      pct_min_trail_stop: 10
+      op_mode: self_consumption
+      reason: "Nightly reserves rebuilt. Solar charge only.."
+      always_notify: false
+
+    - time_start: 1900
+      time_end: 2359
+      pct_gradient_per_hr: -8
+      pct_thresh: 20
+      iff_higher: false
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: self_consumption
+      reason: "Reserve for rest of shoulder.."
+      always_notify: false
+
+    - time_start: 1900
+      time_end: 2100
+      pct_gradient_per_hr: -35
+      pct_thresh: 40
+      iff_higher: true
+      pct_min: 20
+      pct_min_trail_stop: 0
+      op_mode: autonomous
+      reason: "Dump surplus before end of peak.."
+      always_notify: false
+
+# === August Smart Locks ===
+august:
+  email: ""  
+  password: ""  
+  phone: "+1234567890"
+  token_file: config/tokens/august_auth_token.json
+
+# === Rheem EcoNet Water Heater ===
+rheem:
+  email: ""
+  password: ""
+  poll_seconds: 300
+  # Discrete tank levels reported by EcoNet: 0/33/66/100.
+  empty_threshold: 0    # empty -> P2 emergency (retries until acked)
+  low_threshold: 33     # 1/3rd full -> P1 high (bypasses quiet hours)
+  mid_threshold: 66     # 2/3rd full -> P-1 clear, reset alert state
+
+# === Ring Devices ===
+ring:
+  username: ""
+  password: ""
+  token_file: config/tokens/ring_auth_token.json
+  battery_threshold_pct: 25
+
+# === Ring Beams / Alarm sensors (via Node sidecar) ===
+# Reuses the RingSecurity OAuth token. Same Pushover token as RingSecurity
+# ("Ring Security"). Sidecar timeout covers Node startup + socket.io handshake
+# + initial device-state burst.
+ring_beams:
+  token_file: config/tokens/ring_auth_token.json
+  battery_threshold_pct: 25
+  sidecar_timeout_seconds: 45
+
+# === Samsung Frame TV ===
+samsung_frame:
+  ip: "192.168.X.Y"
+  mac: ""  # MAC address for Wake-on-LAN (e.g. "AA:BB:CC:DD:EE:FF")
+  wol_password: ""  # SecureON password (hex, e.g. "AA:BB:CC:DD:EE:FF"), empty = disabled
+  smartthings_token: ""  # SmartThings PAT for cloud power-on fallback, empty = skip
+  smartthings_device_id: ""  # SmartThings device ID for the TV
+  port: 8002
+  token_file: config/tokens/samsung_frame_token.txt
+  default_matte: shadowbox_black
+  supported_formats:
+    - jpg
+    - jpeg
+    - png
+  max_image_size_mb: 10
+  min_size_mb: 0.75  # minimum file size to upload (750KB)
+  min_images: 100  # minimum user images to maintain on TV during purge
+  slideshow_delay_seconds: 3  # delay before starting slideshow after upload
+
+# === Rachio Irrigation ===
+# `type`: "controller"  -> api.rach.io/1/public/device/*  (Smart Sprinkler Controller)
+#         "hose_timer"  -> cloud-rest.rach.io/valve/*     (Smart Hose Timer base station)
+# Override `devices` in local.yaml with real ids/labels.
+rachio:
+  api_key: ""
+  devices: []
+
+# === Flume Water Monitoring ===
+flume:
+  client_id: ""
+  client_secret: ""
+  user_email: ""
+  password: ""
+
+# === RachioFlume Usage Alerts ===
+# Priority tiers (P{N} == Pushover priority=N):
+#   P-2  routine zone-end reports  -- silent, no banner; inbox + badge only
+#   P1   health checks             -- data outage, device offline, valve battery
+#   P2   emergencies               -- sustained-flow rules, zone anomaly,
+#                                     Flume outage (leak detection blind),
+#                                     stale zone (15d of no watering)
+# Fires re-trigger every retrigger_minutes while the condition holds, unless
+# muted; an "all clear" fires once on transition active -> clear.
+# Whole-house flow rules are suppressed entirely while a Rachio zone irrigates.
+rachio_flume:
+  alerts:
+    enabled: true
+    default_retrigger_minutes: 30   # cadence for re-firing default_flow_rules
+
+    # === Per-zone anomaly check (Rachio-sourced; fires at run end) ===
+    # threshold = avg_gpm + max(absolute_gpm, percent_above/100 * avg_gpm)
+    zone_anomaly:
+      threshold_mode: adaptive       # informational; computation is "adaptive"
+      absolute_gpm: 0.5              # min deviation above average (GPM)
+      percent_above: 10              # min deviation above average (%)
+      min_runtime_minutes: 5         # zone must run this long before anomaly fires
+      # Per-zone baseline flow rates (GPM) from historical data.
+      # Outer key = device label (matches rachio.devices[].label).
+      # Inner key = zone identifier:
+      #   - Controllers: stringified zone_number (e.g. "1")
+      #   - Hose timers: bare valve name as returned by the API (e.g.
+      #     "Upper Deck Planters"), or "<prefix> - <valve name>" (e.g.
+      #     "Z13 FS - Upper Deck Planters") — suffix after " - " must match.
+      # Value: {avg_gpm: <float>}. Display labels derive from the raw key via
+      # compact_zone_label(); no display `name:` field needed.
+      zone_thresholds: {}
+
+    # === Whole-house sustained-flow rules (Flume only; no Rachio context) ===
+    # Suppressed while any Rachio activity (controller OR hose-timer) is recent.
+    default_flow_rules:
+      - {name: "Pipe Break", min_gpm: 8.0, duration_minutes: 10}
+      - {name: "High Flow",  min_gpm: 5.4, duration_minutes: 4}
+      - {name: "Mid Flow",   min_gpm: 2.0, duration_minutes: 14}
+      - {name: "Leak",       min_gpm: 0.1, duration_minutes: 120}
+
+    # === Stale-zone monitoring ===
+    # Fire a P2 alert if any enabled controller zone or known hose-timer
+    # valve (connected or not) hasn't run within this many days.
+    # 15, not 10: at 10 this still fired on ordinary seasonal gaps, and an
+    # alert that gets routinely ignored is not an alert. The wider window is
+    # what makes P2 (emergency, retries until acked) the right level -- a
+    # zone that has missed a fortnight is a real watering failure.
+    stale_zone_days: 15
+
+    # === Hose-valve battery health ===
+    # Rachio reports batteryStatus as an enum -- GOOD / LOW / REPLACE /
+    # UNKNOWN -- with no percentage anywhere in the API:
+    # https://rachio.readme.io/reference/valveservice_getvalve
+    # P1 on LOW or REPLACE (a chore with hours of slack, per the repo's
+    # priority convention); UNKNOWN is the sensor's own shrug, not a fault,
+    # so it never fires. Re-fires on retrigger_minutes while low; P0 on
+    # recovery. Skipped when the roster observation is older than
+    # rachio_outage.stale_after_minutes -- the outage watchdog owns feed death.
+    valve_battery:
+      retrigger_minutes: 1440
+
+    # === Flume data-outage watchdog ===
+    # Healthy Flume meters report a row every minute (even at 0.0 GPM).
+    # P2 when no readings have landed for stale_after_minutes — the whole
+    # leak-detection stack is blind. Re-fires every retrigger_minutes while
+    # stale; P0 once on recovery.
+    flume_outage:
+      stale_after_minutes: 60
+      retrigger_minutes: 360
+
+    # === Rachio data-outage watchdog ===
+    # Controller and each hose base station are watched separately via their
+    # last-successful-poll timestamps (MAX(event_date) is useless — no
+    # watering ≠ outage). P1 when a feed has had no successful poll for
+    # stale_after_minutes (180 ≈ 36 failed 5-min polls, well past transient
+    # cloud blips; hose runs during an outage are unrecoverable — no history
+    # API — so don't go longer). Re-fires every retrigger_minutes; P0 on
+    # recovery.
+    rachio_outage:
+      stale_after_minutes: 180
+      retrigger_minutes: 360
+
+    # === Device-offline health check ===
+    # P1 when the controller reports status OFFLINE or a hose valve reports
+    # disconnected (dead battery / BLE out of range) for debounce_minutes
+    # straight — the debounce absorbs transient dropouts. Re-fires daily
+    # while offline; P0 once on recovery. Skipped when the underlying
+    # observation is older than rachio_outage.stale_after_minutes (the
+    # outage watchdog owns feed death).
+    device_offline:
+      debounce_minutes: 60
+      retrigger_minutes: 1440
+
+# === PersonalCalSync (Google Apps Script) ===
+personal_cal_sync:
+  script_id: ""   # Apps Script project ID — override in config/local.yaml
+
+# === VoiceNotes — local push-to-talk STT via whisper.cpp ===
+voice_notes:
+  model_id: "large-v3-turbo"              # whisper.cpp model name; auto-downloads to ~/.cache/pywhispercpp/
+  hotkey: "right_option"                  # pynput Key name (right_option = ⌥ right)
+  notes_dir: "~/bin/knowledge/notes"      # output directory; created on first run
+  sample_rate: 16000                      # Hz — required by whisper.cpp
+  channels: 1                             # mono
+  vad_aggressiveness: 2                   # webrtcvad 0 (least) – 3 (most aggressive silence detection)
+  n_threads: 4                            # CPU threads for whisper.cpp (Metal GPU used automatically)
+
+# === Prod Controller (remote DB host for integration tests) ===
+prod_controller:
+  ssh_host: ""          # e.g. "user@host"
+  db_path: ""           # e.g. "~/logs/water_tracking.db"
+
+# === AppleNotesBackup — export Apple Notes into a private git repo ===
+apple_notes_backup:
+  # Dedicated PRIVATE git repo (must be `git init`-ed already). Note content is
+  # PII — never a public repo. Override the path in config/local.yaml.
+  backup_repo_dir: "~/AppleNotesBackup"
+  git_remote: "origin"        # remote to push to after commit; "" skips push
+  git_branch: "main"          # branch to commit/push
+  osascript_timeout_seconds: 300   # Notes.app export can be slow with many notes
+
+# === Constants ===
+my_external_ip: "hoiboi.tplinkdns.com"
+seconds_in_day: 86400

@@ -1,0 +1,316 @@
+name: Fireworks PR Review (GLM 5.3 Flash)
+
+# The one display string every PR comment leads with. A model switch should
+# touch scripts/pr_review.py (MODEL) and this label, nothing else.
+env:
+  MODEL_LABEL: GLM 5.3 Flash
+
+on:
+  pull_request:
+    # `ready_for_review` lets us run when a draft PR is promoted; the
+    # `if:` on the job then gates out actual drafts.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Rapid pushes to a PR shouldn't fan out multiple reviewers — wastes
+# Fireworks tokens and races comments.
+concurrency:
+  group: agent-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Skip drafts — reviewer noise while you're still iterating is just noise.
+    if: github.event.pull_request.draft == false
+    # 64k of output at flash-tier decode speed is several minutes of generation
+    # on a worst-case diff, so 10 minutes would time out on exactly the PRs
+    # worth reviewing.
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # scripts/pr_review.py is stdlib-only but must run on the interpreter the
+      # repo targets: `ruff format` rewrites `except (A, B):` into the PEP 758
+      # unparenthesized form, which the runner's system python3 cannot parse.
+      # `--no-project` skips the dependency sync the script does not need.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Generate review with Fireworks
+        env:
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Title/body are attacker-editable text: they reach the shell ONLY as
+          # environment variables, never inline ${{ }} in run: (injection).
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # The description the diff is reviewed against: title, blank, body.
+          { printf '%s\n\n' "$PR_TITLE"; printf '%s\n' "$PR_BODY"; } > /tmp/pr_desc.txt
+
+          # Findings already posted on earlier commits of this PR, so a
+          # synchronize run does not re-flag them (PR #76 collected the same
+          # issue twice across pushes). Best-effort: an API hiccup here must
+          # not kill the review.
+          # --paginate is required: the default page size is 30, so on a
+          # long-lived PR the oldest findings drop out of the harvest and get
+          # re-flagged -- the exact duplicate-reporting this exists to stop.
+          # `--slurp` cannot be combined with `--jq`, so pages come out as
+          # concatenated arrays and `jq -s 'add'` merges them into one.
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/comments" 2>/dev/null \
+            | jq -s 'add // []
+                     | [.[] | select(.user.login == "github-actions[bot]")
+                        | {path, line: (.line // .original_line), body}]' \
+            > /tmp/prior_inline.json 2>/dev/null || printf '[]' > /tmp/prior_inline.json
+
+          # The inline-POST fallback posts findings as ISSUE comments, which
+          # /pulls/.../comments never returns — those findings were invisible
+          # to dedup (the reviewer itself caught this on PR #84). Harvest the
+          # bullet lines out of the bot's issue comments as path-less entries.
+          gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" 2>/dev/null \
+            | jq -s 'add // []
+                     | [.[] | select(.user.login == "github-actions[bot]")
+                        | .body | split("\n")[] | select(startswith("- **["))
+                        | {body: .}]' \
+            > /tmp/prior_fallback.json 2>/dev/null || printf '[]' > /tmp/prior_fallback.json
+          jq -s 'add' /tmp/prior_inline.json /tmp/prior_fallback.json > /tmp/prior.json
+
+          # Defensive: BASE_SHA may not exist locally if base branch was force-pushed.
+          # Fetch as unshallow so we don't graft a shallow root on top of the
+          # fetch-depth: 0 checkout — a shallow BASE_SHA fetch breaks merge-base
+          # resolution and made `git diff A...B` fatal with "no merge base".
+          git fetch --no-tags origin "$BASE_SHA" 2>/dev/null || true
+
+          # Diff from the MERGE BASE, not base.sha: a concurrent PR landing on
+          # main moves base.sha past this branch's fork point, and a two-SHA
+          # tree diff then shows that PR's changes in reverse as if this PR
+          # made them. On PR #84 that meant reviewing a revert this PR never
+          # touched — the inline POST failed on paths outside the real diff
+          # and the whole review fell back to one comment. Tree diff remains
+          # the fallback for histories where no merge base resolves.
+          DIFF_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)
+          if [ -z "$DIFF_BASE" ]; then
+            echo "::warning::No merge base for $BASE_SHA..$HEAD_SHA; falling back to tree diff." >&2
+            DIFF_BASE="$BASE_SHA"
+          fi
+
+          # Streaming truncation: subshell disables pipefail so git diff's
+          # SIGPIPE (when head closes after 400KB) doesn't fail the step.
+          # Avoids the old `git diff | head -c N` exit-141 bug while also
+          # capping disk use — important for PRs touching vendored dirs.
+          ( set +o pipefail; git diff "$DIFF_BASE" "$HEAD_SHA" | head -c 400000 > /tmp/diff.raw )
+
+          # Guard: if git fetch failed (force-push, network) the diff is empty
+          # and the reviewer would post a misleading "no issues" comment.
+          # The post step sees empty /tmp/review.json and posts "review skipped".
+          if [ ! -s /tmp/diff.raw ]; then
+            echo "::warning::Diff is empty — base commit may be unavailable. Skipping review." >&2
+            echo "the diff was empty — base commit \`${BASE_SHA:0:7}\` may be unavailable" > /tmp/skip_reason.txt
+            exit 0
+          fi
+
+          # `head -c N` cuts on byte boundaries; mid-multibyte cuts produce
+          # invalid UTF-8, which the JSON encoder rejects. `iconv -c` drops
+          # invalid bytes; `tr -d '\000'` drops embedded NULs. Both are
+          # defensive against binary blobs accidentally landing in a diff.
+          tr -d '\000' < /tmp/diff.raw | iconv -f utf-8 -t utf-8 -c > /tmp/diff.txt
+
+          # scripts/pr_review.py renders the diff as numbered `__new hunk__`
+          # blocks and writes the line index the validate step checks the
+          # model's answers against. See its module docstring for why.
+          uv run --python 3.13 --no-project scripts/pr_review.py payload \
+            --diff /tmp/diff.txt \
+            --index-out /tmp/index.json \
+            --description /tmp/pr_desc.txt \
+            --prior /tmp/prior.json \
+            > /tmp/payload.json
+
+          # POST with --data @file instead of -d "$PAYLOAD" so we don't blow
+          # past ARG_MAX / MAX_ARG_STRLEN (128KB per-arg on Linux) on large
+          # diffs. curl otherwise fails with "Argument list too long" (exit
+          # 126) and the required check reds out regardless of PR content.
+          HTTP_RESPONSE=$(curl -sS --max-time 900 -w "\n%{http_code}" https://api.fireworks.ai/inference/v1/chat/completions \
+            -H "Authorization: Bearer $FIREWORKS_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/payload.json)
+
+          HTTP_STATUS=$(printf '%s' "$HTTP_RESPONSE" | tail -n1)
+          BODY=$(printf '%s' "$HTTP_RESPONSE" | sed '$d')
+
+          # The reviewer fails CLOSED. Every path that does not produce a
+          # review records why in /tmp/skip_reason.txt and exits 0 so the post
+          # step still runs; that step comments the reason and then reds the
+          # check. An unreviewed PR must not be mergeable -- a green check has
+          # to mean "reviewed", never "the reviewer gave up quietly".
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::warning::Fireworks API returned HTTP $HTTP_STATUS; skipping review." >&2
+            printf '%s' "$BODY" | head -c 2000 >&2
+            API_MSG=$(printf '%s' "$BODY" | jq -r '.error.message // .message // empty' 2>/dev/null || true)
+            if [ -n "$API_MSG" ]; then
+              printf 'Fireworks returned HTTP %s: %s\n' "$HTTP_STATUS" "$API_MSG" > /tmp/skip_reason.txt
+            else
+              printf 'Fireworks returned HTTP %s\n' "$HTTP_STATUS" > /tmp/skip_reason.txt
+            fi
+            printf '%s' "$BODY" | head -c 2000 > /tmp/skip_detail.txt
+            exit 0
+          fi
+
+          # Always surface why a run produced nothing. Without finish_reason and
+          # the token counts an empty reply is undiagnosable from the log --
+          # "length" means reasoning ate the whole budget, "stop" means the
+          # model genuinely answered with nothing.
+          # Every jq read of $BODY is guarded: a 200 carrying non-JSON (proxy
+          # page, HTML error) makes jq exit non-zero, and under `set -e` that
+          # kills the step before any reason is recorded — the post step would
+          # then report a generic failure and lose the actual error.
+          FINISH=$(printf '%s' "$BODY" | jq -r '"finish_reason=\(.choices[0].finish_reason), completion_tokens=\(.usage.completion_tokens // "?")"' 2>/dev/null || true)
+          [ -n "$FINISH" ] || FINISH="finish_reason=unknown (response body was not JSON)"
+          echo "$FINISH" >&2
+
+          # Fireworks splits a reasoning model's reply: chain-of-thought lands
+          # in reasoning_content, the answer in content. If the budget ran out
+          # mid-thought, content is empty but the JSON may still be at the tail
+          # of the reasoning -- worth one salvage attempt before giving up.
+          CONTENT=$(printf '%s' "$BODY" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
+          if [ -z "$CONTENT" ]; then
+            CONTENT=$(printf '%s' "$BODY" | jq -r '.choices[0].message.reasoning_content // empty' 2>/dev/null || true)
+            if [ -n "$CONTENT" ]; then
+              echo "::warning::Empty content; salvaging from reasoning_content." >&2
+            fi
+          fi
+          if [ -z "$CONTENT" ]; then
+            echo "::warning::Empty content and empty reasoning_content from Fireworks; skipping review." >&2
+            printf 'the model returned no content (%s)\n' "$FINISH" > /tmp/skip_reason.txt
+            {
+              printf '%s\n\n' "$FINISH"
+              printf 'finish_reason=length means the thinking budget consumed max_tokens before the answer was written; lower THINKING_BUDGET_TOKENS or raise MAX_TOKENS in scripts/pr_review.py. An unknown finish_reason means the 200 response was not JSON — the raw body follows.\n\n'
+              printf '%s' "$BODY" | head -c 1500
+            } > /tmp/skip_detail.txt
+            exit 0
+          fi
+          printf '%s' "$CONTENT" > /tmp/raw_content.txt
+
+          # validate extracts the JSON object from the surrounding reasoning,
+          # then drops any issue whose path/line/snippet the diff doesn't
+          # support or whose confidence is below the threshold. Exits non-zero
+          # only when nothing parseable came back.
+          if ! uv run --python 3.13 --no-project scripts/pr_review.py validate --index /tmp/index.json \
+              < /tmp/raw_content.txt > /tmp/review.json; then
+            echo "::warning::Model output was not parseable JSON; posting no PR comment. Raw preview (first 2KB) follows." >&2
+            head -c 2000 /tmp/raw_content.txt >&2
+            echo >&2
+            printf 'the model output was not parsable JSON (%s)\n' "$FINISH" > /tmp/skip_reason.txt
+            head -c 2000 /tmp/raw_content.txt > /tmp/skip_detail.txt
+            : > /tmp/review.json
+            exit 0
+          fi
+
+          echo "Parsed review:"
+          cat /tmp/review.json
+
+      # always() so a hard failure in the step above (crash, timeout) still
+      # gets a comment and a red check rather than a bare failed job.
+      - name: Post review (comments the verdict; fails closed if none)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # No review produced: propagate the real error to the PR, then fail
+          # the check so the branch stays unmergeable until a review lands.
+          # A reason is always written by the step above unless it crashed
+          # outright, in which case say so rather than inventing a cause.
+          if [ ! -s /tmp/review.json ]; then
+            REASON=$(cat /tmp/skip_reason.txt 2>/dev/null \
+              || echo "the review step failed before reporting a reason")
+            {
+              printf '**%s:** ❌ could not review commit `%s`\n\n> %s\n' \
+                "$MODEL_LABEL" "${HEAD_SHA:0:7}" "$REASON"
+              if [ -s /tmp/skip_detail.txt ]; then
+                printf '\n<details><summary>Response detail</summary>\n\n```\n'
+                cat /tmp/skip_detail.txt
+                printf '\n```\n\n</details>\n'
+              fi
+              printf '\nThis check fails closed: the PR stays unmergeable until a review succeeds. [Workflow run](%s/%s/actions/runs/%s)\n' \
+                "$GITHUB_SERVER_URL" "$REPO" "$GITHUB_RUN_ID"
+            } | gh pr comment "$PR_NUMBER" --body-file -
+            exit 1
+          fi
+
+          ISSUE_COUNT=$(jq '.issues | length' /tmp/review.json)
+          # Notes are description<->diff findings with no diff line to sit on;
+          # they ride in the summary body instead of inline comments.
+          NOTE_COUNT=$(jq '.notes | length' /tmp/review.json)
+          SHORT_SHA="${HEAD_SHA:0:7}"
+
+          if [ "$ISSUE_COUNT" -eq 0 ] && [ "$NOTE_COUNT" -eq 0 ]; then
+            printf '**%s:** no issues found in commit `%s`. ✅\n' "$MODEL_LABEL" "$SHORT_SHA" \
+              | gh pr comment "$PR_NUMBER" --body-file -
+            exit 0
+          fi
+
+          if [ "$ISSUE_COUNT" -eq 0 ]; then
+            {
+              printf '**%s:** no code issues in commit `%s`; %s description note(s):\n\n' \
+                "$MODEL_LABEL" "$SHORT_SHA" "$NOTE_COUNT"
+              jq -r '.notes[] | "- \(.body)"' /tmp/review.json
+            } | gh pr comment "$PR_NUMBER" --body-file -
+            exit 0
+          fi
+
+          # Issues exist: post a single PR review with inline comments AND a
+          # short top-level body summarizing the count for the Conversation tab.
+          REVIEW_PAYLOAD=$(jq -n \
+            --arg sha "$HEAD_SHA" \
+            --arg short "$SHORT_SHA" \
+            --arg count "$ISSUE_COUNT" \
+            --arg label "$MODEL_LABEL" \
+            --slurpfile r /tmp/review.json \
+            '{
+              commit_id: $sha,
+              event: "COMMENT",
+              body: ("**\($label):** \($count) issue(s) flagged inline on commit `\($short)`."
+                     + (if ($r[0].notes | length) > 0
+                        then "\n\n" + ($r[0].notes | map("- " + .body) | join("\n"))
+                        else "" end)),
+              comments: ($r[0].issues | map({
+                path: .path,
+                line: .line,
+                side: "RIGHT",
+                body: ("**[" + .severity + "]** " + .body)
+              }))
+            }')
+
+          if ! echo "$REVIEW_PAYLOAD" | gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+              --method POST --input - 2>/tmp/review_err.log; then
+            echo "::warning::Inline review POST failed (often line out of diff range). Falling back to a single comment with the issue list."
+            cat /tmp/review_err.log
+            {
+              printf '**%s:** %s issue(s) on commit `%s` — inline placement failed, listing here:\n\n' \
+                "$MODEL_LABEL" "$ISSUE_COUNT" "$SHORT_SHA"
+              jq -r '.issues[] | "- **[\(.severity)]** `\(.path):\(.line)` — \(.body)"' /tmp/review.json
+              jq -r '.notes[] | "- \(.body)"' /tmp/review.json
+            } | gh pr comment "$PR_NUMBER" --body-file -
+          fi
