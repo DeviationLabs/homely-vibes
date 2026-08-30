@@ -458,7 +458,7 @@ uv run python -m NetworkCheck.uplink_watchdog reboot-all
 Cron on the Linux prod host:
 
 ```
-*/10 * * * * cd ~/Code && uv run python -m NetworkCheck.uplink_watchdog check >> ~/logs/uplink_watchdog.log 2>&1
+*/10 * * * * cd $HOMELY_VIBES && uv run python -m NetworkCheck.uplink_watchdog check >> ~/logs/uplink_watchdog.log 2>&1
 ```
 
 ### Alert priorities
