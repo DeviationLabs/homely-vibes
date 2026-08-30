@@ -246,7 +246,7 @@ Build locally, test remotely — without touching the running prod collector.
 
 One-time setup on the test host (uses `~/Code-test` so prod `~/Code` is safe):
 ```bash
-ssh <test-host> "git clone https://github.com/DeviationLabs/homely-vibes ~/Code-test && cd ~/Code-test && uv sync --quiet"
+ssh <test-host> "git clone https://github.com/abutala/homely-vibes ~/Code-test && cd ~/Code-test && uv sync --quiet"
 ssh <test-host> "ln -sf ~/Code/config/local.yaml ~/Code-test/config/local.yaml"
 ```
 
