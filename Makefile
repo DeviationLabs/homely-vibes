@@ -29,7 +29,7 @@ setup: ## Set up the development environment
 	@echo "🚀 Setting up the development environment"
 	@$(MAKE) --no-print-directory brew-deps
 	@echo "📥 Installing project dependencies..."
-	@uv sync --extra dev
+	@uv sync
 	@echo "📦 Initializing Git submodules..."
 	@git submodule update --init --recursive
 	@echo "🔧 Setting up git hooks..."

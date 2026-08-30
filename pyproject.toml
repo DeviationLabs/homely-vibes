@@ -59,24 +59,6 @@ voice = [
     "rumps>=0.4.0",
     "pynput>=1.7.0",
 ]
-dev = [
-    "pytest>=9.0.3",
-    "pytest-cov>=4.0.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-mock>=3.10.0",
-    "pytest-forked>=1.4.0",
-    "ruff>=0.13.0",
-    "flake8>=5.0.0",
-    "mypy>=1.0.0",
-    "vulture>=2.0.0",
-    "semgrep>=1.174.0",
-    "codespell>=2.0.0",
-    "deptry>=0.23.1",
-    # Type stubs  
-    "types-requests>=2.31.0",
-    "types-paramiko>=3.4.0",
-    "pandas-stubs>=2.0.0",
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["lib", "Tesla", "BimpopAI", "August", "RingSecurity", "RingBeams", "Rheem"]
@@ -110,7 +92,19 @@ known_first_party = [
     "utils",  # for Bimpop.ai/fe/utils.py
     "pr_review",  # scripts/pr_review.py — CI helper imported by its colocated test
 ]
-exclude = ["tests", ".venv", "backups"]
+# Tests are co-located beside sources (Tesla/test_manage_power.py), not in a
+# tests/ dir, so the bare "tests" entry never matched anything. Exclude the real
+# layout instead: test files legitimately import dev-scoped deps like pytest, and
+# leaving DEP004 active elsewhere still catches pytest leaking into production code.
+exclude = [
+    "tests",
+    ".venv",
+    "backups",
+    "test_.*\\.py",
+    ".*/test_.*\\.py",
+    "conftest\\.py",
+    ".*/conftest\\.py",
+]
 
 [tool.deptry.package_module_name_map]
 streamlit = "streamlit"
@@ -274,22 +268,28 @@ warn_return_any = false
 warn_unreachable = false
 ignore_errors = true
 
+# Single source of truth for dev tooling. uv installs this group by default,
+# so `uv sync` is all any call site needs -- there is no `dev` extra to request.
 [dependency-groups]
 dev = [
-    "mypy>=1.17.1",
-    "pandas-stubs>=2.3.2.250926",
-    "pytest-forked>=1.6.0",
-    "types-requests>=2.32.4.20250913",
+    # Test runner + plugins
+    "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-mock>=3.10.0",
+    "pytest-forked>=1.6.0",
+    # Linters / analysers
     "ruff>=0.13.0",
     "flake8>=5.0.0",
+    "mypy>=1.17.1",
     "vulture>=2.0.0",
     "semgrep>=1.174.0",
     "codespell>=2.0.0",
     "deptry>=0.23.1",
+    # Type stubs
+    "types-requests>=2.32.4.20250913",
     "types-paramiko>=3.4.0",
+    "pandas-stubs>=2.3.2.250926",
 ]
 
 
