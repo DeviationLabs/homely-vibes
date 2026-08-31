@@ -188,6 +188,128 @@ class TestCensusFailsClosed:
         assert watchdog.state.down_since is None
 
 
+class TestRecoveryFromAnUnreadableCensus:
+    """A read timeout must not be reported as a Wi-Fi outage that never happened.
+
+    The Deco's local admin API times out on roughly 2% of ticks (measured in
+    prod: 6 of ~260 over two days, spread across all four calls of the login
+    handshake, never twice in a row). Every one failed closed to "0 clients",
+    started the clock, and cleared on the next tick -- sending a silent P-1
+    reading "Recovered after 10 min (Wi-Fi down (0/6 clients on the radios))".
+    Not merely noisy: false. The radios were fine the whole time.
+
+    Failing closed is unchanged. Only the recovery notice is gated.
+    """
+
+    def test_a_window_of_only_timeouts_recovers_silently(self, build: BuildFn) -> None:
+        deco = FakeDeco(error=DecoAPIError("Read timed out"))
+        watchdog, _, notifier = build(cfg=make_cfg(**WIFI_ON), internet=True, deco=deco)
+        watchdog.check_once(now=NOW)
+        assert watchdog.state.down_since == NOW  # still failed closed
+
+        deco.error = None
+        watchdog.check_once(now=NOW + 600)
+
+        assert notifier.sent == []
+        assert watchdog.state.pending == []
+        assert watchdog.state.down_since is None
+
+    def test_a_genuine_empty_mesh_still_reports_its_recovery(self, build: BuildFn) -> None:
+        """The router answered honestly with zero radios. That is real news."""
+        deco = FakeDeco(wireless=0)
+        watchdog, _, notifier = build(cfg=make_cfg(**WIFI_ON), internet=True, deco=deco)
+        watchdog.check_once(now=NOW)
+
+        deco.clients = wifi_clients(wireless=12)
+        watchdog.check_once(now=NOW + 600)
+
+        assert [p for _, _, p in notifier.sent] == [-1]
+        assert "Recovered after 10 min" in notifier.sent[0][0]
+
+    def test_an_internet_outage_still_reports_its_recovery(self, build: BuildFn) -> None:
+        """The case the P-1 exists for -- nothing is sent until it ends."""
+        watchdog, _, notifier = build(cfg=make_cfg(**WIFI_ON), internet=False)
+        watchdog.check_once(now=NOW)
+        watchdog.internet_probe = lambda: True
+        watchdog.check_once(now=NOW + 45 * 60)
+
+        assert [p for _, _, p in notifier.sent] == [-1]
+        assert "Internet down" in notifier.sent[0][0]
+
+    def test_one_real_fault_makes_the_whole_window_newsworthy(self, build: BuildFn) -> None:
+        """Timeout, then a genuinely empty mesh, then healthy.
+
+        The flag is sticky for the life of the window: a real fault happened in
+        it, so its end is reported even though it opened on a timeout.
+        """
+        deco = FakeDeco(error=DecoAPIError("Read timed out"))
+        watchdog, _, notifier = build(cfg=make_cfg(**WIFI_ON), internet=True, deco=deco)
+        watchdog.check_once(now=NOW)
+
+        deco.error = None
+        deco.clients = wifi_clients(wireless=0)
+        watchdog.check_once(now=NOW + 600)
+
+        deco.clients = wifi_clients(wireless=12)
+        watchdog.check_once(now=NOW + 1200)
+
+        assert [p for _, _, p in notifier.sent] == [-1]
+        assert "Recovered after 20 min" in notifier.sent[0][0]
+
+    def test_a_reboot_makes_the_recovery_newsworthy(self, build: BuildFn) -> None:
+        """The fail-closed path still closes its own loop.
+
+        A census that never becomes readable reaches the reboot after 2h and
+        sends a P1. Staying silent on recovery would leave that P1 hanging.
+        """
+        deco = FakeDeco(error=DecoAPIError("Read timed out"))
+        watchdog, _, notifier = build(cfg=make_cfg(**WIFI_ON), internet=True, deco=deco)
+        watchdog.check_once(now=NOW)
+        deco.error = None
+        deco.clients = wifi_clients(wireless=0)
+        watchdog.check_once(now=NOW + 2 * HOUR)
+        assert len(deco.reboots) == 1
+
+        deco.clients = wifi_clients(wireless=12)
+        watchdog.check_once(now=NOW + 2 * HOUR + 600)
+
+        assert [p for _, _, p in notifier.sent] == [1, -1]
+        assert "10 min after the watchdog rebooted the mesh" in notifier.sent[1][0]
+
+    def test_an_unreachable_deco_at_reboot_time_still_reports(self, build: BuildFn) -> None:
+        """`_execute` alerts and returns without recording an action.
+
+        The flag is set on entry to `_execute` precisely so this branch, which
+        sends a P1 and books nothing, does not end in silence.
+        """
+        deco = FakeDeco(error=DecoAPIError("Read timed out"))
+        watchdog, _, notifier = build(cfg=make_cfg(**WIFI_ON), internet=True, deco=deco)
+        watchdog.check_once(now=NOW)
+        watchdog.check_once(now=NOW + 2 * HOUR)
+        assert deco.reboots == []
+
+        deco.error = None
+        watchdog.check_once(now=NOW + 2 * HOUR + 600)
+
+        assert [p for _, _, p in notifier.sent] == [1, -1]
+
+    def test_the_flag_does_not_leak_into_the_next_window(self, build: BuildFn) -> None:
+        """Cleared on recovery, so a later timeout-only window is silent too."""
+        watchdog, deco, notifier = build(cfg=make_cfg(**WIFI_ON), internet=False)
+        watchdog.check_once(now=NOW)
+        watchdog.internet_probe = lambda: True
+        watchdog.check_once(now=NOW + 600)
+        assert watchdog.state.recovery_is_news is False
+        notifier.sent.clear()
+
+        deco.error = DecoAPIError("Read timed out")
+        watchdog.check_once(now=NOW + 1200)
+        deco.error = None
+        watchdog.check_once(now=NOW + 1800)
+
+        assert notifier.sent == []
+
+
 class TestFailureHandling:
     def test_auth_failure_queues_p0_and_records_no_action(self, build: BuildFn) -> None:
         watchdog, _, _ = build(deco=FakeDeco(error=DecoAuthError("bad password")))
@@ -447,6 +569,9 @@ class TestDeliveryAcrossAReboot:
         watchdog, _, notifier = build()
         watchdog.state.down_since = NOW - HOUR
         watchdog.state.fault_reason = "Internet down"
+        # An internet outage is a real fault, so a state file written by a real
+        # tick would carry this. Hand-built state has to say so too.
+        watchdog.state.recovery_is_news = True
         watchdog.internet_probe = lambda: True
         watchdog.check_once(now=NOW)
         recovery = [m for m, _, priority in notifier.sent if priority == -1]

@@ -82,10 +82,16 @@ class Fault:
 
     ``deliverable`` says the uplink is up, so an alert can be sent right now --
     which on the Wi-Fi path is also the moment we are about to take it away.
+
+    ``census_unreadable`` says the router would not answer rather than that it
+    answered with no clients. Both are faults and both run the clock -- this
+    changes nothing about the policy. It exists only so a recovery from pure
+    transient timeouts can stay quiet.
     """
 
     reason: str
     deliverable: bool
+    census_unreadable: bool = False
 
 
 class DecoControl(Protocol):
@@ -164,6 +170,8 @@ class UplinkWatchdog:
             self.logger.warning("Fault detected (%s) -- starting the clock", fault.reason)
             self.state.down_since = now
         self.state.fault_reason = fault.reason
+        if not fault.census_unreadable:
+            self.state.recovery_is_news = True
 
         decision = should_act(self.state, now, self.cfg)
         self.logger.info("Decision: act=%s (%s)", decision.act, decision.reason)
@@ -200,13 +208,26 @@ class UplinkWatchdog:
         floor = self.cfg.min_wireless_clients
         if not floor:
             return None
-        wireless = self._census(now)
+        counted = self._census(now)
+        # Fail closed, exactly as before: a router that will not answer is a
+        # router serving nobody, and the clock runs either way. The wording is
+        # deliberately identical too -- the flag rides alongside it rather than
+        # changing what the alert says.
+        wireless = 0 if counted is None else counted
         if wireless >= floor:
             return None
-        return Fault(f"Wi-Fi down ({wireless}/{floor} clients on the radios)", deliverable=True)
+        return Fault(
+            f"Wi-Fi down ({wireless}/{floor} clients on the radios)",
+            deliverable=True,
+            census_unreadable=counted is None,
+        )
 
-    def _census(self, now: float) -> int:
-        """Count clients on the radios. An unreadable router counts as zero.
+    def _census(self, now: float) -> Optional[int]:
+        """Count clients on the radios. ``None`` means the router would not answer.
+
+        The caller turns ``None`` into zero, so this still fails closed; the
+        distinction is kept only so the recovery notice can tell a transient
+        timeout apart from a mesh that really was serving nobody.
 
         Failing closed is the deliberate choice. The alternative -- treating
         "I could not ask" as "everything is fine" -- lets a permanently broken
@@ -226,7 +247,7 @@ class UplinkWatchdog:
             # crypto and key-parsing paths can still raise raw, and this runs
             # before _save().
             self.logger.error("Wireless client census failed; counting as 0: %s", err)
-            return 0
+            return None
 
         # A successful census proves the credential works, so it stands in for
         # the daily auth check and saves a second login on the same tick.
@@ -345,6 +366,11 @@ class UplinkWatchdog:
         * On the Wi-Fi path we are about to cut our own uplink on purpose, so
           the alert has to leave (or be durably queued) while it still can.
         """
+        # Reaching this point means the user is about to hear about this
+        # window, so its end is worth reporting even if every tick of it was an
+        # unreadable census. Set before the early returns below, which alert
+        # without recording an action.
+        self.state.recovery_is_news = True
         self._reboot_modem(fault)
 
         deco = self.deco_factory()
@@ -391,9 +417,13 @@ class UplinkWatchdog:
             mins = int((now - self.state.down_since) / 60)
             was = self.state.fault_reason or "fault"
             self.logger.info("Mesh healthy again after %d min (%s)", mins, was)
-            self._queue(now, f"Recovered after {mins} min ({was}){self._reboot_note(now)}", -1)
+            if self.state.recovery_is_news:
+                self._queue(now, f"Recovered after {mins} min ({was}){self._reboot_note(now)}", -1)
+            else:
+                self.logger.info("Window was an unreadable census throughout; no alert")
         self.state.down_since = None
         self.state.fault_reason = None
+        self.state.recovery_is_news = False
         self._flush_pending()
 
     def _reboot_note(self, now: float) -> str:
