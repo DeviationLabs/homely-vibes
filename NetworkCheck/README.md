@@ -203,6 +203,31 @@ has it -- and a persistent one reaches the reboot, which has its own P1. A bad
 credential still cannot cause a reboot: `_execute` lists the mesh first and
 raises there.
 
+**And no alert fires on its recovery either.** That claim above used to be true
+only of the fault tick. The clock had still started, so the *next* tick sent a
+P-1 reading `Recovered after 10 min (Wi-Fi down (0/25 clients on the radios))`
+-- an alert that is not merely noisy but false, describing an outage that never
+happened. In prod the Deco's admin API times out on roughly 2% of ticks (6 of
+~260 over two days, spread across all four calls of the login handshake, never
+twice in a row), so this arrived about three times a day. Upstream documents
+the router behaviour and ships two knobs for it -- see
+[ha-tplink-deco](https://github.com/amosyuen/ha-tplink-deco/blob/main/README.md):
+*"Some routers give a lot of timeout errors... This is a problem with the
+router."*
+
+`WatchdogState.recovery_is_news` closes it. The flag is sticky for the life of
+a fault window and set by anything that makes the window worth reporting: a
+fault that was **not** an unreadable census (internet down, or a census that
+answered honestly with too few radios), or reaching `_execute` at all -- which
+covers both the reboot P1 and the "cannot reach the Deco to reboot" P1, so
+neither is ever left without closure. A window made only of timeouts runs the
+clock exactly as before and ends quietly.
+
+Detection is untouched. `_census` returns `None` instead of `0` so the caller
+can tell "would not answer" from "answered with nothing", and the caller
+immediately maps `None` to `0`. Same clock, same threshold, same reboot, same
+wording on the fault itself.
+
 The tradeoff to know about: if a firmware update ever changes the client-list
 payload so it cannot be parsed, that reads as zero clients forever. Login still
 works, so it *will* reboot every 2h indefinitely. Loud, not silent -- each one
@@ -469,7 +494,8 @@ Per the repo convention (`P{N}` == Pushover `priority=N`):
   reboot it; a reboot that did not confirm.
 - **P0** — Deco admin auth failure, or a failed gateway check (bad password, or
   `btn1` no longer labelled as the reboot). Both are chores, not emergencies.
-- **P-1** — recovered (silent, informational).
+- **P-1** — recovered (silent, informational). Skipped entirely when the whole
+  fault window was an unreadable census — see fail-closed above.
 - **silent** — a failed client census and a failed modem reboot. Both are
   logged; neither is worth a notification, because the clock keeps running and
   the reboot that follows carries its own P1.

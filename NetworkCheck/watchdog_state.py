@@ -27,6 +27,14 @@ class WatchdogState:
     # What was wrong on the last unhealthy cycle, so the recovery notice can
     # name it. Purely for the alert text; nothing branches on it.
     fault_reason: Optional[str] = None
+    # Did anything in this fault window deserve to be reported? Sticky for the
+    # life of the window and cleared on recovery. The Deco's admin API times
+    # out on roughly 2% of ticks, and a census that fails closed is
+    # indistinguishable from a dead radio plane -- so without this, one 15s
+    # read timeout sends "Recovered after 10 min (Wi-Fi down (0/25 clients))",
+    # an alert that is not merely noisy but false. A window made only of
+    # unreadable censuses still runs the clock; it just ends quietly.
+    recovery_is_news: bool = False
     last_action_ts: Optional[float] = None
     last_auth_check_ts: Optional[float] = None
     # The gateway check runs on its own clock. Sharing last_auth_check_ts
