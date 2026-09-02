@@ -290,6 +290,8 @@ Convention: `P{N}` maps 1:1 to Pushover `priority=N`. Every module README uses t
 ### Sidecars & polyglot integration
 - Node sidecars live inside the Python module (e.g., `RingBeams/fetch_status.js` alongside `beams_manager.py`).
 - `node_modules/` is gitignored per-module; commit only `package.json` + `package-lock.json`.
+- **A gitignored `node_modules/` is a deploy-time dependency.** `git pull` never restores it, so any fresh clone or re-clone leaves a working Python side and no sidecar. Run `make node-deps` after any re-clone, and give the Python parent a preflight check so the failure reads as "run make node-deps" rather than a Node stack trace in an alert body (`RingBeams/beams_manager.py::_require_sidecar_deps`).
+- `NODE_PATH` does not apply to ESM sidecars — it is CommonJS-only ([Node docs](https://nodejs.org/api/esm.html)). Only a real `node_modules/` on the resolution walk works.
 - Sidecar exit-code contract must be explicit and documented at the top of the sidecar file. Python maps codes to Python exception classes; overloading `exit 1` for both auth failure and generic errors is the classic misclassification bug.
 - Drain stdout before `process.exit(0)` — pass the exit callback to `process.stdout.write(payload, () => process.exit(0))`. On stdout-as-pipe, writes above ~16KB are buffered.
 - Surface partial failures (per-location, per-device) in the JSON payload, not just stderr. Python only reads stderr on non-zero exit, so a silent partial with `exit 0` becomes a false "all healthy" report.

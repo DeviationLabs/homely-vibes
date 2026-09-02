@@ -6,8 +6,8 @@ pull device state via Ring's socket.io channel — the only way to get
 battery for Beams motion sensors and Alarm contact/motion sensors.
 
 P1 alert: any device below the battery threshold, OR batteryStatus == "warn".
-P2 alert: any device with tamperStatus == "tamper".
-P2 alert: sidecar auth failure (needs re-auth).
+P0 alert: any device with tamperStatus == "tamper".
+P0 alert: sidecar auth failure (needs re-auth).
 
 Skips devices with batteryLevel == null (wired base stations, adapters,
 hubs). `faulted: true` on contact sensors just means "door open now" —
@@ -35,6 +35,8 @@ from lib.notifications import Notifier
 
 PUSHOVER_KEY = "Ring Security"
 WIRED_BATTERY_STATUSES = {"none", "charging", "charged"}
+SIDECAR_PACKAGE = "ring-client-api"
+ALERT_MAX_CHARS = 200
 
 
 class BeamsAuthError(RuntimeError):
@@ -61,6 +63,33 @@ def _resolve_node() -> str:
     return node
 
 
+def _require_sidecar_deps(script: str) -> None:
+    """Fail early when the sidecar's node_modules is absent.
+
+    node_modules/ is gitignored, so any fresh clone or re-clone of the repo has
+    a working Python side and no sidecar deps at all. Without this check Node
+    dies at module load and its ERR_MODULE_NOT_FOUND stack becomes the Pushover
+    body. Walk parents the way Node resolves bare specifiers, so a hoisted
+    install does not false-alarm.
+    """
+    start = Path(script).resolve().parent
+    for parent in (start, *start.parents):
+        if (parent / "node_modules" / SIDECAR_PACKAGE).is_dir():
+            return
+    raise RuntimeError(
+        f"Sidecar dependency `{SIDECAR_PACKAGE}` is not installed under {start}. "
+        "Run `make node-deps` from the repo root."
+    )
+
+
+def _alert_text(exc: Exception) -> str:
+    """First line of an exception, capped -- notification bodies are not logs."""
+    message = str(exc).strip()
+    if not message:
+        return exc.__class__.__name__
+    return message.splitlines()[0][:ALERT_MAX_CHARS]
+
+
 def run_sidecar(
     cfg: RingBeamsConfig,
     logger: logging.Logger,
@@ -82,6 +111,11 @@ def run_sidecar(
             "`uv run python RingSecurity/ring_manager.py auth` first "
             "(RingBeams reuses the RingSecurity token)."
         )
+    # After the token check: a missing token is the more specific diagnosis and
+    # must still surface as "Auth Required", not as a dep error. Skipped when a
+    # script is injected, matching _resolve_node()'s handling of node_path.
+    if not script_path:
+        _require_sidecar_deps(script)
 
     env = os.environ.copy()
     env["RING_BEAMS_TOKEN_FILE"] = token_file
@@ -95,7 +129,8 @@ def run_sidecar(
         timeout=cfg.sidecar_timeout_seconds,
     )
     if proc.returncode != 0:
-        # Sidecar prints JSON error on stderr on known-failure exits (1..3).
+        # Exits 2..5 carry a JSON {"error": ...} envelope on stderr; exit 1 is
+        # a raw Node stack trace with none.
         try:
             err = json.loads(proc.stderr.strip().splitlines()[-1])
             msg = err.get("error", proc.stderr)
@@ -221,7 +256,7 @@ def main() -> None:
         sys.exit(1)
     except Exception as e:
         logger.error(f"Ring Beams check failed: {e}")
-        pushover.send_message(str(e), title="Ring: Error", priority=1)
+        pushover.send_message(_alert_text(e), title="Ring: Error", priority=1)
         sys.exit(1)
 
 

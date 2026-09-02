@@ -23,9 +23,13 @@ brew install node          # macOS
 ### 2. Install sidecar deps
 
 ```bash
-cd RingBeams && npm install
+make node-deps
 ```
-Creates `RingBeams/node_modules/` (gitignored).
+Creates `RingBeams/node_modules/` (gitignored). Runs `npm ci --ignore-scripts`:
+`ring-client-api` pulls in `ffmpeg-for-homebridge`, whose postinstall downloads a
+69 MB static ffmpeg from GitHub Releases. RingBeams never streams camera video, so
+skipping install scripts halves the tree (150 MB -> 80 MB) and removes the only
+network- and arch-dependent install step.
 
 ### 3. Reuse RingSecurity token
 
@@ -45,6 +49,22 @@ pushover:
   tokens:
     Ring Security: <your-pushover-app-token>
 ```
+
+## Known failure: missing `node_modules`
+
+`node_modules/` is gitignored, so **any fresh clone or re-clone has a working Python
+side and no sidecar deps at all**. This bit the prod host on 2026-08-30: the checkout
+was replaced, the untracked directory went with it, and `git pull && uv sync` has no
+step that brings it back. Node then died at module load and its
+`ERR_MODULE_NOT_FOUND` stack became the Pushover body.
+
+`beams_manager` now pre-flights for the package and raises a one-line remedy instead.
+Fix is always `make node-deps`.
+
+Setting `NODE_PATH` will **not** rescue this. `fetch_status.js` is `"type": "module"`,
+and per [Node's ESM docs](https://nodejs.org/api/esm.html) *"`NODE_PATH` is not part of
+resolving `import` specifiers"* -- it applies only to CommonJS `require()`. Only a real
+`node_modules/` on the resolution walk works.
 
 ## Daily run
 
