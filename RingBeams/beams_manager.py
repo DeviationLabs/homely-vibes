@@ -103,11 +103,7 @@ def run_sidecar(
     masks itself as "all healthy" — the caller pushes them to Pushover at P1.
     """
     node = node_path or _resolve_node()
-    if script_path:
-        script = script_path
-    else:
-        script = str(Path(__file__).resolve().parent / "fetch_status.js")
-        _require_sidecar_deps(script)
+    script = script_path or str(Path(__file__).resolve().parent / "fetch_status.js")
     token_file = cfg.token_file
     if not Path(token_file).exists():
         raise BeamsAuthError(
@@ -115,6 +111,11 @@ def run_sidecar(
             "`uv run python RingSecurity/ring_manager.py auth` first "
             "(RingBeams reuses the RingSecurity token)."
         )
+    # After the token check: a missing token is the more specific diagnosis and
+    # must still surface as "Auth Required", not as a dep error. Skipped when a
+    # script is injected, matching _resolve_node()'s handling of node_path.
+    if not script_path:
+        _require_sidecar_deps(script)
 
     env = os.environ.copy()
     env["RING_BEAMS_TOKEN_FILE"] = token_file
