@@ -13,6 +13,7 @@ from AppleNotesBackup.notes_backup import (
     Note,
     commit_and_push,
     folder_relpath,
+    git_env,
     note_filename,
     parse_stream,
     prune_stale,
@@ -101,9 +102,22 @@ def test_note_filename_caps_length() -> None:
 
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
-    subprocess.run(["git", "init", "-b", "main", str(tmp_path)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "t@t.io"], check=True)
-    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    subprocess.run(
+        ["git", "init", "-b", "main", str(tmp_path)],
+        check=True,
+        capture_output=True,
+        env=git_env(),
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "t@t.io"],
+        check=True,
+        env=git_env(),
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.name", "Test"],
+        check=True,
+        env=git_env(),
+    )
     return tmp_path
 
 
@@ -148,7 +162,10 @@ def test_commit_counts_and_skips_push_without_remote(repo: Path) -> None:
     msg = commit_and_push(repo, "main", "")  # empty remote → no push attempted
     assert msg is not None and "new" in msg
     log = subprocess.run(
-        ["git", "-C", str(repo), "log", "--oneline"], capture_output=True, text=True
+        ["git", "-C", str(repo), "log", "--oneline"],
+        capture_output=True,
+        text=True,
+        env=git_env(),
     ).stdout
     assert msg.split(":")[0] in log or "backup" in log
 
@@ -157,29 +174,54 @@ def test_clean_tree_retries_unpushed_commit(tmp_path: Path) -> None:
     # A prior run committed but its push failed; a later clean-tree run must push it.
     remote = tmp_path / "remote.git"
     subprocess.run(
-        ["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True
+        ["git", "init", "--bare", "-b", "main", str(remote)],
+        check=True,
+        capture_output=True,
+        env=git_env(),
     )
     work = tmp_path / "work"
-    subprocess.run(["git", "clone", str(remote), str(work)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(work), "config", "user.email", "t@t.io"], check=True)
-    subprocess.run(["git", "-C", str(work), "config", "user.name", "Test"], check=True)
+    subprocess.run(
+        ["git", "clone", str(remote), str(work)],
+        check=True,
+        capture_output=True,
+        env=git_env(),
+    )
+    subprocess.run(
+        ["git", "-C", str(work), "config", "user.email", "t@t.io"],
+        check=True,
+        env=git_env(),
+    )
+    subprocess.run(
+        ["git", "-C", str(work), "config", "user.name", "Test"],
+        check=True,
+        env=git_env(),
+    )
 
     write_notes([_note()], work)
     commit_and_push(work, "main", "origin")  # first backup: commit + push
 
     # Simulate a run that committed but whose push failed (local-only commit):
     (work / "later.html").write_text("x", encoding="utf-8")
-    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True, env=git_env())
     subprocess.run(
-        ["git", "-C", str(work), "commit", "-m", "local only"], check=True, capture_output=True
+        ["git", "-C", str(work), "commit", "-m", "local only"],
+        check=True,
+        capture_output=True,
+        env=git_env(),
     )
     local_head = subprocess.run(
-        ["git", "-C", str(work), "rev-parse", "HEAD"], capture_output=True, text=True
+        ["git", "-C", str(work), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        env=git_env(),
     ).stdout.strip()
 
     assert commit_and_push(work, "main", "origin") is None  # clean tree, but ahead
     remote_head = subprocess.run(
-        ["git", "-C", str(remote), "rev-parse", "HEAD"], capture_output=True, text=True
+        ["git", "-C", str(remote), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        env=git_env(),
     ).stdout.strip()
     assert remote_head == local_head  # pending commit got pushed
 
@@ -200,3 +242,33 @@ def test_run_export_raises_on_failure() -> None:
 
     with pytest.raises(RuntimeError, match="boom"):
         run_export(timeout=5, runner=fake_runner)
+
+
+class TestGitEnv:
+    """`git_env()` is what keeps a test's real git calls off the developer's repo.
+
+    conftest.py scrubs the same vars at import, but that is one layer: any harness
+    that skips the root conftest (a different rootdir, --confcutdir, a direct
+    unittest run) would leave the tests writing to whatever GIT_DIR points at.
+    """
+
+    def test_repo_discovery_vars_are_dropped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GIT_DIR", "/somewhere/else/.git")
+        monkeypatch.setenv("GIT_WORK_TREE", "/somewhere/else")
+        monkeypatch.setenv("GIT_INDEX_FILE", "/tmp/fake-index")
+        env = git_env()
+        assert "GIT_DIR" not in env
+        assert "GIT_WORK_TREE" not in env
+        assert "GIT_INDEX_FILE" not in env
+
+    def test_transport_vars_are_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Dropping these would break SSH pushes from the cron backup."""
+        monkeypatch.setenv("GIT_SSH_COMMAND", "ssh -i /key")
+        monkeypatch.setenv("GIT_SSL_NO_VERIFY", "1")
+        env = git_env()
+        assert env["GIT_SSH_COMMAND"] == "ssh -i /key"
+        assert env["GIT_SSL_NO_VERIFY"] == "1"
+
+    def test_non_git_environment_survives(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PATH", "/usr/bin")
+        assert git_env()["PATH"] == "/usr/bin"

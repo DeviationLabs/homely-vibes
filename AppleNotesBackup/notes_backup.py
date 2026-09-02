@@ -209,10 +209,20 @@ def prune_stale(repo: Path, keep: set[Path]) -> list[Path]:
 # ── git ───────────────────────────────────────────────────────────────────────
 
 
+def git_env() -> dict[str, str]:
+    """os.environ minus the repo-discovery GIT_* vars.
+
+    Transport settings (GIT_SSH_COMMAND, GIT_SSL_NO_VERIFY, ...) are deliberately
+    preserved -- only the vars that repoint git at a different repository are
+    dropped. Exported because the tests shell out to real git too and must not
+    depend on conftest.py having scrubbed the ambient environment for them.
+    """
+    return {k: v for k, v in os.environ.items() if k not in _GIT_ENV_OVERRIDES}
+
+
 def _git(repo: Path, *args: str) -> str:
-    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_OVERRIDES}
     result = subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=120, env=env
+        ["git", *args], cwd=repo, capture_output=True, text=True, timeout=120, env=git_env()
     )
     if result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")

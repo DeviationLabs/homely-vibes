@@ -115,7 +115,7 @@ class FakeDecoSession:
         raise AssertionError(f"unexpected form={form}")
 
 
-def make_client(session: FakeDecoSession) -> DecoClient:
+def make_client(session: FakeDecoSession, sleep: Any = lambda _s: None) -> DecoClient:
     # The fake implements exactly the slice of Session the client touches
     # (post + cookies); cast rather than patch, per the repo's DI convention.
     client = DecoClient(
@@ -123,9 +123,34 @@ def make_client(session: FakeDecoSession) -> DecoClient:
         "admin",
         FAKE_ADMIN_CRED,
         session=cast(requests.Session, session),
+        sleep=sleep,
     )
     session.client = client
     return client
+
+
+class FlakyDecoSession(FakeDecoSession):
+    """Fails the first `fail_times` posts for one form, then behaves normally."""
+
+    def __init__(self, form: str, fail_times: int, error: Exception) -> None:
+        super().__init__()
+        self.target_form = form
+        self.fail_times = fail_times
+        self.error = error
+        self.attempts: dict[str, int] = {}
+
+    def post(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        data: str | None = None,
+        **_kwargs: Any,
+    ) -> FakeResponse:
+        form = (params or {}).get("form", "")
+        self.attempts[form] = self.attempts.get(form, 0) + 1
+        if form == self.target_form and self.attempts[form] <= self.fail_times:
+            raise self.error
+        return super().post(url, params=params, data=data, **_kwargs)
 
 
 class TestCrypto:
@@ -304,3 +329,45 @@ class TestWirelessCensus:
 
     def test_case_does_not_change_the_verdict(self) -> None:
         assert count_wireless_clients([{"connection_type": "WIRED"}]) == 0
+
+
+class TestTransientRetry:
+    """A transient timeout must not abort a real reboot (bk-22).
+
+    The watchdog calls list_decos() inside _execute to learn which units to
+    reboot. One dropped packet there used to abort the whole recovery and fire
+    a P1, on a mesh that was fine.
+    """
+
+    def test_list_decos_survives_a_transient_timeout(self) -> None:
+        session = FlakyDecoSession("device_list", 1, requests.Timeout("boom"))
+        slept: list[float] = []
+        client = make_client(session, sleep=slept.append)
+        assert [d["mac"] for d in client.list_decos()] == [MASTER_MAC]
+        assert session.attempts["device_list"] == 2
+        assert slept, "expected a backoff between attempts"
+
+    def test_retries_are_bounded_and_then_raise(self) -> None:
+        session = FlakyDecoSession("device_list", 99, requests.ConnectionError("down"))
+        client = make_client(session)
+        with pytest.raises(DecoAPIError, match="attempt"):
+            client.list_decos()
+        assert session.attempts["device_list"] == 3
+
+    def test_reboot_is_never_retried(self) -> None:
+        """A lost reboot response is ambiguous -- it may have landed. Re-issuing
+        can bounce a mesh that is already coming back up, so one attempt only."""
+        session = FlakyDecoSession("system", 1, requests.Timeout("boom"))
+        client = make_client(session)
+        with pytest.raises(DecoAPIError):
+            client.reboot([MASTER_MAC])
+        assert session.attempts["system"] == 1
+
+    def test_http_errors_are_not_retried(self) -> None:
+        """A 4xx/5xx is a real answer from the router; repeating it just repeats
+        the rejection."""
+        session = FlakyDecoSession("device_list", 1, requests.HTTPError("500"))
+        client = make_client(session)
+        with pytest.raises(DecoAPIError):
+            client.list_decos()
+        assert session.attempts["device_list"] == 1

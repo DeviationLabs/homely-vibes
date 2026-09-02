@@ -552,8 +552,28 @@ def get_config() -> Config:
         # Create Config instance from dict
         # Note: We need to manually construct nested dataclasses
         _config = _dict_to_config(cfg_dict)
+        _validate_shared_invariants(_config)
 
     return _config
+
+
+def _validate_shared_invariants(cfg: Config) -> None:
+    """Cross-section invariants the code relies on but YAML cannot express.
+
+    RingSecurity and RingBeams both serialize on a POSIX flock derived from
+    their own ``token_file``, and they share one Ring OAuth refresh token that
+    rotates on every use. If the two paths ever diverge, each process locks a
+    private sentinel, mutual exclusion disappears with no error, and the loser
+    surfaces a spurious ``invalid_grant`` days later. Fail loudly at load time
+    instead.
+    """
+    if cfg.ring.token_file != cfg.ring_beams.token_file:
+        raise ValueError(
+            "ring.token_file and ring_beams.token_file must name the same file: "
+            "RingSecurity and RingBeams share one rotating Ring OAuth token and "
+            "serialize on a lock derived from this path. Got "
+            f"{cfg.ring.token_file!r} and {cfg.ring_beams.token_file!r}."
+        )
 
 
 def _dict_to_config(cfg_dict: dict) -> Config:  # type: ignore

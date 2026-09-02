@@ -28,6 +28,8 @@ import hashlib
 import json
 import math
 import secrets
+import time
+from collections.abc import Callable
 from typing import Any, Optional
 from urllib.parse import quote_plus
 
@@ -54,6 +56,12 @@ _MAX_AES_KEY = (10**_AES_DIGITS) - 1
 _PKCS1_HEADER_BYTES = 11
 
 _DEFAULT_TIMEOUT = 15
+_POST_ATTEMPTS = 3
+_RETRY_BACKOFF_S = 1.0
+# Only genuinely transient transport faults. An HTTPError (4xx/5xx from
+# raise_for_status) is a real answer from the router and retrying it just
+# repeats the same rejection.
+_TRANSIENT_ERRORS = (requests.Timeout, requests.ConnectionError)
 
 
 class DecoAuthError(Exception):
@@ -146,12 +154,14 @@ class DecoClient:
         password: str,
         session: Optional[requests.Session] = None,
         timeout: int = _DEFAULT_TIMEOUT,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.host = host.rstrip("/")
         self.username = username
         self.password = password
         self.session = session or requests.Session()
         self.timeout = timeout
+        self._sleep = sleep
 
         self._aes_key = str(secrets.randbelow(_MAX_AES_KEY - _MIN_AES_KEY) + _MIN_AES_KEY)
         self._aes_iv = str(secrets.randbelow(_MAX_AES_KEY - _MIN_AES_KEY) + _MIN_AES_KEY)
@@ -223,7 +233,13 @@ class DecoClient:
         return list(client_list)
 
     def reboot(self, macs: list[str]) -> None:
-        """Reboot the named Deco units."""
+        """Reboot the named Deco units.
+
+        Never retried. A timeout here is ambiguous -- the reboot may well have
+        landed before the response was lost -- and re-issuing it can bounce a
+        mesh that is already coming back up. Callers treat a failure as "did not
+        reboot", which is the safe reading.
+        """
         if not macs:
             raise ValueError("reboot() requires at least one MAC")
         self.login_if_needed()
@@ -231,6 +247,7 @@ class DecoClient:
             f"/cgi-bin/luci/;stok={self._stok}/admin/device",
             {"form": "system"},
             {"operation": "reboot", "params": {"mac_list": [{"mac": m} for m in macs]}},
+            retry=False,
         )
         self._raise_for_error(data, "reboot")
         logger.info("Deco reboot issued for %s", ", ".join(macs))
@@ -256,30 +273,53 @@ class DecoClient:
         return self._post(path, params, json.dumps({"operation": "read"}))
 
     def _post_encrypted(
-        self, path: str, params: dict[str, str], payload: dict[str, Any]
+        self,
+        path: str,
+        params: dict[str, str],
+        payload: dict[str, Any],
+        *,
+        retry: bool = True,
     ) -> dict[str, Any]:
-        response = self._post(path, params, self._encode_payload(payload))
+        response = self._post(path, params, self._encode_payload(payload), retry=retry)
         encrypted = response.get("data")
         if not encrypted:
             raise DecoAPIError(f"Deco {_form(params)} returned no data")
         return self._decrypt(encrypted)
 
-    def _post(self, path: str, params: dict[str, str], body: str) -> dict[str, Any]:
+    def _post(
+        self, path: str, params: dict[str, str], body: str, *, retry: bool = True
+    ) -> dict[str, Any]:
         url = f"{self.host}{path}"
-        try:
-            response = self.session.post(
-                url,
-                params=params,
-                data=body,
-                headers={"Content-Type": "application/json"},
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            return dict(response.json())
-        except requests.RequestException as err:
-            raise DecoAPIError(f"Deco {_form(params)} request failed: {err}") from err
-        except ValueError as err:
-            raise DecoAPIError(f"Deco {_form(params)} response was not JSON: {err}") from err
+        attempts = _POST_ATTEMPTS if retry else 1
+        for attempt in range(1, attempts + 1):
+            try:
+                response = self.session.post(
+                    url,
+                    params=params,
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                return dict(response.json())
+            except _TRANSIENT_ERRORS as err:
+                if attempt == attempts:
+                    raise DecoAPIError(
+                        f"Deco {_form(params)} request failed after {attempt} attempt(s): {err}"
+                    ) from err
+                logger.warning(
+                    "Deco %s attempt %d/%d failed (%s); retrying",
+                    _form(params),
+                    attempt,
+                    attempts,
+                    err,
+                )
+                self._sleep(_RETRY_BACKOFF_S)
+            except requests.RequestException as err:
+                raise DecoAPIError(f"Deco {_form(params)} request failed: {err}") from err
+            except ValueError as err:
+                raise DecoAPIError(f"Deco {_form(params)} response was not JSON: {err}") from err
+        raise AssertionError("unreachable")
 
     def _encode_payload(self, payload: dict[str, Any]) -> str:
         data = base64.b64encode(

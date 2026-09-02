@@ -31,6 +31,7 @@ from lib.config import RingBeamsConfig, get_config
 from lib.file_lock import LockTimeoutError, acquire_lock
 from lib.logger import get_logger
 from lib.MyPushover import Pushover
+from lib.secure_io import ensure_secret_perms
 from lib.notifications import Notifier
 
 PUSHOVER_KEY = "Ring Security"
@@ -147,6 +148,11 @@ def run_sidecar(
         if proc.returncode in (3, 5):
             raise BeamsAuthError(msg)
         raise RuntimeError(f"sidecar exit={proc.returncode}: {msg}")
+
+    # The sidecar rewrites token_file whenever Ring rotates the refresh token.
+    # It writes 0600 itself, but per CLAUDE.md any third-party writer gets an
+    # explicit re-assert -- the sidecar is not the only thing that touches this.
+    ensure_secret_perms(token_file)
 
     # Sidecar succeeded but may have emitted structured warnings on stderr
     # (e.g. TOKEN_WRITE_FAILED — server rotated refresh_token but our write
