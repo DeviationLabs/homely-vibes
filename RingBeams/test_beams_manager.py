@@ -16,8 +16,11 @@ import pytest
 from lib.config import RingBeamsConfig
 from lib.MyPushover import Pushover
 from RingBeams.beams_manager import (
+    SIDECAR_PACKAGE,
     BeamsAuthError,
     DeviceRecord,
+    _alert_text,
+    _require_sidecar_deps,
     classify,
     notify,
     run_sidecar,
@@ -275,3 +278,52 @@ def test_sidecar_token_write_warn_on_stderr_is_logged_not_raised(
     assert len(devs) == 1
     assert errs == []
     assert any("TOKEN_WRITE_FAILED" in r.message for r in caplog.records)
+
+
+def test_missing_sidecar_deps_raises_actionable(tmp_path: Path) -> None:
+    """The 2026-08-30 prod case: a re-clone drops the gitignored node_modules.
+    Node would die at module load with a 20-line ERR_MODULE_NOT_FOUND stack that
+    then lands in a Pushover body. Fail early with a one-line remedy instead."""
+    script = tmp_path / "fetch_status.js"
+    script.write_text("// no deps installed next to me\n")
+    with pytest.raises(RuntimeError, match=SIDECAR_PACKAGE) as exc:
+        _require_sidecar_deps(str(script))
+    assert "make node-deps" in str(exc.value)
+    assert not isinstance(exc.value, BeamsAuthError)
+
+
+def test_sidecar_deps_in_script_dir_ok(tmp_path: Path) -> None:
+    """Normal install: node_modules sits beside the sidecar."""
+    script = tmp_path / "fetch_status.js"
+    script.write_text("// deps live next to me\n")
+    (tmp_path / "node_modules" / SIDECAR_PACKAGE).mkdir(parents=True)
+    _require_sidecar_deps(str(script))
+
+
+def test_sidecar_deps_in_ancestor_dir_ok(tmp_path: Path) -> None:
+    """Node resolves bare specifiers by walking node_modules upward, so a
+    hoisted install in a parent directory is valid and must not false-alarm."""
+    module_dir = tmp_path / "RingBeams"
+    module_dir.mkdir()
+    script = module_dir / "fetch_status.js"
+    script.write_text("// deps are hoisted to the repo root\n")
+    (tmp_path / "node_modules" / SIDECAR_PACKAGE).mkdir(parents=True)
+    _require_sidecar_deps(str(script))
+
+
+def test_alert_text_keeps_first_line_only() -> None:
+    """Pushover bodies must not carry a Node stack trace; logs keep the rest."""
+    exc = RuntimeError(
+        "sidecar exit=1: ERR_MODULE_NOT_FOUND\n  at packageResolve\n  at moduleResolve"
+    )
+    assert _alert_text(exc) == "sidecar exit=1: ERR_MODULE_NOT_FOUND"
+
+
+def test_alert_text_caps_length() -> None:
+    body = _alert_text(RuntimeError("x" * 500))
+    assert len(body) == 200
+
+
+def test_alert_text_falls_back_to_class_name() -> None:
+    """An exception with an empty message still needs an identifiable alert."""
+    assert _alert_text(RuntimeError("")) == "RuntimeError"

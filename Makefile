@@ -22,7 +22,7 @@ brew-deps: ## Install macOS Homebrew build deps (skipped off macOS)
 		echo "🍺 Upgrading Homebrew packages"; \
 		brew upgrade || echo "${YELLOW}⚠️  brew upgrade reported errors on unrelated formulae — continuing${RESET}"; \
 		echo "🍺 Installing build dependencies"; \
-		brew install libomp pre-commit yamllint -q; \
+		brew install libomp pre-commit yamllint node -q; \
 	fi
 
 setup: ## Set up the development environment
@@ -30,12 +30,22 @@ setup: ## Set up the development environment
 	@$(MAKE) --no-print-directory brew-deps
 	@echo "📥 Installing project dependencies..."
 	@uv sync
+	@$(MAKE) --no-print-directory node-deps
 	@echo "📦 Initializing Git submodules..."
 	@git submodule update --init --recursive
 	@echo "🔧 Setting up git hooks..."
 	@$(MAKE) --no-print-directory hooks
 	@test -x .venv/bin/python || { echo "${RED}❌ setup failed: .venv/bin/python is missing${RESET}"; exit 1; }
 	@echo "${GREEN}✨ Done ($$(.venv/bin/python --version)). Activate with: source .venv/bin/activate${RESET}"
+
+node-deps: ## Install Node sidecar dependencies (RingBeams)
+	@echo "📦 Installing Node sidecar dependencies"
+	@command -v npm >/dev/null 2>&1 || { \
+		echo "${RED}❌ npm not found on PATH${RESET}"; \
+		echo "${YELLOW}💡 nvm users: PATH=\"$$HOME/.local/bin:$$PATH\" make node-deps${RESET}"; \
+		exit 1; }
+	@cd RingBeams && npm ci --ignore-scripts
+	@echo "${GREEN}✅ Node sidecar deps installed${RESET}"
 
 colima: ## Start colima if not already running
 	@echo "🐳 Checking colima status..."
@@ -168,7 +178,7 @@ validate-jobs-yaml:
 	  || (echo "${RED}❌ Please fix errors in jobs yaml${RESET}" && exit 1)
 
 .PHONY: all \
-	setup brew-deps \
+	setup brew-deps node-deps \
 	test coverage coverage-lcov coverage-html \
 	lint lint-fix codespell deptry \
 	ruff mypy vulture semgrep \
